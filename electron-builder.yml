@@ -1,0 +1,19 @@
+appId: zone.raeyd.app
+productName: RaeydZone
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**
+  - package.json
+win:
+  target: [nsis]
+  icon: build/icon.png
+publish:
+  provider: github
+  owner: raeydzone
+  repo: raeydzone-app
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: RaeydZone

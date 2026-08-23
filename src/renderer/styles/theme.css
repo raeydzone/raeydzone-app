@@ -1,0 +1,58 @@
+:root {
+  --bg-app: #0a0a0a;
+  --bg-panel: #101010;
+  --bg-raised: #161616;
+  --bg-hover: #1c1c1c;
+  --bg-active: #222222;
+  --bg-inset: #070707;
+
+  --line: #232323;
+  --line-strong: #2e2e2e;
+
+  --text: #ededed;
+  --text-dim: #9a9a9a;
+  --text-faint: #5f5f5f;
+
+  --accent: #e11d21;
+  --accent-hot: #ff2a2a;
+  --accent-deep: #8c1114;
+  --accent-wash: rgba(225, 29, 33, 0.12);
+  --accent-edge: rgba(225, 29, 33, 0.35);
+  --accent-glow: rgba(225, 29, 33, 0.28);
+
+  --pp-bg: #2a0634;
+  --pp-bg-hi: #3d0d4d;
+  --pp-fg: #9999ff;
+  --pp-edge: #55257a;
+  --pp-glow: rgba(153, 153, 255, 0.3);
+
+  --ok: #3fb950;
+  --warn: #d29922;
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+
+  --t-fast: 120ms;
+  --t-mid: 160ms;
+  --t-slow: 200ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  --shadow-panel: 0 10px 30px rgba(0, 0, 0, 0.55);
+  --shadow-glow: 0 0 0 1px var(--accent-edge), 0 0 22px var(--accent-glow);
+
+  --titlebar-h: 38px;
+  --sidebar-w: 232px;
+
+  --font: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;
+}

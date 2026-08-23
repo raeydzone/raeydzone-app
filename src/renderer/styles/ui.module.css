@@ -1,0 +1,223 @@
+.page {
+  padding: var(--s-6) var(--s-7) var(--s-7);
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.pageHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin-bottom: var(--s-5);
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.sub {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: var(--s-3);
+}
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--s-5);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: var(--s-4);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 9px 15px;
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: #3a3a3a;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  background: linear-gradient(180deg, var(--accent) 0%, #b8171b 100%);
+  border-color: var(--accent-deep);
+  color: #fff;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--accent-hot) 0%, var(--accent) 100%);
+  border-color: var(--accent);
+  box-shadow: 0 0 18px var(--accent-glow);
+}
+
+.btnPremiere {
+  background: linear-gradient(180deg, var(--pp-bg-hi) 0%, var(--pp-bg) 100%);
+  border-color: var(--pp-edge);
+  color: var(--pp-fg);
+}
+
+.btnPremiere:hover:not(:disabled) {
+  border-color: var(--pp-fg);
+  box-shadow: 0 0 18px var(--pp-glow);
+}
+
+.btnGhost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.btnGhost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.btnDanger:hover:not(:disabled) {
+  border-color: var(--accent-deep);
+  color: var(--accent-hot);
+}
+
+.input {
+  width: 100%;
+  padding: 10px 13px;
+  background: var(--bg-inset);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.input::placeholder {
+  color: var(--text-faint);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  gap: var(--s-3);
+  padding: var(--s-7) var(--s-4);
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.emptyArt {
+  width: 108px;
+  opacity: 0.5;
+  filter: grayscale(0.3);
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.faint {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag {
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  color: var(--text-dim);
+}
+
+.tagDone {
+  background: var(--accent-wash);
+  border-color: var(--accent-edge);
+  color: var(--accent-hot);
+}
+
+.tagOk {
+  background: rgba(63, 185, 80, 0.1);
+  border-color: rgba(63, 185, 80, 0.35);
+  color: var(--ok);
+}
+
+.bar {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--bg-inset);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-deep), var(--accent-hot));
+  transition: width var(--t-slow) var(--ease);
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+  margin: var(--s-4) 0;
+}
+
+.scroll {
+  height: 100%;
+  overflow-y: auto;
+}
