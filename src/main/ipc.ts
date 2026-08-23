@@ -173,6 +173,7 @@ export function register(): void {
   })
 
   handle('update:check', () => updater.check())
+  handle('update:log', () => shell.openPath(updater.logPath()))
   handle('update:install', () => updater.install())
 
   handle('timer:start', () => timer.start())

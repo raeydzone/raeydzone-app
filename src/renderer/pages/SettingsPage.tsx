@@ -1,9 +1,25 @@
 import type { ReactNode } from 'react'
+import type { UpdateState } from '@shared/types'
 import { formatBytes, formatDuration } from '@shared/format'
 import { IconFolder, IconPremiere } from '../components/Icons'
 import { useAppState, useStore } from '../state/store'
 import p from './pages.module.css'
 import ui from '../styles/ui.module.css'
+
+function describeUpdate(u: UpdateState): string {
+  switch (u.status) {
+    case 'checking':
+      return 'checking for updates…'
+    case 'downloading':
+      return `downloading ${u.version} — ${u.percent}%`
+    case 'ready':
+      return `${u.version} downloaded and ready to install`
+    case 'error':
+      return `last check failed — ${u.error ?? 'unknown error'}`
+    default:
+      return 'up to date'
+  }
+}
 
 export default function SettingsPage(): ReactNode {
   const state = useAppState()
@@ -96,6 +112,36 @@ export default function SettingsPage(): ReactNode {
               }}
             />
             <span className={ui.faint}>minutes</span>
+          </div>
+        </div>
+
+        <div className={p.settingRow}>
+          <div>
+            <div className={p.settingLabel}>Updates</div>
+            <div className={p.settingHint}>
+              Version {state.appVersion} · {describeUpdate(state.update)}
+            </div>
+          </div>
+          <div className={ui.row}>
+            {state.update.status === 'ready' ? (
+              <button
+                className={`${ui.btn} ${ui.btnPrimary}`}
+                onClick={() => void api.installUpdate()}
+              >
+                Install {state.update.version}
+              </button>
+            ) : (
+              <button
+                className={ui.btn}
+                disabled={state.update.status === 'checking'}
+                onClick={() => void run(() => api.checkUpdate(), 'Checking for updates…')}
+              >
+                Check now
+              </button>
+            )}
+            <button className={`${ui.btn} ${ui.btnGhost}`} onClick={() => void api.openUpdateLog()}>
+              Log
+            </button>
           </div>
         </div>
 

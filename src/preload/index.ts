@@ -43,6 +43,7 @@ const api = {
   pathsOf: (files: File[]) => files.map((f) => webUtils.getPathForFile(f)),
 
   checkUpdate: () => call<void>('update:check'),
+  openUpdateLog: () => call<void>('update:log'),
   installUpdate: () => call<void>('update:install'),
 
   startTimer: () => call<void>('timer:start'),

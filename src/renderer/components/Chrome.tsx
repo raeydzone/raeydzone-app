@@ -91,7 +91,18 @@ export function Sidebar({
           </motion.button>
         )}
         {state.update.status === 'downloading' && (
-          <div className={s.updateNote}>Downloading update… {state.update.percent}%</div>
+          <div className={s.updateNote}>
+            Downloading {state.update.version}… {state.update.percent}%
+          </div>
+        )}
+        {state.update.status === 'error' && (
+          <button
+            className={s.updateFail}
+            title={state.update.error ?? 'Update failed'}
+            onClick={() => void window.raeydzone.checkUpdate()}
+          >
+            Update failed — retry
+          </button>
         )}
 
         <div className={s.miniGoal}>
