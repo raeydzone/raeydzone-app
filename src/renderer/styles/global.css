@@ -21,7 +21,8 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
-  user-select: none;
+  user-select: text;
+  cursor: default;
 }
 
 h1,
@@ -37,6 +38,7 @@ button {
   background: none;
   border: none;
   cursor: pointer;
+  user-select: none;
 }
 
 input,
@@ -47,7 +49,8 @@ textarea {
 }
 
 ::selection {
-  background: var(--accent-wash);
+  background: var(--accent);
+  color: #fff;
 }
 
 ::-webkit-scrollbar {

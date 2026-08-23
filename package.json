@@ -1,7 +1,7 @@
 {
   "name": "raeydzone",
-  "version": "0.1.0",
-  "description": "A desktop production tracker for YouTube creators \u2014 project folders, an editing pipeline, and a daily work goal.",
+  "version": "0.1.1",
+  "description": "A desktop production tracker for YouTube creators — project folders, an editing pipeline, and a daily work goal.",
   "main": "./out/main/index.js",
   "author": "Raeyd",
   "private": true,
