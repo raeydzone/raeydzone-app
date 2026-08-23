@@ -5,7 +5,9 @@ import { formatClock, formatDuration, formatStamp } from '@shared/format'
 import { LogRows } from '../components/LogFeed'
 import { StepPips, Thumb } from '../components/Bits'
 import { IconPlay, IconStop } from '../components/Icons'
-import { isComplete, mediaUrl, useAppState, useStore, useTick, useTodayMs } from '../state/store'
+import {
+  byProgress, isComplete, mediaUrl, useAppState, useStore, useTick, useTodayMs
+} from '../state/store'
 import mascot from '../assets/mascot.png'
 import type { Route } from '../components/Chrome'
 import p from './pages.module.css'
@@ -22,7 +24,11 @@ export default function Dashboard({
   useTick(!!state.running)
 
   const pct = Math.min(100, (today / state.dailyGoalMs) * 100)
-  const active = state.videos.filter((v) => !isComplete(v)).slice(0, 6)
+  const active = state.videos
+    .filter((v) => !isComplete(v))
+    .slice()
+    .sort(byProgress)
+    .slice(0, 6)
   const nextStream = state.streams
     .filter((s) => !s.streamedAt && s.scheduledAt)
     .sort((a, b) => (a.scheduledAt! < b.scheduledAt! ? -1 : 1))[0]

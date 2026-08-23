@@ -11,7 +11,9 @@ import { LogRows } from '../components/LogFeed'
 import {
   IconFolder, IconImage, IconPlus, IconPremiere, IconTrash, IconVideo
 } from '../components/Icons'
-import { isComplete, mediaUrl, useAppState, useStore } from '../state/store'
+import {
+  byProgress, isComplete, lastProgressAt, mediaUrl, useAppState, useStore
+} from '../state/store'
 import mascot from '../assets/mascot.png'
 import p from './pages.module.css'
 import ui from '../styles/ui.module.css'
@@ -26,7 +28,10 @@ export default function Videos(): ReactNode {
   const open = state.videos.find((v) => v.id === openId) ?? null
 
   const list = useMemo(
-    () => (showDone ? state.videos : state.videos.filter((v) => !isComplete(v))),
+    () =>
+      (showDone ? state.videos : state.videos.filter((v) => !isComplete(v)))
+        .slice()
+        .sort(byProgress),
     [state.videos, showDone]
   )
 
@@ -82,7 +87,7 @@ export default function Videos(): ReactNode {
                 {video.missing ? (
                   <span style={{ color: 'var(--accent-hot)' }}>folder missing</span>
                 ) : (
-                  <span>{formatStamp(video.createdAt)}</span>
+                  <span>{formatStamp(new Date(lastProgressAt(video)).toISOString())}</span>
                 )}
               </div>
             </motion.button>

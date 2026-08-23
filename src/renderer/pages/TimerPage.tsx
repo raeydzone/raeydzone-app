@@ -122,7 +122,9 @@ export default function TimerPage(): ReactNode {
             {values.map((ms, i) => (
               <motion.div
                 key={keys[i]}
-                className={`${p.chartCol} ${ms >= goal ? p.chartColHit : ''}`}
+                className={`${p.chartCol} ${
+                  ms >= goal ? p.chartColHit : ms > 0 ? p.chartColWorked : ''
+                }`}
                 initial={{ height: 0 }}
                 animate={{ height: `${Math.max(2, (ms / peak) * 100)}%` }}
                 transition={{ duration: 0.24, delay: i * 0.008 }}

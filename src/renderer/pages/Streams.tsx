@@ -7,7 +7,7 @@ import { DropZone, Prompt, RemoveDialog, Thumb } from '../components/Bits'
 import {
   IconCalendar, IconCheck, IconFolder, IconImage, IconPlus, IconTrash
 } from '../components/Icons'
-import { mediaUrl, useAppState, useStore } from '../state/store'
+import { lastStreamActivityAt, mediaUrl, useAppState, useStore } from '../state/store'
 import mascot from '../assets/mascot.png'
 import c from '../components/components.module.css'
 import p from './pages.module.css'
@@ -27,8 +27,18 @@ export default function Streams(): ReactNode {
   const [removing, setRemoving] = useState<Stream | null>(null)
   const api = window.raeydzone
 
-  const upcoming = state.streams.filter((s) => !s.streamedAt)
-  const past = state.streams.filter((s) => s.streamedAt)
+  const upcoming = state.streams
+    .filter((s) => !s.streamedAt)
+    .slice()
+    .sort((a, b) => {
+      const at = a.scheduledAt ? new Date(a.scheduledAt).getTime() : Infinity
+      const bt = b.scheduledAt ? new Date(b.scheduledAt).getTime() : Infinity
+      return at === bt ? lastStreamActivityAt(b) - lastStreamActivityAt(a) : at - bt
+    })
+  const past = state.streams
+    .filter((s) => s.streamedAt)
+    .slice()
+    .sort((a, b) => lastStreamActivityAt(b) - lastStreamActivityAt(a))
 
   const drop = async (stream: Stream, paths: string[], target: 'auto' | 'thumbnail') => {
     const res = await run(() => api.dropFiles('stream', stream.id, paths, target))

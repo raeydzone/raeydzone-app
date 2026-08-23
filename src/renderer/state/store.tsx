@@ -128,3 +128,26 @@ export function mediaUrl(
 export function isComplete(v: Video): boolean {
   return Object.values(v.steps).every((t) => t !== null)
 }
+
+// Ordering follows the work, not the paperwork: the most recently completed step wins,
+// falling back to creation for projects nothing has happened to yet.
+export function lastProgressAt(v: Video): number {
+  let latest = new Date(v.createdAt).getTime()
+  for (const ts of Object.values(v.steps)) {
+    if (!ts) continue
+    const t = new Date(ts).getTime()
+    if (t > latest) latest = t
+  }
+  return latest
+}
+
+export function byProgress(a: Video, b: Video): number {
+  return lastProgressAt(b) - lastProgressAt(a)
+}
+
+export function lastStreamActivityAt(s: Stream): number {
+  return Math.max(
+    new Date(s.createdAt).getTime(),
+    s.streamedAt ? new Date(s.streamedAt).getTime() : 0
+  )
+}
