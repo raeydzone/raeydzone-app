@@ -46,8 +46,9 @@ export interface Stream {
 export type LogType =
   | 'video.create' | 'video.rename' | 'video.step.done' | 'video.step.undone'
   | 'video.thumbnail' | 'video.baseVideo' | 'video.premiere' | 'video.files'
+  | 'video.remove' | 'video.repair'
   | 'stream.create' | 'stream.streamed' | 'stream.unstreamed' | 'stream.schedule'
-  | 'stream.thumbnail' | 'stream.files'
+  | 'stream.thumbnail' | 'stream.files' | 'stream.remove'
   | 'timer.start' | 'timer.stop' | 'timer.recovered'
   | 'system.root' | 'system.rescan'
 

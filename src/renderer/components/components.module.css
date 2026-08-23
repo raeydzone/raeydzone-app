@@ -314,6 +314,23 @@
   margin-bottom: var(--s-4);
 }
 
+.modalText {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.modalText b {
+  color: var(--text);
+}
+
+.modalChoices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+
 .modalActions {
   display: flex;
   justify-content: flex-end;

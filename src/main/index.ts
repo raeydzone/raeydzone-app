@@ -56,6 +56,7 @@ app.whenReady().then(async () => {
     db.open(settings.rootPath)
     db.trimLog()
     await lib.ensureRoot(settings.rootPath)
+    await lib.repairAll(settings.rootPath)
     timer.recover()
     startReminders()
     watchRoot(settings.rootPath)

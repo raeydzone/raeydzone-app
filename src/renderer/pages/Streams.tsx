@@ -3,9 +3,9 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Stream } from '@shared/types'
 import { formatStamp } from '@shared/format'
-import { DropZone, Prompt, Thumb } from '../components/Bits'
+import { DropZone, Prompt, RemoveDialog, Thumb } from '../components/Bits'
 import {
-  IconCalendar, IconCheck, IconFolder, IconImage, IconPlus
+  IconCalendar, IconCheck, IconFolder, IconImage, IconPlus, IconTrash
 } from '../components/Icons'
 import { mediaUrl, useAppState, useStore } from '../state/store'
 import mascot from '../assets/mascot.png'
@@ -24,6 +24,7 @@ export default function Streams(): ReactNode {
   const state = useAppState()
   const { run, rev, notify } = useStore()
   const [creating, setCreating] = useState(false)
+  const [removing, setRemoving] = useState<Stream | null>(null)
   const api = window.raeydzone
 
   const upcoming = state.streams.filter((s) => !s.streamedAt)
@@ -110,6 +111,13 @@ export default function Streams(): ReactNode {
             >
               <IconFolder />
             </button>
+            <button
+              className={`${ui.btn} ${p.iconBtn} ${ui.btnDanger}`}
+              title="Remove this stream"
+              onClick={() => setRemoving(stream)}
+            >
+              <IconTrash />
+            </button>
           </div>
         </DropZone>
       </motion.div>
@@ -153,6 +161,19 @@ export default function Streams(): ReactNode {
           )}
         </>
       )}
+
+      <RemoveDialog
+        open={removing !== null}
+        name={removing?.name ?? ''}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        onConfirm={(deleteFolder) => {
+          if (!removing) return
+          void run(
+            () => api.removeStream(removing.id, deleteFolder),
+            deleteFolder ? 'Folder moved to the Recycle Bin' : 'Removed — folder kept'
+          )
+        }}
+      />
 
       <Prompt
         open={creating}

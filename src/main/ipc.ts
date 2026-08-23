@@ -76,9 +76,13 @@ export function watchRoot(root: string): void {
   const target = path.join(root, '.raeydzone')
   try {
     fs.mkdirSync(target, { recursive: true })
-    watcher = fs.watch(target, () => {
+    watcher = fs.watch(target, (_event, filename) => {
+      if (filename && !String(filename).startsWith('template.prproj')) return
       if (watchDebounce) clearTimeout(watchDebounce)
-      watchDebounce = setTimeout(() => void broadcast(), 250)
+      watchDebounce = setTimeout(() => {
+        // installing the template backfills project files for videos created before it
+        void lib.repairAll(root).then(() => broadcast())
+      }, 400)
     })
   } catch {
     watcher = null
@@ -147,10 +151,16 @@ export function register(): void {
   )
   handle('videos:step', (id: string, step: StepId) => lib.toggleStep(id, step))
   handle('videos:premiere', (id: string) => lib.openPremiere(requireRoot(), id))
+  handle('videos:remove', (id: string, deleteFolder: boolean) =>
+    lib.removeVideo(requireRoot(), id, deleteFolder)
+  )
 
   handle('streams:create', (name: string) => lib.createStream(requireRoot(), name))
   handle('streams:streamed', (id: string, done: boolean) => lib.setStreamed(id, done))
   handle('streams:schedule', (id: string, iso: string | null) => lib.setSchedule(id, iso))
+  handle('streams:remove', (id: string, deleteFolder: boolean) =>
+    lib.removeStream(requireRoot(), id, deleteFolder)
+  )
 
   handle('files:drop', (kind: 'video' | 'stream', id: string, paths: string[], target: DropTarget) =>
     lib.dropFiles(requireRoot(), kind, id, paths, target)
@@ -180,6 +190,7 @@ export function register(): void {
   handle('timer:stop', () => timer.stop())
 
   handle('system:rescan', () => lib.rescan(requireRoot()))
+  handle('system:repair', () => lib.repairAll(requireRoot()))
   handle('system:openRoot', () => shell.openPath(requireRoot()))
   handle('system:openTemplateFolder', () =>
     shell.openPath(path.dirname(db.templatePath(requireRoot())))

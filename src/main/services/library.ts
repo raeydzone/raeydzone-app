@@ -214,6 +214,8 @@ export async function dropFiles(
       : streamPath(root, entity as Stream)
   assertInside(root, dir)
   await fs.mkdir(dir, { recursive: true })
+  if (kind === 'video') await repairVideo(root, entity as Video)
+  else await repairStream(root, entity as Stream)
 
   const result: DropResult = { moved: [], failed: [] }
 
@@ -274,6 +276,7 @@ export async function dropFiles(
 
 export async function openPremiere(root: string, id: string): Promise<string | null> {
   const video = findVideo(id)
+  await repairVideo(root, video)
   const err = await launch(prprojPath(root, video))
   if (!err) {
     log('video.premiere', 'Opened Premiere project for "' + video.name + '"', {
@@ -296,6 +299,139 @@ export async function reveal(
       : streamPath(root, entity as Stream)
   assertInside(root, dir)
   await shell.openPath(dir)
+}
+
+// A project folder can be edited or gutted from Explorer at any time; every entry point
+// repairs before it acts rather than trusting the database.
+export async function repairVideo(root: string, video: Video): Promise<boolean> {
+  const dir = videoPath(root, video)
+  let changed = false
+
+  if (!(await exists(dir))) {
+    if (!video.missing) {
+      video.missing = true
+      db.saveVideo(video)
+    }
+    return false
+  }
+
+  if (video.missing) {
+    video.missing = false
+    changed = true
+  }
+
+  for (const sub of ['footage', 'assets']) {
+    const target = path.join(dir, sub)
+    if (!(await exists(target))) {
+      await fs.mkdir(target, { recursive: true })
+      changed = true
+    }
+  }
+
+  const thumb = await findByStem(dir, THUMB_STEM)
+  if (thumb !== video.thumbnail) {
+    video.thumbnail = thumb
+    changed = true
+  }
+
+  const base = await findByStem(dir, BASE_STEM)
+  if (base !== video.baseVideo) {
+    video.baseVideo = base
+    changed = true
+  }
+
+  if (!(await exists(prprojPath(root, video)))) {
+    if (await createProjectFile(root, dir, video.folder)) changed = true
+  }
+
+  if (changed) db.saveVideo(video)
+  return changed
+}
+
+export async function repairStream(root: string, stream: Stream): Promise<boolean> {
+  const dir = streamPath(root, stream)
+  let changed = false
+
+  if (!(await exists(dir))) {
+    if (!stream.missing) {
+      stream.missing = true
+      db.saveStream(stream)
+    }
+    return false
+  }
+
+  if (stream.missing) {
+    stream.missing = false
+    changed = true
+  }
+
+  const thumb = await findByStem(dir, THUMB_STEM)
+  if (thumb !== stream.thumbnail) {
+    stream.thumbnail = thumb
+    changed = true
+  }
+
+  if (changed) db.saveStream(stream)
+  return changed
+}
+
+export async function repairAll(root: string): Promise<number> {
+  await ensureRoot(root)
+  let repaired = 0
+  for (const v of [...db.state().videos]) {
+    if (await repairVideo(root, v)) repaired++
+  }
+  for (const s of [...db.state().streams]) {
+    if (await repairStream(root, s)) repaired++
+  }
+  if (repaired > 0) {
+    log('video.repair', 'Repaired ' + repaired + ' project folder(s)')
+  }
+  return repaired
+}
+
+export async function removeVideo(
+  root: string,
+  id: string,
+  deleteFolder: boolean
+): Promise<void> {
+  const video = findVideo(id)
+  const dir = videoPath(root, video)
+
+  if (deleteFolder && (await exists(dir))) {
+    assertInside(root, dir)
+    await shell.trashItem(dir)
+  }
+
+  db.deleteVideo(id)
+  log(
+    'video.remove',
+    deleteFolder
+      ? 'Deleted "' + video.name + '" and moved its folder to the Recycle Bin'
+      : 'Removed "' + video.name + '" — folder left on disk'
+  )
+}
+
+export async function removeStream(
+  root: string,
+  id: string,
+  deleteFolder: boolean
+): Promise<void> {
+  const stream = findStream(id)
+  const dir = streamPath(root, stream)
+
+  if (deleteFolder && (await exists(dir))) {
+    assertInside(root, dir)
+    await shell.trashItem(dir)
+  }
+
+  db.deleteStream(id)
+  log(
+    'stream.remove',
+    deleteFolder
+      ? 'Deleted "' + stream.name + '" and moved its folder to the Recycle Bin'
+      : 'Removed "' + stream.name + '" — folder left on disk'
+  )
 }
 
 async function orphanFolders(dir: string, known: Set<string>): Promise<string[]> {
@@ -363,6 +499,7 @@ export async function rescan(root: string): Promise<{ added: number; missing: nu
     db.saveStream(s)
   }
 
+  await repairAll(root)
   log('system.rescan', 'Rescan added ' + added + ', flagged ' + missing + ' missing')
   return { added, missing }
 }

@@ -122,9 +122,14 @@
   color: var(--text);
 }
 
-.btnDanger:hover:not(:disabled) {
-  border-color: var(--accent-deep);
+.btnDanger {
   color: var(--accent-hot);
+  border-color: var(--accent-deep);
+}
+
+.btnDanger:hover:not(:disabled) {
+  background: var(--accent-wash);
+  border-color: var(--accent);
 }
 
 .input {

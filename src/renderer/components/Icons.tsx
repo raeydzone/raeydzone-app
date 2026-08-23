@@ -67,6 +67,9 @@ export const IconPremiere = ({ size = 20 }: Props): ReactNode => (
 export const IconCalendar = ({ size = 15 }: Props): ReactNode =>
   base(size, <><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /></>)
 
+export const IconTrash = ({ size = 16 }: Props): ReactNode =>
+  base(size, <><path d="M4 7h16M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7" /><path d="M6.5 7l.8 11.1A1.5 1.5 0 0 0 8.8 19.5h6.4a1.5 1.5 0 0 0 1.5-1.4L17.5 7" /><path d="M10.5 11v5M13.5 11v5" /></>)
+
 export const IconPlay = ({ size = 20 }: Props): ReactNode =>
   base(size, <path d="M7 4.5v15l13-7.5z" />)
 

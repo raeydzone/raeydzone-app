@@ -162,6 +162,57 @@ export function Timeline({
   )
 }
 
+export function RemoveDialog({
+  open,
+  name,
+  onOpenChange,
+  onConfirm
+}: {
+  open: boolean
+  name: string
+  onOpenChange: (open: boolean) => void
+  onConfirm: (deleteFolder: boolean) => void
+}): ReactNode {
+  const choose = (deleteFolder: boolean): void => {
+    onConfirm(deleteFolder)
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className={s.overlay} />
+        <Dialog.Content className={s.modal}>
+          <Dialog.Title className={s.modalTitle}>Remove “{name}”?</Dialog.Title>
+          <Dialog.Description className={s.modalText}>
+            <b>Keep files</b> drops it from RaeydZone and leaves the folder untouched on
+            disk — a rescan will pick it back up.
+            <br />
+            <b>Delete folder</b> also moves the folder to the Recycle Bin, where you can
+            still restore it.
+          </Dialog.Description>
+          <div className={s.modalChoices}>
+            <button className={ui.btn} onClick={() => choose(false)}>
+              Keep files, remove from RaeydZone
+            </button>
+            <button
+              className={`${ui.btn} ${ui.btnDanger}`}
+              onClick={() => choose(true)}
+            >
+              Delete folder (to Recycle Bin)
+            </button>
+          </div>
+          <div className={s.modalActions}>
+            <Dialog.Close asChild>
+              <button className={`${ui.btn} ${ui.btnGhost}`}>Cancel</button>
+            </Dialog.Close>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
 export function Prompt({
   open,
   title,

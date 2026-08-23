@@ -30,11 +30,15 @@ const api = {
   renameVideo: (id: string, name: string) => call<Video>('videos:rename', id, name),
   toggleStep: (id: string, step: StepId) => call<Video>('videos:step', id, step),
   openPremiere: (id: string) => call<string | null>('videos:premiere', id),
+  removeVideo: (id: string, deleteFolder: boolean) =>
+    call<void>('videos:remove', id, deleteFolder),
 
   createStream: (name: string) => call<Stream>('streams:create', name),
   setStreamed: (id: string, done: boolean) => call<Stream>('streams:streamed', id, done),
   setSchedule: (id: string, iso: string | null) =>
     call<Stream>('streams:schedule', id, iso),
+  removeStream: (id: string, deleteFolder: boolean) =>
+    call<void>('streams:remove', id, deleteFolder),
 
   dropFiles: (kind: 'video' | 'stream', id: string, paths: string[], target: DropTarget) =>
     call<DropResult>('files:drop', kind, id, paths, target),
@@ -50,6 +54,7 @@ const api = {
   stopTimer: () => call<number>('timer:stop'),
 
   rescan: () => call<{ added: number; missing: number }>('system:rescan'),
+  repair: () => call<number>('system:repair'),
   openRoot: () => call<void>('system:openRoot'),
   openTemplateFolder: () => call<void>('system:openTemplateFolder'),
 

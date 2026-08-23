@@ -13,9 +13,12 @@ export const IMAGE_EXTS = new Set([
   '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif'
 ])
 
+// Folder names carry no spaces: paths land in scripts, Premiere and the shell, and
+// quoting bugs there are silent. The display name keeps its spaces.
 export function sanitizeFolderName(input: string): string {
-  let name = input.replace(INVALID, '').replace(/\s+/g, ' ').trim()
-  name = name.replace(/[. ]+$/, '')
+  let name = input.replace(INVALID, '').trim()
+  name = name.replace(/\s+/g, '_').replace(/_{2,}/g, '_')
+  name = name.replace(/^[._]+/, '').replace(/[._]+$/, '')
   if (RESERVED.test(name)) name = `_${name}`
   return name.slice(0, 120)
 }

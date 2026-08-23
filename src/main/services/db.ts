@@ -174,6 +174,16 @@ export function saveStream(s: Stream): void {
   if (!cache.streams.some((x) => x.id === s.id)) cache.streams.unshift(s)
 }
 
+export function deleteVideo(id: string): void {
+  db().prepare('DELETE FROM videos WHERE id = ?').run(id)
+  cache.videos = cache.videos.filter((v) => v.id !== id)
+}
+
+export function deleteStream(id: string): void {
+  db().prepare('DELETE FROM streams WHERE id = ?').run(id)
+  cache.streams = cache.streams.filter((s) => s.id !== id)
+}
+
 export function addLog(entry: LogEntry): void {
   db()
     .prepare(

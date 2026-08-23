@@ -4,9 +4,13 @@ import type { ReactNode } from 'react'
 import { STEP_IDS } from '@shared/types'
 import type { Video } from '@shared/types'
 import { formatStamp } from '@shared/format'
-import { CardSteps, DropZone, Prompt, Thumb, Timeline, Toggle } from '../components/Bits'
+import {
+  CardSteps, DropZone, Prompt, RemoveDialog, Thumb, Timeline, Toggle
+} from '../components/Bits'
 import { LogRows } from '../components/LogFeed'
-import { IconFolder, IconImage, IconPlus, IconPremiere, IconVideo } from '../components/Icons'
+import {
+  IconFolder, IconImage, IconPlus, IconPremiere, IconTrash, IconVideo
+} from '../components/Icons'
 import { isComplete, mediaUrl, useAppState, useStore } from '../state/store'
 import mascot from '../assets/mascot.png'
 import p from './pages.module.css'
@@ -101,6 +105,7 @@ function Detail({ video, onBack }: { video: Video; onBack: () => void }): ReactN
   const state = useAppState()
   const { run, rev, notify } = useStore()
   const [renaming, setRenaming] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const api = window.raeydzone
 
   const drop = async (paths: string[], target: 'auto' | 'thumbnail' | 'baseVideo') => {
@@ -134,6 +139,14 @@ function Detail({ video, onBack }: { video: Video; onBack: () => void }): ReactN
         <div className={ui.row}>
           <button className={ui.btn} onClick={() => setRenaming(true)}>
             Rename
+          </button>
+          <button
+            className={`${ui.btn} ${ui.btnDanger}`}
+            title="Remove this video"
+            onClick={() => setRemoving(true)}
+          >
+            <IconTrash />
+            Remove
           </button>
           <button className={ui.btn} onClick={() => void run(() => api.reveal('video', video.id))}>
             <IconFolder />
@@ -248,6 +261,19 @@ function Detail({ video, onBack }: { video: Video; onBack: () => void }): ReactN
           </DropZone>
         </div>
       </div>
+
+      <RemoveDialog
+        open={removing}
+        name={video.name}
+        onOpenChange={setRemoving}
+        onConfirm={async (deleteFolder) => {
+          const ok = await run(
+            () => api.removeVideo(video.id, deleteFolder),
+            deleteFolder ? 'Folder moved to the Recycle Bin' : 'Removed — folder kept'
+          )
+          if (ok !== null) onBack()
+        }}
+      />
 
       <Prompt
         open={renaming}
