@@ -1,57 +1,120 @@
 <div align="center">
 
-<img src="assets/brand/mascot.png" width="130" alt="RaeydZone">
+<img src="assets/brand/mascot.png" width="120" alt="RaeydZone">
 
 # RaeydZone
 
-**A control room for the YouTube grind.**
+**A desktop production tracker for YouTube creators.**
 
-Tracks every video through a fixed production pipeline, owns the folder structure on
-disk, and holds you to an hour a day.
+Manages your project folders, tracks every video through an editing pipeline,
+and holds you to a daily work goal.
 
-<img src="https://img.shields.io/badge/platform-Windows-0a0a0a?style=flat-square&labelColor=0a0a0a&color=e11d21" alt="Windows">
-<img src="https://img.shields.io/badge/Electron-35-0a0a0a?style=flat-square&labelColor=0a0a0a&color=e11d21" alt="Electron 35">
-<img src="https://img.shields.io/badge/React-19-0a0a0a?style=flat-square&labelColor=0a0a0a&color=e11d21" alt="React 19">
-<img src="https://img.shields.io/badge/SQLite-built--in-0a0a0a?style=flat-square&labelColor=0a0a0a&color=e11d21" alt="SQLite">
+<img src="https://img.shields.io/badge/Windows%2011-0a0a0a?style=for-the-badge&logo=windows11&logoColor=e11d21&labelColor=0a0a0a" alt="Windows 11">
+<img src="https://img.shields.io/badge/Electron%2035-0a0a0a?style=for-the-badge&logo=electron&logoColor=e11d21&labelColor=0a0a0a" alt="Electron 35">
+<img src="https://img.shields.io/badge/React%2019-0a0a0a?style=for-the-badge&logo=react&logoColor=e11d21&labelColor=0a0a0a" alt="React 19">
+<img src="https://img.shields.io/badge/TypeScript-0a0a0a?style=for-the-badge&logo=typescript&logoColor=e11d21&labelColor=0a0a0a" alt="TypeScript">
+
+<br>
+
+<img src="docs/dashboard.png" alt="RaeydZone dashboard" width="880">
 
 </div>
 
 ---
 
-## What it does
+## The problem
 
-Not a video editor. Not an uploader. It manages **folders, progress, and time** — the
-three things that quietly rot when you make videos every week.
+Making videos on a schedule generates mess faster than it generates videos. Footage piles
+up in Downloads. Half-finished projects lose their thumbnails. You forget whether the
+short was cut or whether last Tuesday's upload actually went out. And the days you didn't
+work leave no trace, so the drift is invisible until the channel stalls.
+
+RaeydZone is the layer that keeps that straight. It is not a video editor and not an
+uploader — it manages **folders, progress, and time**.
+
+## Features
+
+### Video pipeline
+
+Every video moves through six stages. They display in order but complete in any order,
+because the thumbnail often lands before the effects do. Each stage stores its own
+completion timestamp, and unchecking one records the reversal.
+
+<div align="center">
+<img src="docs/video-detail.png" alt="Video detail with pipeline timeline" width="820">
+</div>
+
+### Projects own their folders
+
+Creating a video creates its folder, its subfolders, and a Premiere project copied from
+your own blank template — named to match, ready to open with one button.
+
+<div align="center">
+<img src="docs/videos.png" alt="Video overview" width="820">
+</div>
+
+### Drop files where they belong
+
+Drag anything onto a project. Video files move into `footage/`, everything else into
+`assets/`. Files are **moved, not copied**, so nothing is left behind to clean up later.
+Thumbnails and the base cut have their own single-occupancy slots that replace on drop.
+
+### Streams
+
+Lighter than videos: a name, a thumbnail, a scheduled time that fires a desktop
+notification, and a streamed / not-yet flag. Missed reminders surface on next launch
+rather than vanishing.
+
+<div align="center">
+<img src="docs/streams.png" alt="Streams" width="820">
+</div>
+
+### Daily work timer
+
+Start and stop as often as you like — the day accumulates. The bar fills at one hour.
+Sessions that cross midnight are split at the boundary so each day gets its real minutes,
+and a heartbeat every 30 seconds means a crash costs you at most half a minute rather
+than the whole session.
+
+<div align="center">
+<img src="docs/timer.png" alt="Timer with 30-day history" width="820">
+</div>
+
+### Everything is logged
+
+Every state change — created, renamed, checked, unchecked, moved, scheduled, streamed —
+lands in a searchable log grouped by day, with the same activity feed scoped to each
+project.
+
+<div align="center">
+<img src="docs/log.png" alt="Activity log" width="820">
+</div>
+
+## Installing
+
+Download the latest `RaeydZone Setup <version>.exe` from
+[**Releases**](https://github.com/raeydzone/raeydzone-app/releases) and run it.
+
+The app checks for updates on launch and every six hours. When a new version has
+downloaded, an **Update** button appears above the daily progress bar; clicking it
+restarts into the new version.
+
+**Requirements**
 
 | | |
 |---|---|
-| **Videos** | Create a project, get a folder. Six pipeline steps, checkable in any order, each stamped with when you finished it. |
-| **Drop to file** | Drag anything onto a project. Video files land in `footage/`, everything else in `assets/`. Files are **moved**, not copied — nothing is left behind in Downloads. |
-| **Premiere** | Every new project copies your blank `template.prproj`, named to match. One button launches it. |
-| **Thumbnails** | One slot per project. Drop a new image and it replaces the old one. Previewed everywhere. |
-| **Streams** | Lighter than videos — name, thumbnail, a scheduled time that fires a desktop notification, and a streamed/not-yet flag. |
-| **Timer** | Start, stop, resume — the day accumulates. Hit 1:00:00 and the bar fills. Thirty days of history, hoverable. |
-| **Log** | Every state change, grouped by day, filterable. Per-project activity on each video too. |
+| OS | Windows 11 (Windows 10 should work; untested) |
+| Disk | ~200 MB for the app, plus whatever your footage needs |
+| Premiere Pro | Optional — only needed for project templating and launch |
 
-## The pipeline
+## First run
 
-```
-1  Recording footage
-2  Base editing
-3  Effects / memes
-4  Short
-5  Thumbnail
-6  Uploaded
-```
+RaeydZone asks for one folder to manage. It proposes `~/Documents/RaeydZone`, and you can
+point it anywhere outside a cloud-sync tree.
 
-Displayed in order, completed in any order — because the thumbnail often lands before
-the effects do. Each check stores its own timestamp; unchecking clears it and logs the
-reversal.
-
-## Folder layout
-
-One root folder holds everything. It defaults to `~/Documents/RaeydZone` and is
-changeable at any time.
+<div align="center">
+<img src="docs/settings.png" alt="Settings" width="820">
+</div>
 
 ```
 RaeydZone/
@@ -70,29 +133,19 @@ RaeydZone/
         └── thumbnail.png
 ```
 
-The database lives inside the root, so moving or syncing the folder moves everything as
-one unit. **Rescan** in Settings rebuilds from whatever is actually on disk — the
-recovery path if the folder is ever edited by hand.
+The database lives inside the managed folder, so moving or backing up that folder moves
+everything as one unit. **Rescan** in Settings reconciles the database against what is
+actually on disk — it adopts folders you created by hand and flags entries whose folder
+has disappeared.
 
-## Design
+### Premiere Pro templating
 
-Black surfaces, one red accent, borrowed from the mascot's eyes. Every colour, spacing
-step, radius, and animation duration is a CSS custom property in one theme file; a raw
-hex in a component is a bug. Nothing snaps — everything transitions in 120–200 ms.
+Save one blank project from Premiere as `.raeydzone/template.prproj`. Every new video
+copies it, so projects are always created at your Premiere version with your own
+sequence presets. The app never writes into `.prproj` files — that format is gzipped XML
+with internal identifiers, and editing it externally risks projects that will not open.
 
-## Stack
-
-- **Electron 35** — frameless window, custom titlebar, `contextIsolation` on
-- **React 19 + TypeScript** — strict, no `any`
-- **node:sqlite** — SQLite built into Node 22, zero native modules to compile
-- **Radix UI** — accessible primitives, unstyled, painted by us
-- **Motion** — every transition
-- **electron-vite** + **electron-builder**
-
-All filesystem work happens in the main process, with every path validated to sit inside
-the root before anything is written, moved, or deleted.
-
-## Building
+## Building from source
 
 ```bash
 npm install
@@ -103,20 +156,44 @@ npm run dev
 npm run build
 ```
 
-Produces `dist/RaeydZone Setup <version>.exe`.
+The installer lands in `dist/`.
 
-> **Windows Developer Mode must be on** (Settings → System → For developers). Without it
-> electron-builder cannot extract its code-signing cache — it contains macOS symlinks,
-> and Windows blocks symlink creation otherwise. The failure looks like
+> **Windows Developer Mode must be enabled** to package (Settings → System → For
+> developers). Without it, electron-builder cannot extract its code-signing cache, which
+> contains macOS symlinks that Windows refuses to create otherwise. The failure reads
 > `Cannot create symbolic link ... libcrypto.dylib`.
 
-## Updates
+## Architecture
 
-The app checks GitHub Releases on launch and every six hours. When a new version is
-downloaded, an **Update** button appears above the daily progress bar in the sidebar;
-clicking it restarts into the new version.
+```
+src/
+├── main/          Electron main — filesystem, SQLite, IPC, updater
+│   ├── services/  db · library · timer · log · premiere · settings · updater
+│   └── util/      path sanitising, safe joins, cross-device moves
+├── preload/       the only bridge; contextIsolation on, nodeIntegration off
+├── renderer/      React 19 — pages, components, CSS modules
+└── shared/        types and formatters used by both sides
+```
 
-To ship one: bump `version` in `package.json`, then
+Design decisions worth knowing:
+
+- **All filesystem work happens in main.** Every path is validated to sit inside the
+  managed root before anything is written, moved, or deleted.
+- **Moves are real moves.** `fs.rename`, falling back to copy-and-unlink only across
+  devices; a failed move leaves the source untouched.
+- **No native modules.** Storage uses `node:sqlite`, built into the Node 22 runtime that
+  Electron 35 ships, so there is nothing to compile and no ABI to match.
+- **Media is served over a custom protocol** scoped to the managed root, rather than
+  loosening web security to read local files.
+
+## Versioning
+
+`0.MAJOR.PATCH`
+
+- Bug fixes and small changes bump the patch — `0.1.1`, `0.1.2`, …
+- Larger feature work bumps the middle number and resets to `.1` — `0.2.1`, `0.3.1`, …
+
+Releasing:
 
 ```bash
 npx electron-builder --win --publish always
@@ -124,19 +201,15 @@ npx electron-builder --win --publish always
 
 with `GH_TOKEN` set to a token that can write releases.
 
-> Because this repository is private, the installed app also needs a read token to fetch
-> releases. Either make a separate public repo for releases, or set `GH_TOKEN` in the
-> app's environment. Shipping a token inside the binary works but puts it in every copy.
-
 ## Conventions
 
 - Comments are capped at **5% of lines** and explain *why*, never *what*
 - Timestamps always render as `DD, Month YYYY HH:MM` — `23, August 2026 14:30`
-- No hardcoded user paths, ever; the root resolves from `app.getPath('home')`
-- OneDrive folders are rejected as roots — footage does not belong in a sync engine
+- No hardcoded user paths; the managed root resolves from `app.getPath('home')`
+- OneDrive folders are rejected as roots — large footage does not belong in a sync engine
+- Every colour, spacing step, radius, and duration is a CSS custom property in one theme
+  file; a raw hex in a component is a bug
 
-<div align="center">
+## License
 
-<sub>Built for one person. Kept simple on purpose.</sub>
-
-</div>
+MIT — see [LICENSE](LICENSE).

@@ -1,12 +1,12 @@
 # RaeydZone
 
-Personal Electron desktop app — a control room for the YouTube grind. Tracks video
-projects through a production pipeline, owns their folder structure on disk, and enforces
-a daily work-time goal.
+A desktop production tracker for YouTube creators. Tracks video projects through an
+editing pipeline, owns their folder structure on disk, and enforces a daily work goal.
 
-Ships as a single Windows executable with a GUI — no CLI, no server, no accounts, no
-telemetry. Built for one user, so skip multi-user, i18n, and backwards-compat concerns
-unless asked.
+Ships as a single Windows 11 executable with a GUI — no CLI, no server, no accounts, no
+telemetry. Single-user by design: skip multi-user and i18n concerns unless asked. It
+should run correctly on any Windows 11 machine, so never assume a specific user, drive,
+or folder layout.
 
 Product detail lives in [SPEC.md](SPEC.md). This file is the rules.
 
@@ -71,7 +71,7 @@ Every color, space, radius, and duration is a CSS custom property in
 `src/renderer/styles/theme.css`. Components read variables only — a raw hex or px value in
 a `.module.css` is a bug.
 
-Brand assets live in `assets/brand/` (source of truth: `D:\RaeydZone\2026`). The hooded
+Brand assets live in `assets/brand/`. The hooded
 red-eyed cat is the app's face — window icon, sidebar mark, empty states.
 
 ## Code

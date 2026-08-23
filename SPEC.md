@@ -1,7 +1,7 @@
 # RaeydZone — Product Spec
 
-A personal control room for the YouTube grind. Tracks video projects through a fixed
-production pipeline, owns the folder structure on disk, and enforces a daily work goal.
+A desktop production tracker for YouTube creators. Tracks video projects through a fixed
+editing pipeline, owns the folder structure on disk, and enforces a daily work goal.
 
 Not a video editor. Not a publisher. It manages **folders, progress, and time**.
 
