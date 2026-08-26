@@ -49,6 +49,7 @@ export type LogType =
   | 'video.remove' | 'video.repair' | 'video.paste'
   | 'stream.create' | 'stream.streamed' | 'stream.unstreamed' | 'stream.schedule'
   | 'stream.thumbnail' | 'stream.files' | 'stream.remove'
+  | 'tools.record'
   | 'timer.start' | 'timer.stop' | 'timer.recovered'
   | 'system.root' | 'system.rescan'
 

@@ -22,3 +22,10 @@
     ),
     var(--bg-app);
 }
+
+.poppedNote {
+  padding: var(--s-6);
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+}

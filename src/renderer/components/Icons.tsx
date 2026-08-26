@@ -76,6 +76,15 @@ export const IconSearch = ({ size = 14 }: Props): ReactNode =>
 export const IconRefresh = ({ size = 15 }: Props): ReactNode =>
   base(size, <><path d="M20 11a8 8 0 0 0-13.7-5.4L3 9" /><path d="M4 13a8 8 0 0 0 13.7 5.4L21 15" /><path d="M3 4v5h5M21 20v-5h-5" /></>)
 
+export const IconTools = ({ size = 18 }: Props): ReactNode =>
+  base(size, <path d="M14.5 5.5a4 4 0 0 0 5.2 5.2l-8.6 8.6a2.4 2.4 0 0 1-3.4-3.4z M17.5 3.2 20.8 6.5" />)
+
+export const IconMic = ({ size = 16 }: Props): ReactNode =>
+  base(size, <><rect x="9" y="3" width="6" height="10" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" /></>)
+
+export const IconExternal = ({ size = 15 }: Props): ReactNode =>
+  base(size, <><path d="M14 4h6v6" /><path d="M20 4 11.5 12.5" /><path d="M18 14.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V7.5A1.5 1.5 0 0 1 5 6h4.5" /></>)
+
 export const IconPlay = ({ size = 20 }: Props): ReactNode =>
   base(size, <path d="M7 4.5v15l13-7.5z" />)
 

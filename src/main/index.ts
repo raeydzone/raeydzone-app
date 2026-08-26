@@ -1,5 +1,4 @@
-import { BrowserWindow, app, shell } from 'electron'
-import path from 'node:path'
+import { BrowserWindow, app, desktopCapturer, session, shell } from 'electron'
 import { registerScheme, serveFrom } from './protocol'
 import * as db from './services/db'
 import * as lib from './services/library'
@@ -8,12 +7,12 @@ import * as updater from './services/updater'
 import { loadSettings } from './services/settings'
 import { attach, broadcast, register, root, startReminders, watchRoot } from './ipc'
 import { exists } from './util/paths'
+import { loadRenderer, preloadOptions, iconPath } from './windows'
 
 registerScheme()
 app.setAppUserModelId('zone.raeyd.app')
 
 let win: BrowserWindow | null = null
-
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1280,
@@ -23,13 +22,8 @@ function createWindow(): void {
     show: false,
     frame: false,
     backgroundColor: '#0a0a0a',
-    icon: path.join(__dirname, '../../build/icon.png'),
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false
-    }
+    icon: iconPath(),
+    webPreferences: preloadOptions
   })
 
   win.on('ready-to-show', () => win?.show())
@@ -38,18 +32,31 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  const devUrl = process.env['ELECTRON_RENDERER_URL']
-  if (devUrl) {
-    void win.loadURL(devUrl)
-  } else {
-    void win.loadFile(path.join(__dirname, '../renderer/index.html'))
-  }
-
+  loadRenderer(win)
   attach(win)
 }
 
 app.whenReady().then(async () => {
   serveFrom(root)
+
+  // Device labels stay blank until media permission is granted, which makes the source
+  // picker useless; this app only ever records at the user's explicit request.
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === 'media')
+  })
+
+  // Windows loopback: capture what the desktop is playing, not a microphone.
+  session.defaultSession.setDisplayMediaRequestHandler(
+    async (_request, callback) => {
+      const sources = await desktopCapturer.getSources({ types: ['screen'] })
+      if (!sources.length) {
+        callback({})
+        return
+      }
+      callback({ video: sources[0], audio: 'loopback' })
+    },
+    { useSystemPicker: false }
+  )
 
   const settings = await loadSettings()
   if (settings.rootPath && (await exists(settings.rootPath))) {

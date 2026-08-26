@@ -411,6 +411,30 @@ export async function pasteClipboard(
   throw new Error('Clipboard holds no image or file.')
 }
 
+export async function saveRecording(
+  root: string,
+  videoId: string,
+  rawName: string,
+  data: Uint8Array
+): Promise<string> {
+  const video = findVideo(videoId)
+  await repairVideo(root, video)
+
+  const dir = path.join(videoPath(root, video), 'assets')
+  assertInside(root, dir)
+  await fs.mkdir(dir, { recursive: true })
+
+  const base = sanitizeFolderName(rawName) || 'recording'
+  const filename = await uniqueFile(dir, base + '.wav')
+  await fs.writeFile(path.join(dir, filename), data)
+
+  log('tools.record', 'Saved recording ' + filename + ' to assets', {
+    id: videoId,
+    name: video.name
+  })
+  return filename
+}
+
 export async function openPremiere(root: string, id: string): Promise<string | null> {
   const video = findVideo(id)
   await repairVideo(root, video)

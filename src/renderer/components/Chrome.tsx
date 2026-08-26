@@ -4,12 +4,13 @@ import mascot from '../assets/mascot.png'
 import { useAppState, useStore, useTodayMs } from '../state/store'
 import {
   IconClose, IconDashboard, IconLog, IconMaximize, IconMinimize, IconSettings,
-  IconStream, IconTimer, IconVideo
+  IconStream, IconTimer, IconTools, IconVideo
 } from './Icons'
 import s from './components.module.css'
 import ui from '../styles/ui.module.css'
 
-export type Route = 'dashboard' | 'videos' | 'streams' | 'timer' | 'log' | 'settings'
+export type Route =
+  | 'dashboard' | 'videos' | 'streams' | 'timer' | 'tools' | 'log' | 'settings'
 
 export function TitleBar(): ReactNode {
   const api = window.raeydzone
@@ -45,6 +46,7 @@ const NAV: { id: Route; label: string; icon: ReactNode }[] = [
   { id: 'videos', label: 'Videos', icon: <IconVideo /> },
   { id: 'streams', label: 'Streams', icon: <IconStream /> },
   { id: 'timer', label: 'Timer', icon: <IconTimer /> },
+  { id: 'tools', label: 'Tools', icon: <IconTools /> },
   { id: 'log', label: 'Log', icon: <IconLog /> },
   { id: 'settings', label: 'Settings', icon: <IconSettings /> }
 ]

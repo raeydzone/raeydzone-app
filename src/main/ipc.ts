@@ -14,6 +14,7 @@ import {
 } from './services/settings'
 import { freeBytes, isRemovable } from './util/paths'
 import { DRAG_ICON_DATA_URL } from './util/dragIcon'
+import { openToolsWindow } from './windows'
 import type { AppState, DropTarget, StepId } from '@shared/types'
 
 let win: BrowserWindow | null = null
@@ -215,6 +216,11 @@ export function register(): void {
   handle('timer:start', () => timer.start())
   handle('timer:stop', () => timer.stop())
 
+  handle('tools:popout', () => openToolsWindow())
+  handle('tools:save', (videoId: string, name: string, data: Uint8Array) =>
+    lib.saveRecording(requireRoot(), videoId, name, data)
+  )
+
   handle('system:rescan', () => lib.rescan(requireRoot()))
   handle('system:repair', () => lib.repairAll(requireRoot()))
   handle('system:openRoot', () => shell.openPath(requireRoot()))
@@ -240,9 +246,14 @@ export function register(): void {
     })
   })
 
-  ipcMain.on('window:minimize', () => win?.minimize())
-  ipcMain.on('window:maximize', () =>
-    win?.isMaximized() ? win.unmaximize() : win?.maximize()
-  )
-  ipcMain.on('window:close', () => win?.close())
+  const senderWindow = (event: Electron.IpcMainEvent): BrowserWindow | null =>
+    BrowserWindow.fromWebContents(event.sender)
+
+  ipcMain.on('window:minimize', (event) => senderWindow(event)?.minimize())
+  ipcMain.on('window:maximize', (event) => {
+    const target = senderWindow(event)
+    if (!target) return
+    target.isMaximized() ? target.unmaximize() : target.maximize()
+  })
+  ipcMain.on('window:close', (event) => senderWindow(event)?.close())
 }

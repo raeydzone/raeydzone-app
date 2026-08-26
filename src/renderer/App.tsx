@@ -9,9 +9,12 @@ import SettingsPage from './pages/SettingsPage'
 import Setup from './pages/Setup'
 import Streams from './pages/Streams'
 import TimerPage from './pages/TimerPage'
+import ToolsPage from './pages/ToolsPage'
 import Videos from './pages/Videos'
 import { useStore } from './state/store'
 import app from './App.module.css'
+
+const POPPED_VIEW = new URLSearchParams(window.location.search).get('view')
 
 export default function App(): ReactNode {
   const { state } = useStore()
@@ -32,6 +35,22 @@ export default function App(): ReactNode {
     )
   }
 
+  if (POPPED_VIEW === 'tools') {
+    return (
+      <div className={app.shell}>
+        <TitleBar />
+        <main className={app.main}>
+          {state.ready ? (
+            <ToolsPage popped />
+          ) : (
+            <p className={app.poppedNote}>Set a root folder in the main window first.</p>
+          )}
+        </main>
+        <Toasts />
+      </div>
+    )
+  }
+
   if (!state.ready) {
     return (
       <div className={app.shell}>
@@ -47,6 +66,7 @@ export default function App(): ReactNode {
     videos: <Videos />,
     streams: <Streams />,
     timer: <TimerPage />,
+    tools: <ToolsPage />,
     log: <LogPage />,
     settings: <SettingsPage />
   }

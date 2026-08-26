@@ -160,6 +160,21 @@ surface once on next launch rather than being lost.
 
 ---
 
+## 3b. Tools
+
+A tab of small utilities, poppable into its own always-on-top window so it stays reachable
+while Premiere is in front.
+
+**Audio recorder.** Captures Windows loopback — whatever the desktop is currently playing
+— so a sound can be grabbed without hunting down a download. The source defaults to the
+current Windows output and is selectable, since virtual cables and interfaces are common.
+A level control (100% by default) applies before capture, and a live waveform confirms
+signal is arriving.
+
+Audio is captured as raw PCM and written as **WAV**, not WebM/Opus, because Premiere does
+not reliably import the latter. A finished take can be previewed, named, and saved
+straight into a chosen project's `assets/`.
+
 ## 4. Timer
 
 One timer, one daily goal: **60 minutes**.

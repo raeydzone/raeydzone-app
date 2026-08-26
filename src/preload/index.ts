@@ -60,6 +60,10 @@ const api = {
   startTimer: () => call<void>('timer:start'),
   stopTimer: () => call<number>('timer:stop'),
 
+  popoutTools: () => call<void>('tools:popout'),
+  saveRecording: (videoId: string, name: string, data: Uint8Array) =>
+    call<string>('tools:save', videoId, name, data),
+
   rescan: () => call<{ added: number; missing: number }>('system:rescan'),
   repair: () => call<number>('system:repair'),
   openRoot: () => call<void>('system:openRoot'),

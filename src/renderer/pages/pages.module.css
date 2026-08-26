@@ -401,3 +401,57 @@
   padding-left: 0;
   padding-right: 0;
 }
+
+.toolField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: var(--s-4);
+}
+
+.slider {
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  border-radius: 99px;
+  background: var(--bg-active);
+  outline: none;
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-panel);
+  box-shadow: 0 0 10px var(--accent-glow);
+  cursor: pointer;
+  transition: transform var(--t-fast) var(--ease);
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.wave {
+  width: 100%;
+  height: 120px;
+  margin-top: var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--bg-inset);
+  border: 1px solid var(--line);
+  transition: border-color var(--t-mid) var(--ease);
+}
+
+.waveLive {
+  border-color: var(--accent-edge);
+  box-shadow: inset 0 0 24px rgba(225, 29, 33, 0.08);
+}
+
+.player {
+  width: 100%;
+  height: 34px;
+  filter: invert(0.9) hue-rotate(180deg);
+  border-radius: var(--r-md);
+}
