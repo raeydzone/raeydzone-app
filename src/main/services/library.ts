@@ -1,4 +1,4 @@
-import { shell } from 'electron'
+import { clipboard, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import fs from 'node:fs/promises'
@@ -6,11 +6,14 @@ import * as db from './db'
 import { log } from './log'
 import { createProjectFile, launch } from './premiere'
 import {
-  IMAGE_EXTS, VIDEO_EXTS, assertInside, exists, moveFile,
+  AUDIO_EXTS, IMAGE_EXTS, VIDEO_EXTS, assertInside, exists, moveFile,
   sanitizeFolderName, uniqueFile, uniqueFolder
 } from '../util/paths'
+import type { MoveOutcome } from '../util/paths'
 import { STEP_IDS } from '@shared/types'
-import type { DropResult, DropTarget, StepId, Steps, Stream, Video } from '@shared/types'
+import type {
+  DropResult, DropTarget, FileKind, ProjectFile, StepId, Steps, Stream, Video
+} from '@shared/types'
 
 const THUMB_STEM = 'thumbnail'
 const BASE_STEM = 'raw_base_video'
@@ -174,20 +177,28 @@ export function setSchedule(id: string, iso: string | null): Stream {
   return stream
 }
 
-async function replaceSlot(dir: string, stem: string, src: string): Promise<string> {
+async function replaceSlot(
+  dir: string,
+  stem: string,
+  src: string
+): Promise<{ filename: string; via: MoveOutcome }> {
   const ext = path.extname(src).toLowerCase()
   const existing = await findByStem(dir, stem)
   if (existing) await fs.unlink(path.join(dir, existing)).catch(() => {})
   const filename = stem + ext
-  await moveFile(src, path.join(dir, filename))
-  return filename
+  const via = await moveFile(src, path.join(dir, filename))
+  return { filename, via }
 }
 
-function describeMoves(moved: { name: string; to: string }[]): string {
+function describeMoves(moved: { name: string; to: string; via: MoveOutcome }[]): string {
+  const copied = moved.filter((m) => m.via === 'copied').length
+  const note = copied > 0 ? ' (' + copied + ' copied — source was locked)' : ''
+
   if (moved.length === 1) {
     const [only] = moved
     const dir = path.dirname(only.to)
-    return dir === '.' ? 'Moved ' + only.name : 'Moved ' + only.name + ' to ' + dir
+    const where = dir === '.' ? '' : ' to ' + dir
+    return 'Moved ' + only.name + where + note
   }
   const byDir = new Map<string, number>()
   for (const m of moved) {
@@ -197,7 +208,7 @@ function describeMoves(moved: { name: string; to: string }[]): string {
   const parts = [...byDir.entries()].map(
     ([dir, n]) => n + (dir === '.' ? ' files' : ' to ' + dir)
   )
-  return 'Moved ' + parts.join(', ')
+  return 'Moved ' + parts.join(', ') + note
 }
 
 export async function dropFiles(
@@ -225,11 +236,11 @@ export async function dropFiles(
     try {
       if (target === 'thumbnail') {
         if (!IMAGE_EXTS.has(ext)) throw new Error('Not an image file')
-        const filename = await replaceSlot(dir, THUMB_STEM, src)
-        entity.thumbnail = filename
+        const slot = await replaceSlot(dir, THUMB_STEM, src)
+        entity.thumbnail = slot.filename
         if (kind === 'video') db.saveVideo(entity as Video)
         else db.saveStream(entity as Stream)
-        result.moved.push({ name, to: filename })
+        result.moved.push({ name, to: slot.filename, via: slot.via })
         log(
           kind === 'video' ? 'video.thumbnail' : 'stream.thumbnail',
           'Set thumbnail on "' + entity.name + '"',
@@ -240,10 +251,10 @@ export async function dropFiles(
 
       if (target === 'baseVideo') {
         if (!VIDEO_EXTS.has(ext)) throw new Error('Not a video file')
-        const filename = await replaceSlot(dir, BASE_STEM, src)
-        ;(entity as Video).baseVideo = filename
+        const slot = await replaceSlot(dir, BASE_STEM, src)
+        ;(entity as Video).baseVideo = slot.filename
         db.saveVideo(entity as Video)
-        result.moved.push({ name, to: filename })
+        result.moved.push({ name, to: slot.filename, via: slot.via })
         log('video.baseVideo', 'Set base video on "' + entity.name + '"', {
           id,
           name: entity.name
@@ -257,8 +268,8 @@ export async function dropFiles(
           : path.join(dir, VIDEO_EXTS.has(ext) ? 'footage' : 'assets')
       await fs.mkdir(dest, { recursive: true })
       const filename = await uniqueFile(dest, name)
-      await moveFile(src, path.join(dest, filename))
-      result.moved.push({ name, to: path.relative(dir, path.join(dest, filename)) })
+      const via = await moveFile(src, path.join(dest, filename))
+      result.moved.push({ name, to: path.relative(dir, path.join(dest, filename)), via })
     } catch (err) {
       result.failed.push({ name, reason: (err as Error).message })
     }
@@ -272,6 +283,115 @@ export async function dropFiles(
     )
   }
   return result
+}
+
+function classify(ext: string): FileKind {
+  if (VIDEO_EXTS.has(ext)) return 'video'
+  if (IMAGE_EXTS.has(ext)) return 'image'
+  if (AUDIO_EXTS.has(ext)) return 'audio'
+  return 'other'
+}
+
+function entityDir(root: string, kind: 'video' | 'stream', id: string): string {
+  const dir =
+    kind === 'video'
+      ? videoPath(root, findVideo(id))
+      : streamPath(root, findStream(id))
+  assertInside(root, dir)
+  return dir
+}
+
+export async function listFiles(
+  root: string,
+  kind: 'video' | 'stream',
+  id: string
+): Promise<ProjectFile[]> {
+  const dir = entityDir(root, kind, id)
+  const buckets = kind === 'video' ? ['', 'footage', 'assets'] : ['']
+  const out: ProjectFile[] = []
+
+  for (const bucket of buckets) {
+    const target = bucket ? path.join(dir, bucket) : dir
+    let entries
+    try {
+      entries = await fs.readdir(target, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isFile()) continue
+      if (entry.name.toLowerCase().endsWith('.prproj')) continue
+      const abs = path.join(target, entry.name)
+      const stat = await fs.stat(abs)
+      out.push({
+        name: entry.name,
+        rel: bucket ? bucket + '/' + entry.name : entry.name,
+        path: abs,
+        bucket: bucket || 'project',
+        size: stat.size,
+        modified: stat.mtime.toISOString(),
+        kind: classify(path.extname(entry.name).toLowerCase())
+      })
+    }
+  }
+
+  return out.sort((a, b) => b.modified.localeCompare(a.modified))
+}
+
+function clipboardFilePaths(): string[] {
+  try {
+    const buf = clipboard.readBuffer('FileNameW')
+    if (!buf || buf.length === 0) return []
+    const raw = buf.toString('ucs2').replace(/ +$/, '').trim()
+    return raw ? [raw] : []
+  } catch {
+    return []
+  }
+}
+
+function pasteStamp(): string {
+  const d = new Date()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return (
+    d.getFullYear() +
+    pad(d.getMonth() + 1) +
+    pad(d.getDate()) +
+    '_' +
+    pad(d.getHours()) +
+    pad(d.getMinutes()) +
+    pad(d.getSeconds())
+  )
+}
+
+export async function pasteClipboard(
+  root: string,
+  kind: 'video' | 'stream',
+  id: string
+): Promise<DropResult> {
+  const entity = kind === 'video' ? findVideo(id) : findStream(id)
+  const dir = entityDir(root, kind, id)
+
+  const image = clipboard.readImage()
+  if (!image.isEmpty()) {
+    const dest = kind === 'video' ? path.join(dir, 'assets') : dir
+    await fs.mkdir(dest, { recursive: true })
+    const filename = await uniqueFile(dest, 'pasted_' + pasteStamp() + '.png')
+    await fs.writeFile(path.join(dest, filename), image.toPNG())
+    log(
+      kind === 'video' ? 'video.paste' : 'stream.files',
+      'Pasted an image into ' + (kind === 'video' ? 'assets' : 'the stream folder'),
+      { id, name: entity.name }
+    )
+    return {
+      moved: [{ name: filename, to: path.relative(dir, path.join(dest, filename)), via: 'copied' }],
+      failed: []
+    }
+  }
+
+  const files = clipboardFilePaths()
+  if (files.length) return dropFiles(root, kind, id, files, 'auto')
+
+  throw new Error('Clipboard holds no image or file.')
 }
 
 export async function openPremiere(root: string, id: string): Promise<string | null> {

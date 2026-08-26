@@ -1,4 +1,6 @@
-import { BrowserWindow, Notification, app, dialog, ipcMain, shell } from 'electron'
+import {
+  BrowserWindow, Notification, app, dialog, ipcMain, nativeImage, shell
+} from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import * as db from './services/db'
@@ -11,6 +13,7 @@ import {
   defaultRoot, getSettings, proposeRoot, saveSettings, validateRoot
 } from './services/settings'
 import { freeBytes, isRemovable } from './util/paths'
+import { DRAG_ICON_DATA_URL } from './util/dragIcon'
 import type { AppState, DropTarget, StepId } from '@shared/types'
 
 let win: BrowserWindow | null = null
@@ -30,6 +33,14 @@ function requireRoot(): string {
   const r = root()
   if (!r) throw new Error('No root folder configured.')
   return r
+}
+
+function assertInsideRoot(target: string): void {
+  const r = requireRoot()
+  const rel = path.relative(r, path.resolve(target))
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error('That path is outside the managed folder.')
+  }
 }
 
 export async function buildState(): Promise<AppState> {
@@ -168,6 +179,21 @@ export function register(): void {
   handle('files:reveal', (kind: 'video' | 'stream', id: string) =>
     lib.reveal(requireRoot(), kind, id)
   )
+  handle('files:list', (kind: 'video' | 'stream', id: string) =>
+    lib.listFiles(requireRoot(), kind, id)
+  )
+  handle('files:paste', (kind: 'video' | 'stream', id: string) =>
+    lib.pasteClipboard(requireRoot(), kind, id)
+  )
+  handle('files:showFile', (target: string) => {
+    assertInsideRoot(target)
+    shell.showItemInFolder(target)
+  })
+  handle('files:openFile', async (target: string) => {
+    assertInsideRoot(target)
+    const err = await shell.openPath(target)
+    if (err) throw new Error(err)
+  })
   handle('files:pick', async (target: DropTarget) => {
     const filters =
       target === 'thumbnail'
@@ -195,6 +221,24 @@ export function register(): void {
   handle('system:openTemplateFolder', () =>
     shell.openPath(path.dirname(db.templatePath(requireRoot())))
   )
+
+  // Native drag-out: lets a file be dragged from the app straight into Premiere.
+  ipcMain.on('files:drag', (event, paths: string[]) => {
+    const valid = paths.filter((p) => {
+      try {
+        assertInsideRoot(p)
+        return fs.existsSync(p)
+      } catch {
+        return false
+      }
+    })
+    if (!valid.length) return
+    event.sender.startDrag({
+      files: valid,
+      file: valid[0],
+      icon: nativeImage.createFromDataURL(DRAG_ICON_DATA_URL)
+    })
+  })
 
   ipcMain.on('window:minimize', () => win?.minimize())
   ipcMain.on('window:maximize', () =>

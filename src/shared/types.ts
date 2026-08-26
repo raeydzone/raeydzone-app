@@ -46,7 +46,7 @@ export interface Stream {
 export type LogType =
   | 'video.create' | 'video.rename' | 'video.step.done' | 'video.step.undone'
   | 'video.thumbnail' | 'video.baseVideo' | 'video.premiere' | 'video.files'
-  | 'video.remove' | 'video.repair'
+  | 'video.remove' | 'video.repair' | 'video.paste'
   | 'stream.create' | 'stream.streamed' | 'stream.unstreamed' | 'stream.schedule'
   | 'stream.thumbnail' | 'stream.files' | 'stream.remove'
   | 'timer.start' | 'timer.stop' | 'timer.recovered'
@@ -106,6 +106,18 @@ export interface RootProposal {
 export type DropTarget = 'auto' | 'thumbnail' | 'baseVideo'
 
 export interface DropResult {
-  moved: { name: string; to: string }[]
+  moved: { name: string; to: string; via: 'moved' | 'copied' }[]
   failed: { name: string; reason: string }[]
+}
+
+export type FileKind = 'video' | 'image' | 'audio' | 'other'
+
+export interface ProjectFile {
+  name: string
+  rel: string
+  path: string
+  bucket: string
+  size: number
+  modified: string
+  kind: FileKind
 }

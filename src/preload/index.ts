@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
-  AppState, DropResult, DropTarget, RootProposal, StepId, Stream, Video
+  AppState, DropResult, DropTarget, ProjectFile, RootProposal, StepId, Stream, Video
 } from '@shared/types'
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -44,6 +44,13 @@ const api = {
     call<DropResult>('files:drop', kind, id, paths, target),
   pickFiles: (target: DropTarget) => call<string[]>('files:pick', target),
   reveal: (kind: 'video' | 'stream', id: string) => call<void>('files:reveal', kind, id),
+  listFiles: (kind: 'video' | 'stream', id: string) =>
+    call<ProjectFile[]>('files:list', kind, id),
+  pasteClipboard: (kind: 'video' | 'stream', id: string) =>
+    call<DropResult>('files:paste', kind, id),
+  showFile: (target: string) => call<void>('files:showFile', target),
+  openFile: (target: string) => call<void>('files:openFile', target),
+  startDrag: (paths: string[]) => ipcRenderer.send('files:drag', paths),
   pathsOf: (files: File[]) => files.map((f) => webUtils.getPathForFile(f)),
 
   checkUpdate: () => call<void>('update:check'),

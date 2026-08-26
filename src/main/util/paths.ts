@@ -9,6 +9,8 @@ export const VIDEO_EXTS = new Set([
   '.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v', '.mts', '.m2ts', '.wmv', '.flv'
 ])
 
+export const AUDIO_EXTS = new Set(['.wav', '.mp3', '.flac', '.aac', '.ogg', '.m4a'])
+
 export const IMAGE_EXTS = new Set([
   '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif'
 ])
@@ -88,17 +90,39 @@ export function isRemovable(p: string): Promise<boolean> {
   })
 }
 
-export async function moveFile(src: string, dest: string): Promise<void> {
-  try {
-    await fs.rename(src, dest)
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'EXDEV') throw err
-    await fs.copyFile(src, dest)
+const LOCKED = new Set(['EBUSY', 'EPERM', 'EACCES'])
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms))
+
+export type MoveOutcome = 'moved' | 'copied'
+
+// A file freshly written by a browser or being scanned by antivirus reports EBUSY for a
+// moment. Retry, then fall back to copying, and keep the copy even if the original
+// cannot be unlinked — landing the file matters more than tidying the source.
+export async function moveFile(src: string, dest: string): Promise<MoveOutcome> {
+  let lastErr: unknown = null
+
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      await fs.unlink(src)
-    } catch (unlinkErr) {
-      await fs.unlink(dest).catch(() => {})
-      throw unlinkErr
+      await fs.rename(src, dest)
+      return 'moved'
+    } catch (err) {
+      lastErr = err
+      const code = (err as NodeJS.ErrnoException).code ?? ''
+      if (code === 'EXDEV') break
+      if (!LOCKED.has(code)) throw err
+      await sleep(120 * (attempt + 1))
     }
+  }
+
+  await fs.copyFile(src, dest).catch((copyErr) => {
+    throw lastErr ?? copyErr
+  })
+
+  try {
+    await fs.unlink(src)
+    return 'moved'
+  } catch {
+    return 'copied'
   }
 }

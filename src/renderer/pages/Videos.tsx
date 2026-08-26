@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { STEP_IDS } from '@shared/types'
 import type { Video } from '@shared/types'
@@ -8,9 +8,11 @@ import {
   CardSteps, DropZone, Prompt, RemoveDialog, Thumb, Timeline, Toggle
 } from '../components/Bits'
 import { LogRows } from '../components/LogFeed'
+import { FilesPanel } from '../components/FilesPanel'
 import {
-  IconFolder, IconImage, IconPlus, IconPremiere, IconTrash, IconVideo
+  IconFolder, IconImage, IconPlus, IconPremiere, IconSearch, IconTrash, IconVideo
 } from '../components/Icons'
+import c from '../components/components.module.css'
 import {
   byProgress, isComplete, lastProgressAt, mediaUrl, useAppState, useStore
 } from '../state/store'
@@ -24,16 +26,17 @@ export default function Videos(): ReactNode {
   const [openId, setOpenId] = useState<string | null>(null)
   const [showDone, setShowDone] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [query, setQuery] = useState('')
 
   const open = state.videos.find((v) => v.id === openId) ?? null
 
-  const list = useMemo(
-    () =>
-      (showDone ? state.videos : state.videos.filter((v) => !isComplete(v)))
-        .slice()
-        .sort(byProgress),
-    [state.videos, showDone]
-  )
+  const list = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return (showDone ? state.videos : state.videos.filter((v) => !isComplete(v)))
+      .filter((v) => !needle || v.name.toLowerCase().includes(needle))
+      .slice()
+      .sort(byProgress)
+  }, [state.videos, showDone, query])
 
   if (open) return <Detail video={open} onBack={() => setOpenId(null)} />
 
@@ -51,6 +54,15 @@ export default function Videos(): ReactNode {
           </p>
         </div>
         <div className={ui.row}>
+          <div className={c.searchField}>
+            <IconSearch />
+            <input
+              className={c.searchInput}
+              placeholder="Search projects…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
           <Toggle checked={showDone} onChange={setShowDone} label="Show completed" />
           <button className={`${ui.btn} ${ui.btnPrimary}`} onClick={() => setCreating(true)}>
             <IconPlus />
@@ -113,12 +125,40 @@ function Detail({ video, onBack }: { video: Video; onBack: () => void }): ReactN
   const [removing, setRemoving] = useState(false)
   const api = window.raeydzone
 
-  const drop = async (paths: string[], target: 'auto' | 'thumbnail' | 'baseVideo') => {
-    const res = await run(() => api.dropFiles('video', video.id, paths, target))
-    if (!res) return
-    if (res.moved.length) notify(`Moved ${res.moved.length} file(s)`)
+  const report = (res: { moved: { via: string }[]; failed: { name: string; reason: string }[] }) => {
+    if (res.moved.length) {
+      const copied = res.moved.filter((m) => m.via === 'copied').length
+      notify(
+        copied
+          ? `${res.moved.length} file(s) added — ${copied} copied, source was locked`
+          : `Moved ${res.moved.length} file(s)`
+      )
+    }
     res.failed.forEach((f) => notify(`${f.name}: ${f.reason}`, 'bad'))
   }
+
+  const drop = async (paths: string[], target: 'auto' | 'thumbnail' | 'baseVideo') => {
+    const res = await run(() => api.dropFiles('video', video.id, paths, target))
+    if (res) report(res)
+  }
+
+  const paste = async (): Promise<void> => {
+    const res = await run(() => api.pasteClipboard('video', video.id))
+    if (res) report(res)
+  }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!e.ctrlKey || e.key.toLowerCase() !== 'v') return
+      const el = document.activeElement
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return
+      e.preventDefault()
+      void paste()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video.id])
 
   const pick = async (target: 'auto' | 'thumbnail' | 'baseVideo'): Promise<void> => {
     const paths = await run(() => api.pickFiles(target))
@@ -195,13 +235,21 @@ function Detail({ video, onBack }: { video: Video; onBack: () => void }): ReactN
                 Video files move into <b>footage</b>, everything else into <b>assets</b>.
                 Files are moved, not copied.
               </p>
-              <div style={{ marginTop: 'var(--s-3)' }}>
+              <div className={ui.row} style={{ marginTop: 'var(--s-3)' }}>
                 <button className={ui.btn} onClick={() => void pick('auto')}>
                   Choose files…
                 </button>
+                <button className={ui.btn} onClick={() => void paste()}>
+                  Paste from clipboard
+                </button>
+                <span className={ui.faint}>or press Ctrl+V anywhere on this page</span>
               </div>
             </div>
           </DropZone>
+
+          <div style={{ height: 'var(--s-4)' }} />
+
+          <FilesPanel kind="video" id={video.id} />
 
           <div style={{ height: 'var(--s-4)' }} />
 
