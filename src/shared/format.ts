@@ -29,8 +29,10 @@ export function formatDuration(ms: number): string {
 }
 
 export function formatBytes(bytes: number): string {
-  const gb = bytes / 1024 ** 3
-  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / 1024 ** 2).toFixed(0)} MB`
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${bytes} B`
 }
 
 export function dayKey(d: Date): string {

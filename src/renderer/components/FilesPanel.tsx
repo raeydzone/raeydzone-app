@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import type { ProjectFile } from '@shared/types'
 import { formatBytes } from '@shared/format'
-import { IconFolder, IconSearch } from './Icons'
+import { IconFolder, IconRefresh, IconSearch } from './Icons'
 import { useStore } from '../state/store'
 import s from './components.module.css'
 import ui from '../styles/ui.module.css'
@@ -22,23 +22,45 @@ export function FilesPanel({
 }): ReactNode {
   const { rev, notify } = useStore()
   const [files, setFiles] = useState<ProjectFile[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const seq = useRef(0)
   const api = window.raeydzone
 
-  useEffect(() => {
-    let live = true
-    api
-      .listFiles(kind, id)
-      .then((list) => {
-        if (live) setFiles(list)
-      })
-      .catch(() => {
-        if (live) setFiles([])
-      })
-    return () => {
-      live = false
+  // A failed listing keeps whatever was last known good; replacing it with an empty
+  // list made a momentary read error look like the project had lost its files.
+  const load = useCallback(async () => {
+    const mine = ++seq.current
+    try {
+      const list = await api.listFiles(kind, id)
+      if (mine !== seq.current) return
+      setFiles(list)
+      setLoaded(true)
+      setError(null)
+    } catch (err) {
+      if (mine !== seq.current) return
+      setError((err as Error).message)
     }
-  }, [kind, id, rev, api])
+  }, [api, kind, id])
+
+  useEffect(() => {
+    seq.current++
+    setFiles([])
+    setLoaded(false)
+    setError(null)
+  }, [kind, id])
+
+  useEffect(() => {
+    void load()
+  }, [load, rev])
+
+  // Premiere writes into these folders behind the app's back.
+  useEffect(() => {
+    const refresh = (): void => void load()
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [load])
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -59,18 +81,35 @@ export function FilesPanel({
         <div className={ui.sectionTitle} style={{ margin: 0 }}>
           Files · {files.length}
         </div>
-        <div className={s.searchField}>
-          <IconSearch />
-          <input
-            className={s.searchInput}
-            placeholder="Search files…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+        <div className={ui.row}>
+          <div className={s.searchField}>
+            <IconSearch />
+            <input
+              className={s.searchInput}
+              placeholder="Search files…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <button
+            className={`${ui.btn} ${ui.btnGhost}`}
+            title="Refresh the list"
+            onClick={() => void load()}
+          >
+            <IconRefresh />
+          </button>
         </div>
       </div>
 
-      {files.length === 0 ? (
+      {error && (
+        <button className={s.fileError} onClick={() => void load()}>
+          Could not read the folder — {error}. Click to retry.
+        </button>
+      )}
+
+      {!loaded && files.length === 0 ? (
+        <p className={ui.faint}>Reading folder…</p>
+      ) : files.length === 0 ? (
         <p className={ui.faint}>Nothing here yet — drop footage or assets above.</p>
       ) : (
         <>

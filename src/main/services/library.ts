@@ -285,6 +285,14 @@ export async function dropFiles(
   return result
 }
 
+const SCRATCH_EXTS = new Set(['.prproj', '.tmp', '.temp', '.prlock', '.lock'])
+
+function isScratchFile(name: string): boolean {
+  const lower = name.toLowerCase()
+  if (lower.startsWith('~') || lower.startsWith('.')) return true
+  return SCRATCH_EXTS.has(path.extname(lower))
+}
+
 function classify(ext: string): FileKind {
   if (VIDEO_EXTS.has(ext)) return 'video'
   if (IMAGE_EXTS.has(ext)) return 'image'
@@ -320,9 +328,18 @@ export async function listFiles(
     }
     for (const entry of entries) {
       if (!entry.isFile()) continue
-      if (entry.name.toLowerCase().endsWith('.prproj')) continue
+      if (isScratchFile(entry.name)) continue
       const abs = path.join(target, entry.name)
-      const stat = await fs.stat(abs)
+
+      // Premiere writes a temp file on save and removes it moments later, so a name
+      // returned by readdir may already be gone. Skip it rather than failing the listing.
+      let stat
+      try {
+        stat = await fs.stat(abs)
+      } catch {
+        continue
+      }
+
       out.push({
         name: entry.name,
         rel: bucket ? bucket + '/' + entry.name : entry.name,
@@ -342,7 +359,7 @@ function clipboardFilePaths(): string[] {
   try {
     const buf = clipboard.readBuffer('FileNameW')
     if (!buf || buf.length === 0) return []
-    const raw = buf.toString('ucs2').replace(/ +$/, '').trim()
+    const raw = buf.toString('ucs2').replace(/\u0000+$/, '').trim()
     return raw ? [raw] : []
   } catch {
     return []
@@ -554,6 +571,14 @@ export async function removeStream(
   )
 }
 
+async function birthtimeOf(dir: string): Promise<string> {
+  try {
+    return (await fs.stat(dir)).birthtime.toISOString()
+  } catch {
+    return new Date().toISOString()
+  }
+}
+
 async function orphanFolders(dir: string, known: Set<string>): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true })
   return entries
@@ -582,7 +607,7 @@ export async function rescan(root: string): Promise<{ added: number; missing: nu
       id: randomUUID(),
       name: folder,
       folder,
-      createdAt: (await fs.stat(dir)).birthtime.toISOString(),
+      createdAt: await birthtimeOf(dir),
       steps: emptySteps(),
       thumbnail: await findByStem(dir, THUMB_STEM),
       baseVideo: await findByStem(dir, BASE_STEM)
@@ -597,7 +622,7 @@ export async function rescan(root: string): Promise<{ added: number; missing: nu
       id: randomUUID(),
       name: folder,
       folder,
-      createdAt: (await fs.stat(dir)).birthtime.toISOString(),
+      createdAt: await birthtimeOf(dir),
       scheduledAt: null,
       streamedAt: null,
       thumbnail: await findByStem(dir, THUMB_STEM)
