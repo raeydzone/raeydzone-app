@@ -402,16 +402,90 @@
   padding-right: 0;
 }
 
+.toolsPage {
+  max-width: 720px;
+}
+
+.toolsPopped {
+  padding: var(--s-4);
+  max-width: none;
+}
+
+.tool {
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--s-4);
+  margin-bottom: var(--s-4);
+}
+
+.toolHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.toolIcon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: var(--accent-wash);
+  border: 1px solid var(--accent-edge);
+  color: var(--accent-hot);
+}
+
+.toolName {
+  font-size: 14px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+
+.toolDesc {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 1px;
+}
+
+.toolControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  gap: var(--s-4);
+  margin-top: var(--s-4);
+}
+
+.toolControls:has(> :nth-child(2):last-child) {
+  align-items: end;
+}
+
 .toolField {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: var(--s-4);
+  min-width: 0;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.fieldValue {
+  color: var(--text-dim);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .slider {
   width: 100%;
   height: 4px;
+  margin: 14px 0 0;
   appearance: none;
   border-radius: 99px;
   background: var(--bg-active);
@@ -420,38 +494,129 @@
 
 .slider::-webkit-slider-thumb {
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: var(--accent);
   border: 2px solid var(--bg-panel);
-  box-shadow: 0 0 10px var(--accent-glow);
+  box-shadow: 0 0 8px var(--accent-glow);
   cursor: pointer;
   transition: transform var(--t-fast) var(--ease);
 }
 
 .slider::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
+  transform: scale(1.18);
 }
 
-.wave {
-  width: 100%;
-  height: 120px;
+.waveBox {
+  position: relative;
+  height: 92px;
   margin-top: var(--s-4);
   border-radius: var(--r-md);
   background: var(--bg-inset);
   border: 1px solid var(--line);
-  transition: border-color var(--t-mid) var(--ease);
+  overflow: hidden;
+  transition: border-color var(--t-mid) var(--ease), box-shadow var(--t-mid) var(--ease);
 }
 
 .waveLive {
   border-color: var(--accent-edge);
-  box-shadow: inset 0 0 24px rgba(225, 29, 33, 0.08);
+  box-shadow: inset 0 0 30px rgba(225, 29, 33, 0.07);
+}
+
+.wave {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.waveHint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.toolFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--s-4);
+}
+
+.recClock {
+  font-size: 22px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.recClockLive {
+  color: var(--accent-hot);
+  text-shadow: 0 0 20px var(--accent-glow);
 }
 
 .player {
-  width: 100%;
-  height: 34px;
-  filter: invert(0.9) hue-rotate(180deg);
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+  padding: 8px 12px;
+  background: var(--bg-inset);
+  border: 1px solid var(--line);
   border-radius: var(--r-md);
+}
+
+.playButton {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-mid) var(--ease);
+}
+
+.playButton:hover {
+  transform: scale(1.07);
+  box-shadow: 0 0 14px var(--accent-glow);
+}
+
+.seek {
+  flex: 1;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--bg-active);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.seekFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-deep), var(--accent-hot));
+}
+
+.playerTime {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.saveButton {
+  width: 100%;
+  justify-content: center;
+  margin-top: var(--s-4);
+}
+
+@media (max-width: 520px) {
+  .toolControls {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

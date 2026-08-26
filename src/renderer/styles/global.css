@@ -42,10 +42,19 @@ button {
 }
 
 input,
-textarea {
+textarea,
+select {
   font: inherit;
   color: inherit;
   user-select: text;
+}
+
+/* Native dropdown lists follow the OS palette unless the page declares its scheme. */
+select,
+option {
+  color-scheme: dark;
+  background: var(--bg-raised);
+  color: var(--text);
 }
 
 ::selection {
