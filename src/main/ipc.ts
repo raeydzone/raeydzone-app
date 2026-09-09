@@ -20,6 +20,7 @@ import type { AppState, DropTarget, StepId } from '@shared/types'
 let win: BrowserWindow | null = null
 let reminderTimer: NodeJS.Timeout | null = null
 let watcher: fs.FSWatcher | null = null
+let archiveTimer: NodeJS.Timeout | null = null
 let watchDebounce: NodeJS.Timeout | null = null
 
 export function attach(window: BrowserWindow): void {
@@ -54,6 +55,8 @@ export async function buildState(): Promise<AppState> {
     rootValid: !!r,
     hasPremiereTemplate: r ? await hasTemplate(r) : false,
     dailyGoalMs: settings.dailyGoalMs,
+    autoArchive: settings.autoArchive,
+    archiveAfterDays: settings.archiveAfterDays,
     videos: data.videos,
     streams: data.streams,
     log: data.log.slice(0, 500),
@@ -99,6 +102,31 @@ export function watchRoot(root: string): void {
   } catch {
     watcher = null
   }
+}
+
+const ARCHIVE_EVERY_MS = 24 * 60 * 60 * 1000
+const ARCHIVE_DELAY_MS = 15_000
+
+export function startArchiveSchedule(): void {
+  if (archiveTimer) clearInterval(archiveTimer)
+  archiveTimer = null
+
+  const settings = getSettings()
+  if (!settings.autoArchive || !settings.rootPath) return
+
+  const sweep = async (): Promise<void> => {
+    const r = root()
+    if (!r || !getSettings().autoArchive) return
+    try {
+      const result = await lib.runArchive(r, getSettings().archiveAfterDays)
+      if (result.count > 0) await broadcast()
+    } catch (err) {
+      log('video.archive', 'Automatic archive failed — ' + (err as Error).message)
+    }
+  }
+
+  setTimeout(() => void sweep(), ARCHIVE_DELAY_MS)
+  archiveTimer = setInterval(() => void sweep(), ARCHIVE_EVERY_MS)
 }
 
 export function startReminders(): void {
@@ -152,10 +180,23 @@ export function register(): void {
     log('system.root', 'Root folder set to ' + chosen)
     startReminders()
     watchRoot(chosen)
+    startArchiveSchedule()
     return chosen
   })
 
   handle('settings:goal', (ms: number) => saveSettings({ dailyGoalMs: Math.max(60_000, ms) }))
+
+  handle('archive:settings', async (autoArchive: boolean, days: number) => {
+    await saveSettings({ autoArchive, archiveAfterDays: Math.max(1, Math.round(days)) })
+    startArchiveSchedule()
+  })
+  handle('archive:preview', () =>
+    lib.archivePreview(requireRoot(), getSettings().archiveAfterDays)
+  )
+  handle('archive:run', () =>
+    lib.runArchive(requireRoot(), getSettings().archiveAfterDays)
+  )
+  handle('archive:video', (id: string) => lib.archiveVideo(requireRoot(), id))
 
   handle('videos:create', (name: string) => lib.createVideo(requireRoot(), name))
   handle('videos:rename', (id: string, name: string) =>

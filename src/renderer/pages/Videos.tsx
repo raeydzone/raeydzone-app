@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { STEP_IDS } from '@shared/types'
 import type { Video } from '@shared/types'
-import { formatStamp } from '@shared/format'
+import { formatBytes, formatStamp } from '@shared/format'
 import {
   CardSteps, DropZone, Prompt, RemoveDialog, Thumb, Timeline, Toggle
 } from '../components/Bits'
@@ -95,7 +95,11 @@ export default function Videos(): ReactNode {
               <div className={p.cardName}>{video.name}</div>
               <CardSteps steps={video.steps} />
               <div className={p.cardMeta}>
-                <span>{STEP_IDS.filter((s) => video.steps[s]).length} / 6 done</span>
+                <span>
+                  {video.archivedAt
+                    ? 'archived'
+                    : `${STEP_IDS.filter((s) => video.steps[s]).length} / 6 done`}
+                </span>
                 {video.missing ? (
                   <span style={{ color: 'var(--accent-hot)' }}>folder missing</span>
                 ) : (
@@ -178,6 +182,7 @@ function Detail({ video, onBack }: { video: Video; onBack: () => void }): ReactN
           <h1 className={ui.title}>{video.name}</h1>
           <p className={ui.sub}>
             Created {formatStamp(video.createdAt)}
+            {video.archivedAt ? ` · archived ${formatStamp(video.archivedAt)}` : ''}
             {video.missing ? ' · folder missing on disk' : ''}
           </p>
         </div>
@@ -185,6 +190,19 @@ function Detail({ video, onBack }: { video: Video; onBack: () => void }): ReactN
           <button className={ui.btn} onClick={() => setRenaming(true)}>
             Rename
           </button>
+          {isComplete(video) && !video.archivedAt ? (
+            <button
+              className={ui.btn}
+              title="Send footage, assets and the base video to the Recycle Bin"
+              onClick={async () => {
+                const freed = await run(() => api.archiveVideo(video.id))
+                if (freed !== null)
+                  notify(`Archived · ${formatBytes(freed)} to the Recycle Bin`)
+              }}
+            >
+              Archive
+            </button>
+          ) : null}
           <button
             className={`${ui.btn} ${ui.btnDanger}`}
             title="Remove this video"

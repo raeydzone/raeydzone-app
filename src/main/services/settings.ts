@@ -7,9 +7,17 @@ import type { RootProposal } from '@shared/types'
 export interface Settings {
   rootPath: string | null
   dailyGoalMs: number
+  autoArchive: boolean
+  archiveAfterDays: number
 }
 
-const DEFAULTS: Settings = { rootPath: null, dailyGoalMs: 60 * 60 * 1000 }
+// Archiving is destructive, so it stays off until switched on deliberately.
+const DEFAULTS: Settings = {
+  rootPath: null,
+  dailyGoalMs: 60 * 60 * 1000,
+  autoArchive: false,
+  archiveAfterDays: 30
+}
 
 let cache: Settings = { ...DEFAULTS }
 

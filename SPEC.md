@@ -138,6 +138,26 @@ reversal. A video is **completed** when all six are done.
 The list shows six pips per card so state reads at a glance, and has a **Show completed**
 toggle — off by default.
 
+### Archiving
+
+Finished projects eat disk long after they are useful. A video becomes an **archive
+candidate** once all six steps are done and the *last* of those timestamps is older than
+the configured age (default 30 days).
+
+Archiving sends the project's `footage/` and `assets/` folders and its base video to the
+**Recycle Bin**, then recreates the two folders empty. Everything else survives: the
+database row, the thumbnail, the six step timestamps, the Premiere project and the log.
+The card and detail page still open normally, marked `archived` with the date.
+
+The bin is deliberate: a wrong archive is recoverable. It also means the disk space is not
+actually returned until the bin is emptied, and the UI says so rather than claiming bytes
+were freed.
+
+Settings carries a switch (**off** by default — the operation is destructive) and the age in
+days. When on, a sweep runs 15 seconds after launch and every 24 hours after. Settings
+also shows how much a sweep would reclaim right now, and an **Archive now** button. A
+single completed video can be archived by hand from its detail page.
+
 ---
 
 ## 3. Streams

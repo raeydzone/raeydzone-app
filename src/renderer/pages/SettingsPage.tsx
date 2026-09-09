@@ -1,6 +1,8 @@
+import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { UpdateState } from '@shared/types'
+import type { ArchivePreview, UpdateState } from '@shared/types'
 import { formatBytes, formatDuration } from '@shared/format'
+import { Toggle } from '../components/Bits'
 import { IconFolder, IconPremiere } from '../components/Icons'
 import { useAppState, useStore } from '../state/store'
 import p from './pages.module.css'
@@ -19,6 +21,80 @@ function describeUpdate(u: UpdateState): string {
     default:
       return 'up to date'
   }
+}
+
+function describeArchive(preview: ArchivePreview | null): string {
+  if (!preview) return 'measuring…'
+  if (preview.candidates.length === 0) return 'nothing old enough to archive'
+  return `${preview.candidates.length} ready · ${formatBytes(preview.bytes)} → Recycle Bin`
+}
+
+function ArchiveSetting(): ReactNode {
+  const state = useAppState()
+  const { run, notify } = useStore()
+  const api = window.raeydzone
+  const [preview, setPreview] = useState<ArchivePreview | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const scan = useCallback(async (): Promise<void> => {
+    setPreview(await run(() => api.archivePreview()))
+  }, [api, run])
+
+  useEffect(() => {
+    void scan()
+  }, [scan])
+
+  const archiveNow = async (): Promise<void> => {
+    setBusy(true)
+    const res = await run(() => api.runArchive())
+    setBusy(false)
+    if (res) notify(`Archived ${res.count} · ${formatBytes(res.bytes)} to the Recycle Bin`)
+    await scan()
+  }
+
+  return (
+    <div className={p.settingRow}>
+      <div>
+        <div className={p.settingLabel}>Auto-archive finished videos</div>
+        <div className={p.settingHint}>
+          Footage, assets and the base video of a finished project go to the Recycle Bin
+          once it is old enough. Thumbnail, steps and history stay. Empty the bin to get
+          the disk space back.
+        </div>
+        <div className={ui.faint} style={{ marginTop: 6 }}>
+          {describeArchive(preview)}
+        </div>
+      </div>
+      <div className={ui.row}>
+        <Toggle
+          checked={state.autoArchive}
+          onChange={(v) => void run(() => api.setArchive(v, state.archiveAfterDays))}
+          label="on"
+        />
+        <input
+          className={ui.input}
+          style={{ width: 70 }}
+          type="number"
+          min={1}
+          step={1}
+          defaultValue={state.archiveAfterDays}
+          onBlur={(e) => {
+            const days = Number(e.target.value)
+            if (days > 0)
+              void run(() => api.setArchive(state.autoArchive, days), 'Archive age updated')
+          }}
+        />
+        <span className={ui.faint}>days old</span>
+        <button
+          className={ui.btn}
+          disabled={busy || !preview || preview.candidates.length === 0}
+          onClick={() => void archiveNow()}
+        >
+          Archive now
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export default function SettingsPage(): ReactNode {
@@ -114,6 +190,8 @@ export default function SettingsPage(): ReactNode {
             <span className={ui.faint}>minutes</span>
           </div>
         </div>
+
+        <ArchiveSetting />
 
         <div className={p.settingRow}>
           <div>

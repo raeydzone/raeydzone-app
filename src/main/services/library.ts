@@ -11,8 +11,10 @@ import {
 } from '../util/paths'
 import type { MoveOutcome } from '../util/paths'
 import { STEP_IDS } from '@shared/types'
+import { formatBytes } from '@shared/format'
 import type {
-  DropResult, DropTarget, FileKind, ProjectFile, StepId, Steps, Stream, Video
+  ArchiveCandidate, ArchivePreview, DropResult, DropTarget, FileKind, ProjectFile,
+  StepId, Steps, Stream, Video
 } from '@shared/types'
 
 const THUMB_STEM = 'thumbnail'
@@ -82,7 +84,8 @@ export async function createVideo(root: string, rawName: string): Promise<Video>
     createdAt: new Date().toISOString(),
     steps: emptySteps(),
     thumbnail: null,
-    baseVideo: null
+    baseVideo: null,
+    archivedAt: null
   }
   db.saveVideo(video)
   log('video.create', 'Created video "' + name + '"', { id: video.id, name })
@@ -411,6 +414,132 @@ export async function pasteClipboard(
   throw new Error('Clipboard holds no image or file.')
 }
 
+const MEDIA_DIRS = ['footage', 'assets']
+
+// A project counts as finished only when every step is ticked; the age that matters is
+// when the last one landed, not when the folder was created.
+export function completedAt(video: Video): string | null {
+  let latest = ''
+  for (const stamp of Object.values(video.steps)) {
+    if (!stamp) return null
+    if (stamp > latest) latest = stamp
+  }
+  return latest || null
+}
+
+async function dirSize(dir: string): Promise<number> {
+  let entries
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true })
+  } catch {
+    return 0
+  }
+  let total = 0
+  for (const entry of entries) {
+    const abs = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      total += await dirSize(abs)
+      continue
+    }
+    try {
+      total += (await fs.stat(abs)).size
+    } catch {
+      /* vanished mid-scan */
+    }
+  }
+  return total
+}
+
+export async function reclaimableBytes(root: string, video: Video): Promise<number> {
+  const dir = videoPath(root, video)
+  let total = 0
+  for (const sub of MEDIA_DIRS) total += await dirSize(path.join(dir, sub))
+
+  const base = await findByStem(dir, BASE_STEM)
+  if (base) {
+    try {
+      total += (await fs.stat(path.join(dir, base))).size
+    } catch {
+      /* already gone */
+    }
+  }
+  return total
+}
+
+export async function archivePreview(
+  root: string,
+  days: number
+): Promise<ArchivePreview> {
+  const cutoff = Date.now() - days * 86_400_000
+  const candidates: ArchiveCandidate[] = []
+
+  for (const video of db.state().videos) {
+    if (video.archivedAt || video.missing) continue
+    const done = completedAt(video)
+    if (!done || new Date(done).getTime() > cutoff) continue
+
+    const bytes = await reclaimableBytes(root, video)
+    if (bytes === 0) continue
+    candidates.push({ id: video.id, name: video.name, completedAt: done, bytes })
+  }
+
+  candidates.sort((a, b) => b.bytes - a.bytes)
+  return { candidates, bytes: candidates.reduce((n, c) => n + c.bytes, 0) }
+}
+
+// Media goes to the Recycle Bin rather than being unlinked, so a mistake here is
+// recoverable. The thumbnail, the Premiere project and the database entry all stay.
+export async function archiveVideo(root: string, id: string): Promise<number> {
+  const video = findVideo(id)
+  const dir = videoPath(root, video)
+  assertInside(root, dir)
+
+  const freed = await reclaimableBytes(root, video)
+
+  for (const sub of MEDIA_DIRS) {
+    const target = path.join(dir, sub)
+    assertInside(root, target)
+    if (await exists(target)) await shell.trashItem(target)
+    await fs.mkdir(target, { recursive: true })
+  }
+
+  const base = await findByStem(dir, BASE_STEM)
+  if (base) {
+    const target = path.join(dir, base)
+    assertInside(root, target)
+    await shell.trashItem(target)
+  }
+
+  video.archivedAt = new Date().toISOString()
+  video.baseVideo = null
+  db.saveVideo(video)
+
+  log('video.archive', 'Archived "' + video.name + '" — ' + formatBytes(freed) + ' to the Recycle Bin', {
+    id,
+    name: video.name
+  })
+  return freed
+}
+
+export async function runArchive(
+  root: string,
+  days: number
+): Promise<{ count: number; bytes: number }> {
+  const preview = await archivePreview(root, days)
+  let bytes = 0
+  let count = 0
+
+  for (const candidate of preview.candidates) {
+    try {
+      bytes += await archiveVideo(root, candidate.id)
+      count++
+    } catch (err) {
+      log('video.archive', 'Could not archive "' + candidate.name + '" — ' + (err as Error).message)
+    }
+  }
+  return { count, bytes }
+}
+
 export async function saveRecording(
   root: string,
   videoId: string,
@@ -634,7 +763,8 @@ export async function rescan(root: string): Promise<{ added: number; missing: nu
       createdAt: await birthtimeOf(dir),
       steps: emptySteps(),
       thumbnail: await findByStem(dir, THUMB_STEM),
-      baseVideo: await findByStem(dir, BASE_STEM)
+      baseVideo: await findByStem(dir, BASE_STEM),
+      archivedAt: null
     }
     db.saveVideo(video)
     added++

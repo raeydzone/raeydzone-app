@@ -36,7 +36,8 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS videos (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT NOT NULL,
   createdAt TEXT NOT NULL, steps TEXT NOT NULL,
-  thumbnail TEXT, baseVideo TEXT, missing INTEGER NOT NULL DEFAULT 0
+  thumbnail TEXT, baseVideo TEXT, archivedAt TEXT,
+  missing INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS streams (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT NOT NULL,
@@ -61,8 +62,18 @@ export function open(root: string): void {
   handle.exec('PRAGMA journal_mode = WAL')
   handle.exec('PRAGMA synchronous = NORMAL')
   handle.exec(SCHEMA)
+  migrate()
   importLegacy(root)
   load()
+}
+
+function migrate(): void {
+  const columns = db()
+    .prepare('PRAGMA table_info(videos)')
+    .all() as unknown as { name: string }[]
+  if (!columns.some((c) => c.name === 'archivedAt')) {
+    db().exec('ALTER TABLE videos ADD COLUMN archivedAt TEXT')
+  }
 }
 
 function load(): void {
@@ -88,7 +99,8 @@ type DayRow = { date: string; totalMs: number; sessions: string }
 
 type VideoRow = {
   id: string; name: string; folder: string; createdAt: string; steps: string
-  thumbnail: string | null; baseVideo: string | null; missing: number
+  thumbnail: string | null; baseVideo: string | null
+  archivedAt: string | null; missing: number
 }
 
 type StreamRow = {
@@ -107,6 +119,7 @@ const rowToVideo = (r: unknown): Video => {
     steps: JSON.parse(row.steps) as Steps,
     thumbnail: row.thumbnail,
     baseVideo: row.baseVideo,
+    archivedAt: row.archivedAt ?? null,
     missing: !!row.missing
   }
 }
@@ -129,11 +142,14 @@ const rowToStream = (r: unknown): Stream => {
 export function saveVideo(v: Video): void {
   db()
     .prepare(
-      `INSERT INTO videos (id, name, folder, createdAt, steps, thumbnail, baseVideo, missing)
-       VALUES (@id, @name, @folder, @createdAt, @steps, @thumbnail, @baseVideo, @missing)
+      `INSERT INTO videos
+         (id, name, folder, createdAt, steps, thumbnail, baseVideo, archivedAt, missing)
+       VALUES
+         (@id, @name, @folder, @createdAt, @steps, @thumbnail, @baseVideo, @archivedAt, @missing)
        ON CONFLICT(id) DO UPDATE SET
          name = @name, folder = @folder, steps = @steps,
-         thumbnail = @thumbnail, baseVideo = @baseVideo, missing = @missing`
+         thumbnail = @thumbnail, baseVideo = @baseVideo,
+         archivedAt = @archivedAt, missing = @missing`
     )
     .run({
       id: v.id,
@@ -143,6 +159,7 @@ export function saveVideo(v: Video): void {
       steps: JSON.stringify(v.steps),
       thumbnail: v.thumbnail,
       baseVideo: v.baseVideo,
+      archivedAt: v.archivedAt,
       missing: v.missing ? 1 : 0
     })
   if (!cache.videos.some((x) => x.id === v.id)) cache.videos.unshift(v)

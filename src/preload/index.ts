@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
-  AppState, DropResult, DropTarget, ProjectFile, RootProposal, StepId, Stream, Video
+  AppState, ArchivePreview, DropResult, DropTarget, ProjectFile, RootProposal,
+  StepId, Stream, Video
 } from '@shared/types'
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -25,6 +26,12 @@ const api = {
   pickRoot: () => call<string | null>('root:pick'),
   setRoot: (p: string) => call<string>('root:set', p),
   setGoal: (ms: number) => call<void>('settings:goal', ms),
+
+  setArchive: (autoArchive: boolean, days: number) =>
+    call<void>('archive:settings', autoArchive, days),
+  archivePreview: () => call<ArchivePreview>('archive:preview'),
+  runArchive: () => call<{ count: number; bytes: number }>('archive:run'),
+  archiveVideo: (id: string) => call<number>('archive:video', id),
 
   createVideo: (name: string) => call<Video>('videos:create', name),
   renameVideo: (id: string, name: string) => call<Video>('videos:rename', id, name),

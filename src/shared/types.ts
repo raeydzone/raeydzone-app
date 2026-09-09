@@ -28,7 +28,20 @@ export interface Video {
   steps: Steps
   thumbnail: string | null
   baseVideo: string | null
+  archivedAt: string | null
   missing?: boolean
+}
+
+export interface ArchiveCandidate {
+  id: string
+  name: string
+  completedAt: string
+  bytes: number
+}
+
+export interface ArchivePreview {
+  candidates: ArchiveCandidate[]
+  bytes: number
 }
 
 export interface Stream {
@@ -46,7 +59,7 @@ export interface Stream {
 export type LogType =
   | 'video.create' | 'video.rename' | 'video.step.done' | 'video.step.undone'
   | 'video.thumbnail' | 'video.baseVideo' | 'video.premiere' | 'video.files'
-  | 'video.remove' | 'video.repair' | 'video.paste'
+  | 'video.remove' | 'video.repair' | 'video.paste' | 'video.archive'
   | 'stream.create' | 'stream.streamed' | 'stream.unstreamed' | 'stream.schedule'
   | 'stream.thumbnail' | 'stream.files' | 'stream.remove'
   | 'tools.record'
@@ -86,6 +99,8 @@ export interface AppState {
   rootValid: boolean
   hasPremiereTemplate: boolean
   dailyGoalMs: number
+  autoArchive: boolean
+  archiveAfterDays: number
   videos: Video[]
   streams: Stream[]
   log: LogEntry[]

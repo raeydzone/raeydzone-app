@@ -5,7 +5,9 @@ import * as lib from './services/library'
 import * as timer from './services/timer'
 import * as updater from './services/updater'
 import { loadSettings } from './services/settings'
-import { attach, broadcast, register, root, startReminders, watchRoot } from './ipc'
+import {
+  attach, broadcast, register, root, startArchiveSchedule, startReminders, watchRoot
+} from './ipc'
 import { exists } from './util/paths'
 import { loadRenderer, preloadOptions, iconPath } from './windows'
 
@@ -67,6 +69,7 @@ app.whenReady().then(async () => {
     timer.recover()
     startReminders()
     watchRoot(settings.rootPath)
+    startArchiveSchedule()
   }
 
   register()
