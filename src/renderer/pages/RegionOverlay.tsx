@@ -20,12 +20,14 @@ const rectOf = (
 export default function RegionOverlay(): ReactNode {
   const [anchor, setAnchor] = useState<Point | null>(null)
   const [cursor, setCursor] = useState<Point | null>(null)
+  const [done, setDone] = useState(false)
   const settled = useRef(false)
 
   const settle = useCallback(
     (rect: { x: number; y: number; width: number; height: number } | null): void => {
       if (settled.current) return
       settled.current = true
+      setDone(true)
       void window.raeydzone.finishRegion(rect).catch(() => undefined)
     },
     []
@@ -44,6 +46,9 @@ export default function RegionOverlay(): ReactNode {
   }, [settle])
 
   const box = anchor && cursor ? rectOf(anchor, cursor) : null
+
+  // Stop painting the moment the box is committed; the window teardown follows behind.
+  if (done) return null
 
   return (
     <div

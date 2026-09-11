@@ -182,8 +182,9 @@ surface once on next launch rather than being lost.
 
 ## 3b. Tools
 
-A tab of small utilities, poppable into its own always-on-top window so it stays reachable
-while Premiere is in front.
+A tab of small utilities. **Each tool pops out into its own always-on-top window**, so the
+sound recorder and the screen recorder can sit in different places — or on different
+monitors — while Premiere is in front.
 
 **Audio recorder.** Captures Windows loopback — whatever the desktop is currently playing
 — so a sound can be grabbed without hunting down a download. The source defaults to the
@@ -202,15 +203,23 @@ box also selects that monitor as the source. Region capture composites through a
 scaling by the monitor's real-pixels-to-DIP ratio so display scaling does not shift the
 crop.
 
-Sound has two switches: whether audio is captured at all, and a **Mute** that works
-mid-recording by disabling the track rather than dropping it. Frame rate is 24/30/60.
+Sound uses the same source list as the sound recorder — desktop loopback by default, any
+input device, or **Silent** — plus a **Mute** that works mid-recording by disabling the
+track rather than dropping it. Frame rate is 24/30/60.
+
+**Captured audio is always requested raw**: echo cancellation, noise suppression and
+automatic gain off, stereo asked for explicitly. Left at its defaults Chromium treats
+captured audio as a voice call and returns a processed mono downmix, which on desktop audio
+is audible as a hollow, pumping copy of the original.
 
 The container is chosen at runtime — MP4 when Chromium can mux it, WebM otherwise — and
 the footer names which one you are about to get. Clips preview inline, then save into a
 project's `assets/` like sound takes do.
 
-The tool window is frameless and always-on-top, so the way to keep it out of a capture is
-to drag it onto a second monitor. The app does not hide itself while recording.
+The tool windows are frameless and always-on-top, so the way to keep one out of a capture
+is to drag it onto a second monitor. The app does not hide itself while recording. The
+region overlay is destroyed rather than closed the instant a box is committed, so its
+outline never sits over the recording it was used to frame.
 
 ## 4. Timer
 

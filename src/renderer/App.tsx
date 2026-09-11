@@ -39,13 +39,14 @@ export default function App(): ReactNode {
     )
   }
 
-  if (POPPED_VIEW === 'tools') {
+  if (POPPED_VIEW?.startsWith('tools')) {
+    const tool = POPPED_VIEW === 'tools-screen' ? 'screen' : 'sound'
     return (
       <div className={app.shell}>
         <TitleBar />
         <main className={app.main}>
           {state.ready ? (
-            <ToolsPage popped />
+            <ToolsPage tool={tool} />
           ) : (
             <p className={app.poppedNote}>Set a root folder in the main window first.</p>
           )}

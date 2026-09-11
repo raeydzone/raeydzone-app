@@ -30,6 +30,33 @@ export async function listAudioSources(): Promise<AudioSource[]> {
   return sources
 }
 
+// Left to itself Chromium treats captured audio like a voice call: echo cancellation,
+// noise suppression and a downmix to mono. On desktop audio that is audible as a hollow,
+// pumping version of the original, so every capture asks for the raw stereo signal.
+const RAW_AUDIO = {
+  echoCancellation: false,
+  noiseSuppression: false,
+  autoGainControl: false,
+  channelCount: 2
+}
+
+export async function openAudioStream(sourceId: string): Promise<MediaStream> {
+  if (sourceId === LOOPBACK_ID) {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: RAW_AUDIO
+    })
+    stream.getVideoTracks().forEach((track) => {
+      track.stop()
+      stream.removeTrack(track)
+    })
+    return stream
+  }
+  return navigator.mediaDevices.getUserMedia({
+    audio: { deviceId: { exact: sourceId }, ...RAW_AUDIO }
+  })
+}
+
 export interface RecorderHandle {
   stop: () => Promise<Uint8Array<ArrayBuffer>>
   cancel: () => void
@@ -48,24 +75,7 @@ export async function startRecording(
   sourceId: string,
   gain: number
 ): Promise<RecorderHandle> {
-  let stream: MediaStream
-
-  if (sourceId === LOOPBACK_ID) {
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-    stream.getVideoTracks().forEach((track) => {
-      track.stop()
-      stream.removeTrack(track)
-    })
-  } else {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: { exact: sourceId },
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false
-      }
-    })
-  }
+  const stream = await openAudioStream(sourceId)
 
   if (stream.getAudioTracks().length === 0) {
     stream.getTracks().forEach((t) => t.stop())

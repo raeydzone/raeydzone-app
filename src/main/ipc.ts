@@ -14,7 +14,8 @@ import {
 } from './services/settings'
 import { freeBytes, isRemovable } from './util/paths'
 import { DRAG_ICON_DATA_URL } from './util/dragIcon'
-import { finishRegion, openToolsWindow, selectRegion } from './windows'
+import { finishRegion, openToolWindow, selectRegion } from './windows'
+import type { Tool } from './windows'
 import type { AppState, DropTarget, StepId } from '@shared/types'
 
 type RegionRect = { x: number; y: number; width: number; height: number }
@@ -259,7 +260,7 @@ export function register(): void {
   handle('timer:start', () => timer.start())
   handle('timer:stop', () => timer.stop())
 
-  handle('tools:popout', () => openToolsWindow())
+  handle('tools:popout', (tool: Tool) => openToolWindow(tool))
   handle('tools:save', (videoId: string, name: string, data: Uint8Array, ext: string) =>
     lib.saveRecording(requireRoot(), videoId, name, data, ext)
   )

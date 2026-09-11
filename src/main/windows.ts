@@ -22,17 +22,26 @@ export function loadRenderer(target: BrowserWindow, view?: string): void {
   }
 }
 
-let toolsWin: BrowserWindow | null = null
+export type Tool = 'sound' | 'screen'
 
-export function openToolsWindow(): void {
-  if (toolsWin && !toolsWin.isDestroyed()) {
-    toolsWin.show()
-    toolsWin.focus()
+const TOOL_WINDOWS: Record<Tool, { width: number; height: number }> = {
+  sound: { width: 440, height: 580 },
+  screen: { width: 470, height: 660 }
+}
+
+const openTools = new Map<Tool, BrowserWindow>()
+
+export function openToolWindow(tool: Tool): void {
+  const existing = openTools.get(tool)
+  if (existing && !existing.isDestroyed()) {
+    existing.show()
+    existing.focus()
     return
   }
-  toolsWin = new BrowserWindow({
-    width: 440,
-    height: 580,
+
+  const size = TOOL_WINDOWS[tool] ?? TOOL_WINDOWS.sound
+  const win = new BrowserWindow({
+    ...size,
     minWidth: 380,
     minHeight: 460,
     show: false,
@@ -42,11 +51,12 @@ export function openToolsWindow(): void {
     icon: iconPath(),
     webPreferences: preloadOptions
   })
-  toolsWin.on('ready-to-show', () => toolsWin?.show())
-  toolsWin.on('closed', () => {
-    toolsWin = null
+  openTools.set(tool, win)
+  win.on('ready-to-show', () => win.show())
+  win.on('closed', () => {
+    if (openTools.get(tool) === win) openTools.delete(tool)
   })
-  loadRenderer(toolsWin, 'tools')
+  loadRenderer(win, 'tools-' + tool)
 }
 
 type Rect = { x: number; y: number; width: number; height: number }
@@ -58,10 +68,8 @@ let settleRegion: ((r: Region | null) => void) | null = null
 // The overlay covers whichever monitor the cursor is on, so its window coordinates are
 // already display-relative — the renderer never has to reason about monitor offsets.
 export function selectRegion(): Promise<Region | null> {
-  if (regionWin && !regionWin.isDestroyed()) {
-    regionWin.focus()
-    return Promise.resolve(null)
-  }
+  if (regionWin && !regionWin.isDestroyed()) regionWin.destroy()
+  regionWin = null
 
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
   regionDisplay = display
@@ -104,7 +112,9 @@ export function finishRegion(rect: Rect | null): void {
 
   const win = regionWin
   regionWin = null
-  if (win && !win.isDestroyed()) win.close()
+  // destroy, not close: a transparent always-on-top window can outlive a close() long
+  // enough for its outline to sit over the very recording it was used to frame.
+  if (win && !win.isDestroyed()) win.destroy()
 
   if (!resolve) return
   const display = regionDisplay

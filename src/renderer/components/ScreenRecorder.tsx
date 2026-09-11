@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Region, ScreenSource, Video } from '@shared/types'
 import { formatBytes } from '@shared/format'
+import { LOOPBACK_ID, listAudioSources } from '../lib/recorder'
+import type { AudioSource } from '../lib/recorder'
 import { pickFormat, startClip } from '../lib/screen'
 import type { Clip, ClipHandle } from '../lib/screen'
 import { useStore } from '../state/store'
@@ -25,7 +27,9 @@ export default function ScreenRecorder({ projects }: { projects: Video[] }): Rea
   const [sources, setSources] = useState<ScreenSource[]>([])
   const [sourceId, setSourceId] = useState('')
   const [region, setRegion] = useState<Region | null>(null)
-  const [withAudio, setWithAudio] = useState(true)
+  const [audioSources, setAudioSources] = useState<AudioSource[]>([])
+  const [audioId, setAudioId] = useState<string>(LOOPBACK_ID)
+  const [channels, setChannels] = useState(0)
   const [muted, setMuted] = useState(false)
   const [fps, setFps] = useState(30)
 
@@ -45,6 +49,10 @@ export default function ScreenRecorder({ projects }: { projects: Video[] }): Rea
       setSourceId((current) => current || (found[0]?.id ?? ''))
     })
   }, [api, run])
+
+  useEffect(() => {
+    void listAudioSources().then(setAudioSources)
+  }, [])
 
   useEffect(() => {
     if (!projects.length) return
@@ -75,9 +83,15 @@ export default function ScreenRecorder({ projects }: { projects: Video[] }): Rea
       return
     }
     try {
-      const active = await startClip({ sourceId, region, withAudio, fps })
+      const active = await startClip({
+        sourceId,
+        region,
+        audioSourceId: audioId || null,
+        fps
+      })
       active.setMuted(muted)
       handle.current = active
+      setChannels(active.audioChannels)
       setElapsed(0)
       setRecording(true)
     } catch (err) {
@@ -196,14 +210,20 @@ export default function ScreenRecorder({ projects }: { projects: Video[] }): Rea
           <div className={p.toolField}>
             <span className={p.fieldLabel}>Sound</span>
             <div className={ui.row}>
-              <button
-                className={ui.btn}
+              <select
+                className={ui.input}
+                value={audioId}
                 disabled={recording}
-                onClick={() => setWithAudio((v) => !v)}
+                onChange={(e) => setAudioId(e.target.value)}
               >
-                {withAudio ? 'Desktop audio' : 'Silent'}
-              </button>
-              {withAudio && (
+                <option value="">Silent</option>
+                {audioSources.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+              {audioId && (
                 <button
                   className={`${ui.btn} ${muted ? ui.btnDanger : ui.btnGhost}`}
                   onClick={() => setMuted((v) => !v)}
@@ -217,7 +237,9 @@ export default function ScreenRecorder({ projects }: { projects: Video[] }): Rea
 
         <footer className={p.toolFoot}>
           <span className={p.fieldValue}>
-            {recording ? 'Recording · ' + clock(elapsed) : format.ext.toUpperCase()}
+            {recording
+              ? 'Recording · ' + clock(elapsed) + (channels === 1 ? ' · mono' : '')
+              : format.ext.toUpperCase()}
           </span>
           {recording ? (
             <button className={`${ui.btn} ${ui.btnDanger}`} onClick={() => void stop()}>

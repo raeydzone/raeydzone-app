@@ -1,4 +1,5 @@
 import type { Region } from '@shared/types'
+import { openAudioStream } from './recorder'
 
 export interface Clip {
   data: Uint8Array<ArrayBuffer>
@@ -12,6 +13,7 @@ export interface ClipHandle {
   setMuted: (muted: boolean) => void
   preview: MediaStream
   hasAudio: boolean
+  audioChannels: number
 }
 
 // Premiere is the destination, so MP4 wins when Chromium can mux it; WebM is the
@@ -41,30 +43,26 @@ async function desktopStream(sourceId: string): Promise<MediaStream> {
   } as unknown as MediaStreamConstraints)
 }
 
-async function loopbackTrack(): Promise<MediaStreamTrack | null> {
-  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-  stream.getVideoTracks().forEach((track) => {
-    track.stop()
-    stream.removeTrack(track)
-  })
+async function audioTrackFrom(sourceId: string): Promise<MediaStreamTrack | null> {
+  const stream = await openAudioStream(sourceId)
   return stream.getAudioTracks()[0] ?? null
 }
 
 interface Options {
   sourceId: string
   region: Region | null
-  withAudio: boolean
+  audioSourceId: string | null
   fps: number
 }
 
 export async function startClip(options: Options): Promise<ClipHandle> {
-  const { sourceId, region, withAudio, fps } = options
+  const { sourceId, region, audioSourceId, fps } = options
   const screen = await desktopStream(sourceId)
 
   let audio: MediaStreamTrack | null = null
-  if (withAudio) {
+  if (audioSourceId) {
     try {
-      audio = await loopbackTrack()
+      audio = await audioTrackFrom(audioSourceId)
     } catch {
       /* a recording without sound beats no recording at all */
     }
@@ -109,6 +107,7 @@ export async function startClip(options: Options): Promise<ClipHandle> {
   return {
     preview: mixed,
     hasAudio: !!audio,
+    audioChannels: audio?.getSettings().channelCount ?? 0,
     setMuted: (muted) => {
       if (audio) audio.enabled = !muted
     },
