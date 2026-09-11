@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
-  AppState, ArchivePreview, DropResult, DropTarget, ProjectFile, RootProposal,
-  StepId, Stream, Video
+  AppState, ArchivePreview, DropResult, DropTarget, ProjectFile, Region, RootProposal,
+  ScreenSource, StepId, Stream, Video
 } from '@shared/types'
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -68,8 +68,13 @@ const api = {
   stopTimer: () => call<number>('timer:stop'),
 
   popoutTools: () => call<void>('tools:popout'),
-  saveRecording: (videoId: string, name: string, data: Uint8Array) =>
-    call<string>('tools:save', videoId, name, data),
+  saveRecording: (videoId: string, name: string, data: Uint8Array, ext: string) =>
+    call<string>('tools:save', videoId, name, data, ext),
+
+  screenSources: () => call<ScreenSource[]>('screen:sources'),
+  selectRegion: () => call<Region | null>('screen:region'),
+  finishRegion: (rect: { x: number; y: number; width: number; height: number } | null) =>
+    call<void>('screen:regionDone', rect),
 
   rescan: () => call<{ added: number; missing: number }>('system:rescan'),
   repair: () => call<number>('system:repair'),

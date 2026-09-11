@@ -5,6 +5,7 @@ import { Sidebar, TitleBar, Toasts } from './components/Chrome'
 import type { Route } from './components/Chrome'
 import Dashboard from './pages/Dashboard'
 import LogPage from './pages/LogPage'
+import RegionOverlay from './pages/RegionOverlay'
 import SettingsPage from './pages/SettingsPage'
 import Setup from './pages/Setup'
 import Streams from './pages/Streams'
@@ -26,6 +27,9 @@ export default function App(): ReactNode {
     localStorage.setItem('route', next)
     setRoute(next)
   }
+
+  // The picker window has no titlebar and must paint before app state exists.
+  if (POPPED_VIEW === 'region') return <RegionOverlay />
 
   if (!state) {
     return (

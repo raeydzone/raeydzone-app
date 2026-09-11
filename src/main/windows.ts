@@ -1,4 +1,6 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, screen } from 'electron'
+import type { Display } from 'electron'
+import type { Region } from '@shared/types'
 import path from 'node:path'
 
 export const preloadOptions = {
@@ -45,4 +47,78 @@ export function openToolsWindow(): void {
     toolsWin = null
   })
   loadRenderer(toolsWin, 'tools')
+}
+
+type Rect = { x: number; y: number; width: number; height: number }
+
+let regionWin: BrowserWindow | null = null
+let regionDisplay: Display | null = null
+let settleRegion: ((r: Region | null) => void) | null = null
+
+// The overlay covers whichever monitor the cursor is on, so its window coordinates are
+// already display-relative — the renderer never has to reason about monitor offsets.
+export function selectRegion(): Promise<Region | null> {
+  if (regionWin && !regionWin.isDestroyed()) {
+    regionWin.focus()
+    return Promise.resolve(null)
+  }
+
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  regionDisplay = display
+
+  const win = new BrowserWindow({
+    ...display.bounds,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    show: false,
+    webPreferences: preloadOptions
+  })
+  regionWin = win
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.on('ready-to-show', () => {
+    win.show()
+    win.focus()
+  })
+  win.on('closed', () => {
+    if (regionWin === win) regionWin = null
+    finishRegion(null)
+  })
+  loadRenderer(win, 'region')
+
+  return new Promise((resolve) => {
+    settleRegion = resolve
+  })
+}
+
+export function finishRegion(rect: Rect | null): void {
+  const resolve = settleRegion
+  settleRegion = null
+
+  const win = regionWin
+  regionWin = null
+  if (win && !win.isDestroyed()) win.close()
+
+  if (!resolve) return
+  const display = regionDisplay
+  if (!rect || !display || rect.width < 8 || rect.height < 8) {
+    resolve(null)
+    return
+  }
+  resolve({
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+    displayId: String(display.id),
+    displayWidth: display.size.width,
+    displayHeight: display.size.height
+  })
 }

@@ -620,3 +620,13 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.clipPreview {
+  width: 100%;
+  margin-top: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-inset);
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+}

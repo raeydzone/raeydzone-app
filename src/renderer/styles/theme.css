@@ -47,6 +47,7 @@
   --t-slow: 200ms;
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
+  --scrim: rgba(0, 0, 0, 0.45);
   --shadow-panel: 0 10px 30px rgba(0, 0, 0, 0.55);
   --shadow-glow: 0 0 0 1px var(--accent-edge), 0 0 22px var(--accent-glow);
 

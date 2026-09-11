@@ -1,5 +1,5 @@
 import {
-  BrowserWindow, Notification, app, dialog, ipcMain, nativeImage, shell
+  BrowserWindow, Notification, app, desktopCapturer, dialog, ipcMain, nativeImage, shell
 } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -14,8 +14,10 @@ import {
 } from './services/settings'
 import { freeBytes, isRemovable } from './util/paths'
 import { DRAG_ICON_DATA_URL } from './util/dragIcon'
-import { openToolsWindow } from './windows'
+import { finishRegion, openToolsWindow, selectRegion } from './windows'
 import type { AppState, DropTarget, StepId } from '@shared/types'
+
+type RegionRect = { x: number; y: number; width: number; height: number }
 
 let win: BrowserWindow | null = null
 let reminderTimer: NodeJS.Timeout | null = null
@@ -258,9 +260,19 @@ export function register(): void {
   handle('timer:stop', () => timer.stop())
 
   handle('tools:popout', () => openToolsWindow())
-  handle('tools:save', (videoId: string, name: string, data: Uint8Array) =>
-    lib.saveRecording(requireRoot(), videoId, name, data)
+  handle('tools:save', (videoId: string, name: string, data: Uint8Array, ext: string) =>
+    lib.saveRecording(requireRoot(), videoId, name, data, ext)
   )
+
+  handle('screen:sources', async () => {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 0, height: 0 }
+    })
+    return sources.map((s) => ({ id: s.id, name: s.name, displayId: s.display_id }))
+  })
+  handle('screen:region', () => selectRegion())
+  handle('screen:regionDone', (rect: RegionRect | null) => finishRegion(rect))
 
   handle('system:rescan', () => lib.rescan(requireRoot()))
   handle('system:repair', () => lib.repairAll(requireRoot()))

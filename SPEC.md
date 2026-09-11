@@ -195,6 +195,23 @@ Audio is captured as raw PCM and written as **WAV**, not WebM/Opus, because Prem
 not reliably import the latter. A finished take can be previewed, named, and saved
 straight into a chosen project's `assets/`.
 
+**Screen recorder.** Captures a screen, a single window, or a box drawn over the desktop,
+with desktop audio on the same track. **Draw box…** opens a transparent overlay on
+whichever monitor the cursor is on; dragging picks the area, Esc cancels, and choosing a
+box also selects that monitor as the source. Region capture composites through a canvas,
+scaling by the monitor's real-pixels-to-DIP ratio so display scaling does not shift the
+crop.
+
+Sound has two switches: whether audio is captured at all, and a **Mute** that works
+mid-recording by disabling the track rather than dropping it. Frame rate is 24/30/60.
+
+The container is chosen at runtime — MP4 when Chromium can mux it, WebM otherwise — and
+the footer names which one you are about to get. Clips preview inline, then save into a
+project's `assets/` like sound takes do.
+
+The tool window is frameless and always-on-top, so the way to keep it out of a capture is
+to drag it onto a second monitor. The app does not hide itself while recording.
+
 ## 4. Timer
 
 One timer, one daily goal: **60 minutes**.

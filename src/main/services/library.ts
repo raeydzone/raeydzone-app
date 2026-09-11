@@ -544,7 +544,8 @@ export async function saveRecording(
   root: string,
   videoId: string,
   rawName: string,
-  data: Uint8Array
+  data: Uint8Array,
+  ext: string
 ): Promise<string> {
   const video = findVideo(videoId)
   await repairVideo(root, video)
@@ -553,11 +554,12 @@ export async function saveRecording(
   assertInside(root, dir)
   await fs.mkdir(dir, { recursive: true })
 
+  const safeExt = /^[a-z0-9]{2,4}$/.test(ext) ? ext : 'bin'
   const base = sanitizeFolderName(rawName) || 'recording'
-  const filename = await uniqueFile(dir, base + '.wav')
+  const filename = await uniqueFile(dir, base + '.' + safeExt)
   await fs.writeFile(path.join(dir, filename), data)
 
-  log('tools.record', 'Saved recording ' + filename + ' to assets', {
+  log(safeExt === 'wav' ? 'tools.record' : 'tools.clip', 'Saved recording ' + filename + ' to assets', {
     id: videoId,
     name: video.name
   })

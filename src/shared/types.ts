@@ -44,6 +44,22 @@ export interface ArchivePreview {
   bytes: number
 }
 
+export interface Region {
+  x: number
+  y: number
+  width: number
+  height: number
+  displayId: string
+  displayWidth: number
+  displayHeight: number
+}
+
+export interface ScreenSource {
+  id: string
+  name: string
+  displayId: string
+}
+
 export interface Stream {
   id: string
   name: string
@@ -62,7 +78,7 @@ export type LogType =
   | 'video.remove' | 'video.repair' | 'video.paste' | 'video.archive'
   | 'stream.create' | 'stream.streamed' | 'stream.unstreamed' | 'stream.schedule'
   | 'stream.thumbnail' | 'stream.files' | 'stream.remove'
-  | 'tools.record'
+  | 'tools.record' | 'tools.clip'
   | 'timer.start' | 'timer.stop' | 'timer.recovered'
   | 'system.root' | 'system.rescan'
 

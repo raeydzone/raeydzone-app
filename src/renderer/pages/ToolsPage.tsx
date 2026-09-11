@@ -8,6 +8,7 @@ import { byProgress, useAppState, useStore } from '../state/store'
 import { LOOPBACK_ID, listAudioSources, startRecording } from '../lib/recorder'
 import type { AudioSource, RecorderHandle } from '../lib/recorder'
 import p from './pages.module.css'
+import ScreenRecorder from '../components/ScreenRecorder'
 import ui from '../styles/ui.module.css'
 
 const BARS = 150
@@ -206,7 +207,9 @@ export default function ToolsPage({ popped = false }: { popped?: boolean }): Rea
 
   const save = async (): Promise<void> => {
     if (!take || !project) return
-    const saved = await run(() => api.saveRecording(project, name || 'recording', take.data))
+    const saved = await run(() =>
+      api.saveRecording(project, name || 'recording', take.data, 'wav')
+    )
     if (saved) {
       notify(`Saved ${saved} to assets`)
       discard()
@@ -357,6 +360,8 @@ export default function ToolsPage({ popped = false }: { popped?: boolean }): Rea
           )}
         </section>
       )}
+
+      <ScreenRecorder projects={projects} />
     </div>
   )
 }
