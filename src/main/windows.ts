@@ -12,14 +12,71 @@ export const preloadOptions = {
 
 export const iconPath = (): string => path.join(__dirname, '../../build/icon.png')
 
-export function loadRenderer(target: BrowserWindow, view?: string): void {
+export function loadRenderer(
+  target: BrowserWindow,
+  view?: string,
+  extra?: Record<string, string>
+): void {
+  const query = view ? { view, ...extra } : undefined
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (devUrl) {
-    void target.loadURL(view ? devUrl + '?view=' + view : devUrl)
+    const search = query ? '?' + new URLSearchParams(query).toString() : ''
+    void target.loadURL(devUrl + search)
   } else {
     const file = path.join(__dirname, '../renderer/index.html')
-    void target.loadFile(file, view ? { query: { view } } : undefined)
+    void target.loadFile(file, query ? { query } : undefined)
   }
+}
+
+let frameWin: BrowserWindow | null = null
+
+export function hideRegionFrame(): void {
+  const win = frameWin
+  frameWin = null
+  if (win && !win.isDestroyed()) win.destroy()
+}
+
+// The guide sits on top of the desktop but must never reach the capture. Two defences:
+// setContentProtection excludes it from screen capture outright, and the outline is drawn
+// in the ring just outside the recorded rectangle, so a miss there is still not in frame.
+export function showRegionFrame(region: Region | null): void {
+  hideRegionFrame()
+  if (!region) return
+
+  const display =
+    screen.getAllDisplays().find((d) => String(d.id) === region.displayId) ??
+    screen.getPrimaryDisplay()
+
+  const win = new BrowserWindow({
+    ...display.bounds,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+    show: false,
+    webPreferences: preloadOptions
+  })
+  frameWin = win
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setIgnoreMouseEvents(true, { forward: true })
+  win.setContentProtection(true)
+  win.on('ready-to-show', () => win.showInactive())
+  win.on('closed', () => {
+    if (frameWin === win) frameWin = null
+  })
+  loadRenderer(win, 'frame', {
+    x: String(region.x),
+    y: String(region.y),
+    w: String(region.width),
+    h: String(region.height)
+  })
 }
 
 export type Tool = 'sound' | 'screen'

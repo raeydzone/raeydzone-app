@@ -73,6 +73,7 @@ const api = {
 
   screenSources: () => call<ScreenSource[]>('screen:sources'),
   selectRegion: () => call<Region | null>('screen:region'),
+  showRegionFrame: (region: Region | null) => call<void>('screen:frame', region),
   finishRegion: (rect: { x: number; y: number; width: number; height: number } | null) =>
     call<void>('screen:regionDone', rect),
 

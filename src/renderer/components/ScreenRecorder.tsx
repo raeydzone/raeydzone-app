@@ -69,6 +69,17 @@ export default function ScreenRecorder({ projects }: { projects: Video[] }): Rea
     handle.current?.setMuted(muted)
   }, [muted])
 
+  useEffect(() => {
+    void api.showRegionFrame(region).catch(() => undefined)
+  }, [api, region])
+
+  useEffect(
+    () => () => {
+      void window.raeydzone.showRegionFrame(null).catch(() => undefined)
+    },
+    []
+  )
+
   const pickRegion = async (): Promise<void> => {
     const picked = await run(() => api.selectRegion())
     if (!picked) return

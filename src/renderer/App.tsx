@@ -5,6 +5,7 @@ import { Sidebar, TitleBar, Toasts } from './components/Chrome'
 import type { Route } from './components/Chrome'
 import Dashboard from './pages/Dashboard'
 import LogPage from './pages/LogPage'
+import RegionFrame from './pages/RegionFrame'
 import RegionOverlay from './pages/RegionOverlay'
 import SettingsPage from './pages/SettingsPage'
 import Setup from './pages/Setup'
@@ -28,8 +29,9 @@ export default function App(): ReactNode {
     setRoute(next)
   }
 
-  // The picker window has no titlebar and must paint before app state exists.
+  // The picker and the guide have no titlebar and must paint before app state exists.
   if (POPPED_VIEW === 'region') return <RegionOverlay />
+  if (POPPED_VIEW === 'frame') return <RegionFrame />
 
   if (!state) {
     return (

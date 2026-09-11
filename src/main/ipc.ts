@@ -14,9 +14,11 @@ import {
 } from './services/settings'
 import { freeBytes, isRemovable } from './util/paths'
 import { DRAG_ICON_DATA_URL } from './util/dragIcon'
-import { finishRegion, openToolWindow, selectRegion } from './windows'
+import {
+  finishRegion, openToolWindow, selectRegion, showRegionFrame
+} from './windows'
 import type { Tool } from './windows'
-import type { AppState, DropTarget, StepId } from '@shared/types'
+import type { AppState, DropTarget, Region, StepId } from '@shared/types'
 
 type RegionRect = { x: number; y: number; width: number; height: number }
 
@@ -273,6 +275,7 @@ export function register(): void {
     return sources.map((s) => ({ id: s.id, name: s.name, displayId: s.display_id }))
   })
   handle('screen:region', () => selectRegion())
+  handle('screen:frame', (region: Region | null) => showRegionFrame(region))
   handle('screen:regionDone', (rect: RegionRect | null) => finishRegion(rect))
 
   handle('system:rescan', () => lib.rescan(requireRoot()))

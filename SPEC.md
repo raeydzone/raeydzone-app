@@ -216,6 +216,12 @@ The container is chosen at runtime — MP4 when Chromium can mux it, WebM otherw
 the footer names which one you are about to get. Clips preview inline, then save into a
 project's `assets/` like sound takes do.
 
+Once a box is set, a thin red **guide** outlines it on the desktop until the box is
+cleared, so what is being recorded is obvious the way the Snipping Tool makes it obvious.
+The guide is click-through and never reaches the recording: the window is marked excluded
+from screen capture, and its outline is drawn in the ring just *outside* the recorded
+rectangle, so even if that exclusion fails the border is not inside the crop.
+
 The tool windows are frameless and always-on-top, so the way to keep one out of a capture
 is to drag it onto a second monitor. The app does not hide itself while recording. The
 region overlay is destroyed rather than closed the instant a box is committed, so its

@@ -43,3 +43,11 @@
   box-shadow: var(--shadow-panel);
   pointer-events: none;
 }
+
+.guide {
+  position: fixed;
+  border-style: solid;
+  border-color: var(--accent);
+  background: transparent;
+  pointer-events: none;
+}
