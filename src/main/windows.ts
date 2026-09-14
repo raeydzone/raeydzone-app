@@ -79,11 +79,12 @@ export function showRegionFrame(region: Region | null): void {
   })
 }
 
-export type Tool = 'sound' | 'screen'
+export type Tool = 'sound' | 'screen' | 'shot'
 
 const TOOL_WINDOWS: Record<Tool, { width: number; height: number }> = {
   sound: { width: 440, height: 580 },
-  screen: { width: 470, height: 660 }
+  screen: { width: 470, height: 660 },
+  shot: { width: 470, height: 640 }
 }
 
 const openTools = new Map<Tool, BrowserWindow>()
@@ -124,7 +125,7 @@ let settleRegion: ((r: Region | null) => void) | null = null
 
 // The overlay covers whichever monitor the cursor is on, so its window coordinates are
 // already display-relative — the renderer never has to reason about monitor offsets.
-export function selectRegion(): Promise<Region | null> {
+export function selectRegion(hint?: string): Promise<Region | null> {
   if (regionWin && !regionWin.isDestroyed()) regionWin.destroy()
   regionWin = null
 
@@ -156,7 +157,7 @@ export function selectRegion(): Promise<Region | null> {
     if (regionWin === win) regionWin = null
     finishRegion(null)
   })
-  loadRenderer(win, 'region')
+  loadRenderer(win, 'region', hint ? { hint } : undefined)
 
   return new Promise((resolve) => {
     settleRegion = resolve

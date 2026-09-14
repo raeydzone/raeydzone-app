@@ -274,7 +274,7 @@ export function register(): void {
     })
     return sources.map((s) => ({ id: s.id, name: s.name, displayId: s.display_id }))
   })
-  handle('screen:region', () => selectRegion())
+  handle('screen:region', (hint?: string) => selectRegion(hint))
   handle('screen:frame', (region: Region | null) => showRegionFrame(region))
   handle('screen:regionDone', (rect: RegionRect | null) => finishRegion(rect))
 

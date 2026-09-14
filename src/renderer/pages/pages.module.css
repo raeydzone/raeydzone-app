@@ -631,6 +631,17 @@
   object-fit: contain;
 }
 
+.shotPreview {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  margin-top: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-inset);
+  object-fit: contain;
+}
+
 .toolGroup {
   position: relative;
 }

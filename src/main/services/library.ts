@@ -559,7 +559,14 @@ export async function saveRecording(
   const filename = await uniqueFile(dir, base + '.' + safeExt)
   await fs.writeFile(path.join(dir, filename), data)
 
-  log(safeExt === 'wav' ? 'tools.record' : 'tools.clip', 'Saved recording ' + filename + ' to assets', {
+  const kind =
+    safeExt === 'wav'
+      ? { type: 'tools.record' as const, noun: 'recording' }
+      : safeExt === 'png' || safeExt === 'jpg'
+        ? { type: 'tools.shot' as const, noun: 'screenshot' }
+        : { type: 'tools.clip' as const, noun: 'clip' }
+
+  log(kind.type, 'Saved ' + kind.noun + ' ' + filename + ' to assets', {
     id: videoId,
     name: video.name
   })

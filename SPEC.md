@@ -183,8 +183,8 @@ surface once on next launch rather than being lost.
 ## 3b. Tools
 
 A tab of small utilities. **Each tool pops out into its own always-on-top window**, so the
-sound recorder and the screen recorder can sit in different places — or on different
-monitors — while Premiere is in front.
+sound recorder, the screen recorder and the screenshot tool can sit in different places —
+or on different monitors — while Premiere is in front.
 
 **Audio recorder.** Captures Windows loopback — whatever the desktop is currently playing
 — so a sound can be grabbed without hunting down a download. The source defaults to the
@@ -221,6 +221,21 @@ cleared, so what is being recorded is obvious the way the Snipping Tool makes it
 The guide is click-through and never reaches the recording: the window is marked excluded
 from screen capture, and its outline is drawn in the ring just *outside* the recorded
 rectangle, so even if that exclusion fails the border is not inside the crop.
+
+**Screenshot.** The same framing as the screen recorder, for a single still: a screen, a
+window, or a box drawn over the desktop. **Draw box…** opens the same overlay, worded for
+capture, and choosing a box selects that monitor as the source. The crop scales by the
+monitor's real-pixels-to-DIP ratio exactly as the recorder's does, so the saved image is at
+the monitor's native resolution, not its scaled one.
+
+**PNG** or **JPG**, and an optional **delay** (3, 5 or 10 seconds, counted down in the
+footer) for shots that need a menu open or the app out of the way. The result previews
+inline with its pixel dimensions and file size, then either **Copy** — to the Windows
+clipboard, always as PNG, since that is the only image type Chromium will write — or a
+name and a project, saving into that project's `assets/` like clips and sound takes do.
+
+Unlike the recorder, the screenshot tool leaves no guide on the desktop: the shot is
+instant, so there is nothing to outline between choosing the box and taking it.
 
 The tool windows are frameless and always-on-top, so the way to keep one out of a capture
 is to drag it onto a second monitor. The app does not hide itself while recording. The

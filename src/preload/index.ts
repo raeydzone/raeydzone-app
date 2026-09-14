@@ -67,12 +67,12 @@ const api = {
   startTimer: () => call<void>('timer:start'),
   stopTimer: () => call<number>('timer:stop'),
 
-  popoutTool: (tool: 'sound' | 'screen') => call<void>('tools:popout', tool),
+  popoutTool: (tool: 'sound' | 'screen' | 'shot') => call<void>('tools:popout', tool),
   saveRecording: (videoId: string, name: string, data: Uint8Array, ext: string) =>
     call<string>('tools:save', videoId, name, data, ext),
 
   screenSources: () => call<ScreenSource[]>('screen:sources'),
-  selectRegion: () => call<Region | null>('screen:region'),
+  selectRegion: (hint?: string) => call<Region | null>('screen:region', hint),
   showRegionFrame: (region: Region | null) => call<void>('screen:frame', region),
   finishRegion: (rect: { x: number; y: number; width: number; height: number } | null) =>
     call<void>('screen:regionDone', rect),

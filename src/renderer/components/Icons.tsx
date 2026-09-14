@@ -94,6 +94,12 @@ export const IconStop = ({ size = 20 }: Props): ReactNode =>
 export const IconImage = ({ size = 16 }: Props): ReactNode =>
   base(size, <><rect x="3" y="4.5" width="18" height="15" rx="2" /><circle cx="8.5" cy="10" r="1.6" /><path d="m4 17 5-4.5 4.5 4 3-2.5 4 3.5" /></>)
 
+export const IconCamera = ({ size = 16 }: Props): ReactNode =>
+  base(size, <><path d="M3 8.5a2 2 0 0 1 2-2h2l1.5-2.2h7L17 6.5h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="12.5" r="3.6" /></>)
+
+export const IconCopy = ({ size = 14 }: Props): ReactNode =>
+  base(size, <><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5" /></>)
+
 export const IconMinimize = ({ size = 11 }: Props): ReactNode => (
   <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden="true">
     <path d="M1 6h10" stroke="currentColor" strokeWidth="1.2" />

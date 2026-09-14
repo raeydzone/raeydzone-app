@@ -36,7 +36,7 @@ export function pickFormat(): { mime: string; ext: string } {
   return { mime: '', ext: 'webm' }
 }
 
-async function desktopStream(sourceId: string): Promise<MediaStream> {
+export async function desktopStream(sourceId: string): Promise<MediaStream> {
   return navigator.mediaDevices.getUserMedia({
     audio: false,
     video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId } }

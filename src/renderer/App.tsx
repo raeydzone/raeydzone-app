@@ -42,7 +42,8 @@ export default function App(): ReactNode {
   }
 
   if (POPPED_VIEW?.startsWith('tools')) {
-    const tool = POPPED_VIEW === 'tools-screen' ? 'screen' : 'sound'
+    const tool =
+      POPPED_VIEW === 'tools-screen' ? 'screen' : POPPED_VIEW === 'tools-shot' ? 'shot' : 'sound'
     return (
       <div className={app.shell}>
         <TitleBar />

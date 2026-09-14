@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import r from './region.module.css'
 
+const HINT =
+  new URLSearchParams(window.location.search).get('hint') ??
+  'Drag a box to record · Esc to cancel'
+
 interface Point {
   x: number
   y: number
@@ -80,7 +84,7 @@ export default function RegionOverlay(): ReactNode {
       )}
 
       {!anchor && (
-        <div className={r.hint}>Drag a box to record · Esc to cancel</div>
+        <div className={r.hint}>{HINT}</div>
       )}
     </div>
   )

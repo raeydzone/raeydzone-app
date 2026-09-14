@@ -78,7 +78,7 @@ export type LogType =
   | 'video.remove' | 'video.repair' | 'video.paste' | 'video.archive'
   | 'stream.create' | 'stream.streamed' | 'stream.unstreamed' | 'stream.schedule'
   | 'stream.thumbnail' | 'stream.files' | 'stream.remove'
-  | 'tools.record' | 'tools.clip'
+  | 'tools.record' | 'tools.clip' | 'tools.shot'
   | 'timer.start' | 'timer.stop' | 'timer.recovered'
   | 'system.root' | 'system.rescan'
 

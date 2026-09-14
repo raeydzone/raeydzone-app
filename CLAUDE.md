@@ -81,6 +81,17 @@ red-eyed cat is the app's face — window icon, sidebar mark, empty states.
 - Small files, small functions. Prefer deleting code over adding flags
 - No dependency unless it earns its place
 
+## Versioning
+
+The version in `package.json` is `MAJOR.FEATURE.FIX`, and every shipped change bumps it in
+the same commit as the change itself — it is the release tag and what the updater compares.
+
+- **New feature** → middle number +1, last back to 0. `0.7.3` → `0.8.0`
+- **Fix or tweak** → last number +1. `0.8.0` → `0.8.1`
+
+No digit goes past 9: it rolls back to 0 and carries into the one on its left. A feature on
+`0.9.2` ships as `1.0.0`; a fix on `0.8.9` ships as `0.9.0`.
+
 ## Build
 
 `npm run dev` for development, `npm run build` to produce the distributable `.exe` via
