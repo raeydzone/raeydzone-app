@@ -40,6 +40,7 @@ export default function ScreenRecorder({ projects }: { projects: Video[] }): Rea
   const [project, setProject] = useState('')
 
   const handle = useRef<ClipHandle | null>(null)
+  const mounted = useRef(true)
   const format = pickFormat()
 
   useEffect(() => {
@@ -73,19 +74,29 @@ export default function ScreenRecorder({ projects }: { projects: Video[] }): Rea
     void api.showRegionFrame(region).catch(() => undefined)
   }, [api, region])
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      handle.current?.cancel()
+      handle.current = null
       void window.raeydzone.showRegionFrame(null).catch(() => undefined)
-    },
-    []
-  )
+    }
+  }, [])
 
   const pickRegion = async (): Promise<void> => {
     const picked = await run(() => api.selectRegion())
     if (!picked) return
+    const found = await run(() => api.screenSources())
+    if (!found) return
+    setSources(found)
+    const match = found.find((s) => s.displayId === picked.displayId)
+    if (!match) {
+      notify('That display is no longer available. Pick the area again.', 'bad')
+      return
+    }
     setRegion(picked)
-    const match = sources.find((s) => s.displayId === picked.displayId)
-    if (match) setSourceId(match.id)
+    setSourceId(match.id)
   }
 
   const start = async (): Promise<void> => {
@@ -100,6 +111,10 @@ export default function ScreenRecorder({ projects }: { projects: Video[] }): Rea
         audioSourceId: audioId || null,
         fps
       })
+      if (!mounted.current) {
+        active.cancel()
+        return
+      }
       active.setMuted(muted)
       handle.current = active
       setChannels(active.audioChannels)
@@ -167,7 +182,10 @@ export default function ScreenRecorder({ projects }: { projects: Video[] }): Rea
               className={ui.input}
               value={sourceId}
               disabled={recording}
-              onChange={(e) => setSourceId(e.target.value)}
+              onChange={(e) => {
+                setSourceId(e.target.value)
+                setRegion(null)
+              }}
             >
               {sources.map((s) => (
                 <option key={s.id} value={s.id}>

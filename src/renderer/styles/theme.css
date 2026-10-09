@@ -53,6 +53,7 @@
 
   --titlebar-h: 38px;
   --sidebar-w: 232px;
+  --guide-stroke: 1px;
 
   --font: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;

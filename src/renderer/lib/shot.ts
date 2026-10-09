@@ -55,13 +55,14 @@ export async function takeShot({ sourceId, region, ext }: Options): Promise<Shot
 
     // The stream arrives at the monitor's real pixel size while the box was drawn in
     // DIPs, so the crop scales by the ratio between the two.
-    const scale = region ? (video.videoWidth || region.displayWidth) / region.displayWidth : 1
+    const scaleX = region ? (video.videoWidth || region.displayWidth) / region.displayWidth : 1
+    const scaleY = region ? (video.videoHeight || region.displayHeight) / region.displayHeight : 1
     const crop = region
       ? {
-          x: region.x * scale,
-          y: region.y * scale,
-          width: region.width * scale,
-          height: region.height * scale
+          x: region.x * scaleX,
+          y: region.y * scaleY,
+          width: region.width * scaleX,
+          height: region.height * scaleY
         }
       : { x: 0, y: 0, width: video.videoWidth, height: video.videoHeight }
 

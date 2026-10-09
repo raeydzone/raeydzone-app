@@ -1,5 +1,5 @@
 import {
-  BrowserWindow, Notification, app, desktopCapturer, dialog, ipcMain, nativeImage, shell
+  BrowserWindow, Notification, app, desktopCapturer, dialog, ipcMain, nativeImage, screen, shell
 } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -80,9 +80,17 @@ export async function broadcast(): Promise<void> {
 }
 
 function handle(channel: string, fn: (...args: never[]) => unknown): void {
-  ipcMain.handle(channel, async (_event, ...args) => {
+  handleFromWindow(channel, (_sender, ...args) => fn(...args))
+}
+
+function handleFromWindow(
+  channel: string,
+  fn: (sender: BrowserWindow | null, ...args: never[]) => unknown
+): void {
+  ipcMain.handle(channel, async (event, ...args) => {
     try {
-      const value = await (fn as (...a: unknown[]) => unknown)(...args)
+      const sender = BrowserWindow.fromWebContents(event.sender)
+      const value = await (fn as (w: BrowserWindow | null, ...a: unknown[]) => unknown)(sender, ...args)
       await broadcast()
       return { ok: true, value }
     } catch (err) {
@@ -262,21 +270,26 @@ export function register(): void {
   handle('timer:start', () => timer.start())
   handle('timer:stop', () => timer.stop())
 
-  handle('tools:popout', (tool: Tool) => openToolWindow(tool))
+  handle('tools:popout', (tool: Tool) => openToolWindow(tool, win ?? undefined))
   handle('tools:save', (videoId: string, name: string, data: Uint8Array, ext: string) =>
     lib.saveRecording(requireRoot(), videoId, name, data, ext)
   )
 
-  handle('screen:sources', async () => {
+  handleFromWindow('screen:sources', async (sender) => {
     const sources = await desktopCapturer.getSources({
       types: ['screen', 'window'],
       thumbnailSize: { width: 0, height: 0 }
     })
-    return sources.map((s) => ({ id: s.id, name: s.name, displayId: s.display_id }))
+    const display = sender
+      ? screen.getDisplayMatching(sender.getBounds())
+      : screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    return sources
+      .map((s) => ({ id: s.id, name: s.name, displayId: s.display_id }))
+      .sort((a, b) => Number(b.displayId === String(display.id)) - Number(a.displayId === String(display.id)))
   })
-  handle('screen:region', (hint?: string) => selectRegion(hint))
-  handle('screen:frame', (region: Region | null) => showRegionFrame(region))
-  handle('screen:regionDone', (rect: RegionRect | null) => finishRegion(rect))
+  handleFromWindow('screen:region', (sender, hint?: string) => selectRegion(hint, sender))
+  handleFromWindow('screen:frame', (sender, region: Region | null) => showRegionFrame(region, sender))
+  handleFromWindow('screen:regionDone', (sender, rect: RegionRect | null) => finishRegion(rect, sender))
 
   handle('system:rescan', () => lib.rescan(requireRoot()))
   handle('system:repair', () => lib.repairAll(requireRoot()))

@@ -26,6 +26,11 @@ export default function RegionOverlay(): ReactNode {
   const [cursor, setCursor] = useState<Point | null>(null)
   const [done, setDone] = useState(false)
   const settled = useRef(false)
+  const startPoint = useRef<Point | null>(null)
+  const pointOf = (e: { clientX: number; clientY: number }): Point => ({
+    x: Math.max(0, Math.min(e.clientX, window.innerWidth)),
+    y: Math.max(0, Math.min(e.clientY, window.innerHeight))
+  })
 
   const settle = useCallback(
     (rect: { x: number; y: number; width: number; height: number } | null): void => {
@@ -57,17 +62,33 @@ export default function RegionOverlay(): ReactNode {
   return (
     <div
       className={r.overlay}
-      onMouseDown={(e) => {
-        const point = { x: e.clientX, y: e.clientY }
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        e.currentTarget.setPointerCapture(e.pointerId)
+        const point = pointOf(e)
+        startPoint.current = point
         setAnchor(point)
         setCursor(point)
       }}
-      onMouseMove={(e) => {
-        if (anchor) setCursor({ x: e.clientX, y: e.clientY })
+      onPointerMove={(e) => {
+        if (startPoint.current) setCursor(pointOf(e))
       }}
-      onMouseUp={() => {
-        if (box && box.width >= 8 && box.height >= 8) settle(box)
-        else setAnchor(null)
+      onPointerUp={(e) => {
+        const start = startPoint.current
+        if (!start) return
+        startPoint.current = null
+        e.currentTarget.releasePointerCapture(e.pointerId)
+        const selected = rectOf(start, pointOf(e))
+        if (selected.width >= 8 && selected.height >= 8) settle(selected)
+        else {
+          setAnchor(null)
+          setCursor(null)
+        }
+      }}
+      onPointerCancel={() => {
+        startPoint.current = null
+        setAnchor(null)
+        setCursor(null)
       }}
     >
       {box ? (

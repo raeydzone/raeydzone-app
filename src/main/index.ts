@@ -9,7 +9,7 @@ import {
   attach, broadcast, register, root, startArchiveSchedule, startReminders, watchRoot
 } from './ipc'
 import { exists } from './util/paths'
-import { loadRenderer, preloadOptions, iconPath } from './windows'
+import { closeAuxiliaryWindows, loadRenderer, preloadOptions, iconPath } from './windows'
 
 registerScheme()
 app.setAppUserModelId('zone.raeyd.app')
@@ -29,6 +29,10 @@ function createWindow(): void {
   })
 
   win.on('ready-to-show', () => win?.show())
+  win.on('closed', () => {
+    win = null
+    closeAuxiliaryWindows()
+  })
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
     return { action: 'deny' }
@@ -87,4 +91,7 @@ app.on('window-all-closed', () => {
   app.quit()
 })
 
-app.on('before-quit', () => timer.shutdown())
+app.on('before-quit', () => {
+  closeAuxiliaryWindows()
+  timer.shutdown()
+})

@@ -55,9 +55,16 @@ export default function ScreenShot({ projects }: { projects: Video[] }): ReactNo
   const pickRegion = async (): Promise<void> => {
     const picked = await run(() => api.selectRegion('Drag a box to capture · Esc to cancel'))
     if (!picked) return
+    const found = await run(() => api.screenSources())
+    if (!found) return
+    setSources(found)
+    const match = found.find((s) => s.displayId === picked.displayId)
+    if (!match) {
+      notify('That display is no longer available. Pick the area again.', 'bad')
+      return
+    }
     setRegion(picked)
-    const match = sources.find((s) => s.displayId === picked.displayId)
-    if (match) setSourceId(match.id)
+    setSourceId(match.id)
   }
 
   const capture = async (): Promise<void> => {
@@ -135,7 +142,10 @@ export default function ScreenShot({ projects }: { projects: Video[] }): ReactNo
               className={ui.input}
               value={sourceId}
               disabled={busy}
-              onChange={(e) => setSourceId(e.target.value)}
+              onChange={(e) => {
+                setSourceId(e.target.value)
+                setRegion(null)
+              }}
             >
               {sources.map((s) => (
                 <option key={s.id} value={s.id}>

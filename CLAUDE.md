@@ -102,3 +102,12 @@ Packaging needs Windows **Developer Mode** on (Settings → System → For devel
 Without it, electron-builder's `winCodeSign` cache fails to extract — it contains macOS
 symlinks, and creating symlinks otherwise requires admin. The error is
 `Cannot create symbolic link ... libcrypto.dylib`.
+
+## Delivery
+
+For this low-risk project, commit and push completed changes to GitHub as part of normal
+delivery without asking for another confirmation. App updates also require publishing
+the matching version tag as a stable GitHub release with the installer, its `.blockmap`,
+and `latest.yml`; pushing source alone does not make the updater recognize a new version.
+The user performs all GUI and standalone testing. Never use computer control for this
+project.

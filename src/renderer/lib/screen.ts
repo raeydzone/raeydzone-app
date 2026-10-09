@@ -154,10 +154,11 @@ async function cropTrack(
     else video.addEventListener('loadedmetadata', () => resolve(), { once: true })
   })
 
-  const scale = (video.videoWidth || region.displayWidth) / region.displayWidth
+  const scaleX = (video.videoWidth || region.displayWidth) / region.displayWidth
+  const scaleY = (video.videoHeight || region.displayHeight) / region.displayHeight
   const canvas = document.createElement('canvas')
-  canvas.width = Math.max(2, Math.round(region.width * scale))
-  canvas.height = Math.max(2, Math.round(region.height * scale))
+  canvas.width = Math.max(2, Math.round(region.width * scaleX))
+  canvas.height = Math.max(2, Math.round(region.height * scaleY))
 
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Could not open a drawing surface for the region.')
@@ -166,10 +167,10 @@ async function cropTrack(
   const draw = (): void => {
     ctx.drawImage(
       video,
-      region.x * scale,
-      region.y * scale,
-      region.width * scale,
-      region.height * scale,
+      region.x * scaleX,
+      region.y * scaleY,
+      region.width * scaleX,
+      region.height * scaleY,
       0,
       0,
       canvas.width,

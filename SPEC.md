@@ -198,8 +198,8 @@ straight into a chosen project's `assets/`.
 
 **Screen recorder.** Captures a screen, a single window, or a box drawn over the desktop,
 with desktop audio on the same track. **Draw box…** opens a transparent overlay on
-whichever monitor the cursor is on; dragging picks the area, Esc cancels, and choosing a
-box also selects that monitor as the source. Region capture composites through a canvas,
+every connected monitor; dragging picks the area, Esc cancels, and choosing a box also
+selects that monitor as the source. Region capture composites through a canvas,
 scaling by the monitor's real-pixels-to-DIP ratio so display scaling does not shift the
 crop.
 
@@ -216,11 +216,12 @@ The container is chosen at runtime — MP4 when Chromium can mux it, WebM otherw
 the footer names which one you are about to get. Clips preview inline, then save into a
 project's `assets/` like sound takes do.
 
-Once a box is set, a thin red **guide** outlines it on the desktop until the box is
-cleared, so what is being recorded is obvious the way the Snipping Tool makes it obvious.
+Once a box is set, thin red **corner markers** identify it on the desktop until the box
+is cleared. Closing the tool, a renderer crash or reload, or app shutdown removes the
+guide directly from the main process, so it cannot keep the app running by itself.
 The guide is click-through and never reaches the recording: the window is marked excluded
-from screen capture, and its outline is drawn in the ring just *outside* the recorded
-rectangle, so even if that exclusion fails the border is not inside the crop.
+from screen capture, and its markers are drawn just *outside* the recorded rectangle,
+so even if that exclusion fails they are not inside the crop.
 
 **Screenshot.** The same framing as the screen recorder, for a single still: a screen, a
 window, or a box drawn over the desktop. **Draw box…** opens the same overlay, worded for
