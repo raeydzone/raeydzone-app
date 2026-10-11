@@ -269,6 +269,7 @@ export function register(): void {
 
   handle('timer:start', () => timer.start())
   handle('timer:stop', () => timer.stop())
+  handle('timer:move', (from: string, to: string, ms: number) => timer.moveTime(from, to, ms))
 
   handle('tools:popout', (tool: Tool) => openToolWindow(tool, win ?? undefined))
   handle('tools:save', (videoId: string, name: string, data: Uint8Array, ext: string) =>

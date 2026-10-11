@@ -680,7 +680,7 @@
 
 .fileRow {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto auto 30px;
+  grid-template-columns: 44px minmax(0, 1fr) auto auto 30px 30px;
   align-items: center;
   gap: var(--s-3);
   padding: 7px var(--s-2);
@@ -780,4 +780,141 @@
 
 .fileError:hover {
   background: rgba(210, 153, 34, 0.18);
+}
+
+.moveEmpty {
+  margin-top: var(--s-4);
+}
+
+.dayList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: var(--s-4);
+}
+
+.dayRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: 9px var(--s-3);
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  font-size: 13px;
+  text-align: left;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.dayRow:hover {
+  background: var(--bg-hover);
+}
+
+.dayRowOn {
+  background: var(--accent-wash);
+  border-color: var(--accent-edge);
+}
+
+.moveAmount {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+  font-size: 13px;
+}
+
+.moveInput {
+  width: 96px;
+  text-align: right;
+}
+
+.moveResult {
+  margin-top: var(--s-3);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.moveResult b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.fileActionLive {
+  color: var(--accent-hot);
+}
+
+.eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.eqBar {
+  width: 2px;
+  height: 30%;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.eqStop {
+  display: none;
+}
+
+.fileActionLive:hover .eq {
+  display: none;
+}
+
+.fileActionLive:hover .eqStop {
+  display: grid;
+}
+
+.viewer {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  max-width: calc(100vw - 48px);
+  padding: var(--s-3);
+  background: var(--bg-panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-panel);
+  z-index: 71;
+}
+
+.viewerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.viewerTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.viewerHead .fileAction {
+  width: 28px;
+  flex: 0 0 auto;
+}
+
+.viewerImage {
+  display: block;
+  max-width: calc(100vw - 96px);
+  max-height: calc(100vh - 160px);
+  object-fit: contain;
+  border-radius: var(--r-md);
+  background: var(--bg-inset);
 }

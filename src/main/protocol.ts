@@ -25,7 +25,7 @@ export function serveFrom(getRoot: () => string | null): void {
     if (!isInside(root, target)) return new Response('Forbidden', { status: 403 })
 
     try {
-      return await net.fetch(pathToFileURL(target).toString())
+      return await net.fetch(pathToFileURL(target).toString(), { headers: request.headers })
     } catch {
       return new Response('Not found', { status: 404 })
     }

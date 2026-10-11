@@ -66,6 +66,7 @@ const api = {
 
   startTimer: () => call<void>('timer:start'),
   stopTimer: () => call<number>('timer:stop'),
+  moveTime: (from: string, to: string, ms: number) => call<void>('timer:move', from, to, ms),
 
   popoutTool: (tool: 'sound' | 'screen' | 'shot') => call<void>('tools:popout', tool),
   saveRecording: (videoId: string, name: string, data: Uint8Array, ext: string) =>

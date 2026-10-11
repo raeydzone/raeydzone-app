@@ -117,3 +117,6 @@ export const IconClose = ({ size = 11 }: Props): ReactNode => (
     <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" strokeWidth="1.2" />
   </svg>
 )
+
+export const IconEye = ({ size = 14 }: Props): ReactNode =>
+  base(size, <><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="2.8" /></>)

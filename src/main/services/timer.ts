@@ -1,6 +1,6 @@
 import * as db from './db'
 import { log } from './log'
-import { dayKey, formatDuration } from '@shared/format'
+import { dayKey, dayLabel, formatDuration } from '@shared/format'
 
 const HEARTBEAT_MS = 30_000
 let ticker: NodeJS.Timeout | null = null
@@ -59,6 +59,29 @@ export function stop(): number {
   db.setRunning(null)
   log('timer.stop', 'Session ended — ' + formatDuration(elapsed))
   return elapsed
+}
+
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/
+
+export function moveTime(fromKey: string, toKey: string, ms: number): void {
+  if (!DAY_KEY.test(fromKey) || !DAY_KEY.test(toKey)) throw new Error('Not a valid day.')
+  if (toKey >= fromKey) throw new Error('Time can only move to an earlier day.')
+  if (db.state().running) throw new Error('Stop the timer before moving time.')
+
+  const amount = Math.round(ms)
+  const from = db.state().days[fromKey]
+  if (!(amount > 0)) throw new Error('Pick an amount to move.')
+  if (!from || from.totalMs < amount) {
+    throw new Error('That day does not have that much time to move.')
+  }
+
+  const to = db.state().days[toKey] ?? { date: toKey, totalMs: 0, sessions: [] }
+  db.saveDay({ ...from, totalMs: from.totalMs - amount })
+  db.saveDay({ ...to, totalMs: to.totalMs + amount })
+  log(
+    'timer.move',
+    'Moved ' + formatDuration(amount) + ' from ' + dayLabel(fromKey) + ' to ' + dayLabel(toKey)
+  )
 }
 
 export function shutdown(): void {

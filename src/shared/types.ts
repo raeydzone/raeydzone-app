@@ -79,7 +79,7 @@ export type LogType =
   | 'stream.create' | 'stream.streamed' | 'stream.unstreamed' | 'stream.schedule'
   | 'stream.thumbnail' | 'stream.files' | 'stream.remove'
   | 'tools.record' | 'tools.clip' | 'tools.shot'
-  | 'timer.start' | 'timer.stop' | 'timer.recovered'
+  | 'timer.start' | 'timer.stop' | 'timer.recovered' | 'timer.move'
   | 'system.root' | 'system.rescan'
 
 export interface LogEntry {

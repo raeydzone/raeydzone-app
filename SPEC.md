@@ -110,6 +110,10 @@ are **moved, never copied**.
 - `fs.rename`, falling back to copy + unlink on `EXDEV` (cross-drive moves)
 - Name collision in the destination → ` (2)`
 - Each file produces a toast and a log entry naming its destination
+- Rows in the file list carry a small preview button beside the Show-in-Explorer one:
+  images open in a popup viewer, GIFs play in the same popup (closing it stops them), and
+  audio plays in place — the button shows a live indicator that turns into a stop button
+  on hover. Only one audio file plays at a time
 - A failed move leaves the source untouched
 
 ### Thumbnail
@@ -255,6 +259,11 @@ One timer, one daily goal: **60 minutes**.
 - A session crossing midnight is split at the boundary so each day gets its real minutes.
 - A running session writes a heartbeat every 30s. If the app dies, the next launch
   recovers the session up to the last heartbeat instead of losing it.
+- **Move time…** gives minutes worked today to an earlier day that fell short of the goal
+  (e.g. yesterday 28m + today 22m, goal 50m → yesterday 50m, today 0m). The dialog lists
+  short days, defaults the amount to what closes the gap, and previews both totals before
+  anything changes. Only today can be the source, it needs the timer stopped, and it is
+  logged as `timer.move`.
 - History: a bar chart of the last 30 days with a goal line at 1h. Bars that hit goal are
   accent red; misses are muted.
 

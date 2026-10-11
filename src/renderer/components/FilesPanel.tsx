@@ -3,7 +3,8 @@ import type { DragEvent, ReactNode } from 'react'
 import type { ProjectFile } from '@shared/types'
 import { formatBytes } from '@shared/format'
 import { IconFolder, IconRefresh, IconSearch } from './Icons'
-import { useStore } from '../state/store'
+import { PreviewButton } from './FilePreview'
+import { mediaUrl, useAppState, useStore } from '../state/store'
 import s from './components.module.css'
 import ui from '../styles/ui.module.css'
 
@@ -21,6 +22,11 @@ export function FilesPanel({
   id: string
 }): ReactNode {
   const { rev, notify } = useStore()
+  const state = useAppState()
+  const entity =
+    kind === 'video'
+      ? state.videos.find((v) => v.id === id)
+      : state.streams.find((x) => x.id === id)
   const [files, setFiles] = useState<ProjectFile[]>([])
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -145,6 +151,14 @@ export function FilesPanel({
                 <span className={s.fileName}>{file.name}</span>
                 <span className={s.fileBucket}>{BUCKET_LABEL[file.bucket] ?? file.bucket}</span>
                 <span className={s.fileSize}>{formatBytes(file.size)}</span>
+                {entity ? (
+                  <PreviewButton
+                    file={file}
+                    url={mediaUrl(kind, entity, file.rel, Date.parse(file.modified)) ?? ''}
+                  />
+                ) : (
+                  <span />
+                )}
                 <button
                   className={s.fileAction}
                   title="Show in Explorer"

@@ -121,7 +121,7 @@ export function mediaUrl(
 ): string | null {
   if (!file) return null
   const dir = kind === 'video' ? 'Videos' : 'Streams'
-  const parts = [dir, entity.folder, file].map(encodeURIComponent).join('/')
+  const parts = [dir, entity.folder, ...file.split('/')].map(encodeURIComponent).join('/')
   return `raeydzone://media/${parts}?r=${rev}`
 }
 

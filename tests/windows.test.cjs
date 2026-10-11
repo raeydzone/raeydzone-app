@@ -322,3 +322,44 @@ test('main-window destruction and before-quit both clean up auxiliary windows', 
     assert.ok(instances.slice(1).every((window) => window.destroyed), event)
   }
 })
+
+function loadTimer(days, running = null) {
+  const saved = []
+  const logged = []
+  const db = {
+    state: () => ({ days, running }),
+    saveDay: (rec) => { days[rec.date] = rec; saved.push(rec) }
+  }
+  const format = loadModule('src/shared/format.ts', {})
+  const timer = loadModule('src/main/services/timer.ts', {
+    './db': db,
+    './log': { log: (type, message) => logged.push({ type, message }) },
+    '@shared/format': format
+  })
+  return { timer, days, logged }
+}
+
+test('moving time shifts minutes to an earlier day and logs it', () => {
+  const min = 60_000
+  const { timer, days, logged } = loadTimer({
+    '2026-10-10': { date: '2026-10-10', totalMs: 28 * min, sessions: [] },
+    '2026-10-11': { date: '2026-10-11', totalMs: 22 * min, sessions: [] }
+  })
+  timer.moveTime('2026-10-11', '2026-10-10', 22 * min)
+  assert.equal(days['2026-10-10'].totalMs, 50 * min)
+  assert.equal(days['2026-10-11'].totalMs, 0)
+  assert.equal(logged[0].type, 'timer.move')
+})
+
+test('moving time refuses later days, overdrafts and a running timer', () => {
+  const min = 60_000
+  const base = () => ({
+    '2026-10-10': { date: '2026-10-10', totalMs: 10 * min, sessions: [] },
+    '2026-10-11': { date: '2026-10-11', totalMs: 5 * min, sessions: [] }
+  })
+  assert.throws(() => loadTimer(base()).timer.moveTime('2026-10-10', '2026-10-11', min))
+  assert.throws(() => loadTimer(base()).timer.moveTime('2026-10-11', '2026-10-10', 6 * min))
+  assert.throws(() =>
+    loadTimer(base(), { start: 'x', heartbeat: 'x' }).timer.moveTime('2026-10-11', '2026-10-10', min)
+  )
+})

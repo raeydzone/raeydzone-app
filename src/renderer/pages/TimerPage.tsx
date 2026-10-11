@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { dayKey, dayLabel, formatClock, formatDuration } from '@shared/format'
 import { IconPlay, IconStop } from '../components/Icons'
+import { MoveTime } from '../components/MoveTime'
 import { useAppState, useStore, useTick, useTodayMs } from '../state/store'
 import p from './pages.module.css'
 import ui from '../styles/ui.module.css'
@@ -47,6 +48,7 @@ export default function TimerPage(): ReactNode {
             Goal {formatDuration(goal)} a day · {hitCount} of {DAYS_SHOWN} days hit
           </p>
         </div>
+        <MoveTime disabled={!!state.running} />
       </div>
 
       <div className={ui.panel}>
