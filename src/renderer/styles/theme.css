@@ -51,6 +51,20 @@
   --shadow-panel: 0 10px 30px rgba(0, 0, 0, 0.55);
   --shadow-glow: 0 0 0 1px var(--accent-edge), 0 0 22px var(--accent-glow);
 
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --hairline: 1px;
+
+  --studio-tools-w: 52px;
+  --studio-panel-w: 296px;
+  --studio-chat-w: 352px;
+  --studio-strip-h: 118px;
+  --studio-handle: 10px;
+  --checker-a: #161616;
+  --checker-b: #202020;
+  --ai-pulse: rgba(255, 42, 42, 0.55);
+
   --titlebar-h: 38px;
   --sidebar-w: 232px;
   --guide-stroke: 1px;

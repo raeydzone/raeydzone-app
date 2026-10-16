@@ -10,13 +10,14 @@ import {
 import { LogRows } from '../components/LogFeed'
 import { FilesPanel } from '../components/FilesPanel'
 import {
-  IconFolder, IconImage, IconPlus, IconPremiere, IconSearch, IconTrash, IconVideo
+  IconFolder, IconImage, IconPlus, IconPremiere, IconSearch, IconSparkle, IconTrash, IconVideo
 } from '../components/Icons'
 import c from '../components/components.module.css'
 import {
   byProgress, isComplete, lastProgressAt, mediaUrl, useAppState, useStore
 } from '../state/store'
 import mascot from '../assets/mascot.png'
+import Studio from '../studio/ui/Studio'
 import p from './pages.module.css'
 import ui from '../styles/ui.module.css'
 
@@ -27,6 +28,7 @@ export default function Videos(): ReactNode {
   const [showDone, setShowDone] = useState(false)
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
+  const [studioId, setStudioId] = useState<string | null>(null)
 
   const open = state.videos.find((v) => v.id === openId) ?? null
 
@@ -38,7 +40,8 @@ export default function Videos(): ReactNode {
       .sort(byProgress)
   }, [state.videos, showDone, query])
 
-  if (open) return <Detail video={open} onBack={() => setOpenId(null)} />
+  if (open && studioId === open.id) return <Studio video={open} onBack={() => setStudioId(null)} />
+  if (open) return <Detail video={open} onBack={() => setOpenId(null)} onStudio={() => setStudioId(open.id)} />
 
   const create = (name: string): void => {
     void run(() => window.raeydzone.createVideo(name), 'Project folder created')
@@ -122,7 +125,15 @@ export default function Videos(): ReactNode {
   )
 }
 
-function Detail({ video, onBack }: { video: Video; onBack: () => void }): ReactNode {
+function Detail({
+  video,
+  onBack,
+  onStudio
+}: {
+  video: Video
+  onBack: () => void
+  onStudio: () => void
+}): ReactNode {
   const state = useAppState()
   const { run, rev, notify } = useStore()
   const [renaming, setRenaming] = useState(false)
@@ -303,6 +314,10 @@ function Detail({ video, onBack }: { video: Video; onBack: () => void }): ReactN
               hint="Drop an image here"
             />
             {video.thumbnail && <div className={p.slotFile}>{video.thumbnail}</div>}
+            <button className={`${ui.btn} ${ui.btnPrimary} ${p.studioBtn}`} onClick={onStudio}>
+              <IconSparkle size={15} />
+              Create Thumbnail
+            </button>
           </DropZone>
 
           <DropZone

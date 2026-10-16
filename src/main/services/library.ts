@@ -811,3 +811,36 @@ export async function rescan(root: string): Promise<{ added: number; missing: nu
   log('system.rescan', 'Rescan added ' + added + ', flagged ' + missing + ' missing')
   return { added, missing }
 }
+
+export async function studioDir(root: string, videoId: string): Promise<string> {
+  const video = findVideo(videoId)
+  await repairVideo(root, video)
+  const dir = path.join(videoPath(root, video), 'thumbnail_studio')
+  assertInside(root, dir)
+  return dir
+}
+
+export async function writeThumbnail(
+  root: string,
+  videoId: string,
+  data: Uint8Array,
+  ext: 'png' | 'jpg'
+): Promise<string> {
+  const video = findVideo(videoId)
+  await repairVideo(root, video)
+  const dir = videoPath(root, video)
+  assertInside(root, dir)
+  const filename = THUMB_STEM + '.' + ext
+  const temp = path.join(dir, '.' + filename + '.tmp')
+  await fs.writeFile(temp, data)
+  const existing = await findByStem(dir, THUMB_STEM)
+  if (existing && existing !== filename) await fs.unlink(path.join(dir, existing)).catch(() => {})
+  await fs.rename(temp, path.join(dir, filename))
+  video.thumbnail = filename
+  db.saveVideo(video)
+  log('video.thumbnail', 'Applied a studio thumbnail to "' + video.name + '"', {
+    id: videoId,
+    name: video.name
+  })
+  return filename
+}

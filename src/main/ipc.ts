@@ -14,6 +14,7 @@ import {
 } from './services/settings'
 import { freeBytes, isRemovable } from './util/paths'
 import { DRAG_ICON_DATA_URL } from './util/dragIcon'
+import { registerStudio } from './studio/ipc'
 import {
   finishRegion, openToolWindow, selectRegion, showRegionFrame
 } from './windows'
@@ -169,6 +170,7 @@ async function checkReminders(): Promise<void> {
 }
 
 export function register(): void {
+  registerStudio(() => win, broadcast)
   handle('state:get', () => buildState())
 
   handle('root:propose', () => proposeRoot())

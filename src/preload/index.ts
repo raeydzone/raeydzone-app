@@ -3,6 +3,10 @@ import type {
   AppState, ArchivePreview, DropResult, DropTarget, ProjectFile, Region, RootProposal,
   ScreenSource, StepId, Stream, Video
 } from '@shared/types'
+import type {
+  ClaudeStatus, ImageRequest, ImageResult, OpenRouterStatus, SendRequest, StudioEvent,
+  StudioFile, ToolCall, ToolReply
+} from '@shared/studio'
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
@@ -12,7 +16,54 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   return res.value
 }
 
+function listen<T extends unknown[]>(channel: string, cb: (...args: T) => void): () => void {
+  const listener = (_e: unknown, ...args: unknown[]): void => cb(...(args as T))
+  ipcRenderer.on(channel, listener)
+  return () => {
+    ipcRenderer.off(channel, listener)
+  }
+}
+
+type AiPrefs = { claudeModel: string; imageModel: string }
+type Imported = { file: string; name: string }
+
+const studio = {
+  load: (videoId: string) => call<StudioFile | null>('studio:load', videoId),
+  save: (videoId: string, json: string) => call<void>('studio:save', videoId, json),
+  putAsset: (videoId: string, file: string, data: Uint8Array) =>
+    call<void>('studio:putAsset', videoId, file, data),
+  readAsset: (videoId: string, file: string) =>
+    call<Uint8Array>('studio:readAsset', videoId, file),
+  importFiles: (videoId: string, paths: string[]) =>
+    call<Imported[]>('studio:import', videoId, paths),
+  paste: (videoId: string) => call<Imported | null>('studio:paste', videoId),
+  prune: (videoId: string, keep: string[]) => call<number>('studio:prune', videoId, keep),
+  pickImages: () => call<string[]>('studio:pickImages'),
+  apply: (videoId: string, data: Uint8Array, ext: 'png' | 'jpg') =>
+    call<string>('studio:apply', videoId, data, ext),
+  send: (req: SendRequest) => call<void>('studio:send', req),
+  stop: (variantId: string) => call<void>('studio:stop', variantId),
+  image: (req: ImageRequest) => call<ImageResult>('studio:image', req),
+  toolDone: (callId: string, reply: ToolReply) => call<void>('studio:toolDone', callId, reply),
+  onTool: (cb: (call: ToolCall) => void) => listen<[ToolCall]>('studio:tool', cb),
+  onEvent: (cb: (variantId: string, event: StudioEvent) => void) =>
+    listen<[string, StudioEvent]>('studio:event', cb)
+}
+
+const ai = {
+  claudeStatus: () => call<ClaudeStatus>('ai:claudeStatus'),
+  claudeConnect: () => call<void>('ai:claudeConnect'),
+  claudeLocate: () => call<ClaudeStatus>('ai:claudeLocate'),
+  openrouterStatus: () => call<OpenRouterStatus>('ai:openrouterStatus'),
+  setOpenrouterKey: (key: string | null) => call<OpenRouterStatus>('ai:openrouterKey', key),
+  prefs: () => call<AiPrefs>('ai:prefs'),
+  setPrefs: (patch: Partial<AiPrefs>) => call<AiPrefs>('ai:setPrefs', patch)
+}
+
 const api = {
+  studio,
+  ai,
+
   getState: () => call<AppState>('state:get'),
   onStateChanged: (cb: (state: AppState) => void) => {
     const listener = (_e: unknown, state: AppState): void => cb(state)

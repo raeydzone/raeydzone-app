@@ -1,0 +1,36 @@
+@font-face {
+  font-family: 'Montserrat';
+  src: url('../assets/fonts/Montserrat.ttf') format('truetype');
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: 'Oswald';
+  src: url('../assets/fonts/Oswald.ttf') format('truetype');
+  font-weight: 200 700;
+}
+
+@font-face {
+  font-family: 'Anton';
+  src: url('../assets/fonts/Anton.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Bebas Neue';
+  src: url('../assets/fonts/BebasNeue.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Archivo Black';
+  src: url('../assets/fonts/ArchivoBlack.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Luckiest Guy';
+  src: url('../assets/fonts/LuckiestGuy.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Bangers';
+  src: url('../assets/fonts/Bangers.ttf') format('truetype');
+}

@@ -5,6 +5,7 @@ import { formatBytes, formatDuration } from '@shared/format'
 import { Toggle } from '../components/Bits'
 import { IconFolder, IconPremiere } from '../components/Icons'
 import { useAppState, useStore } from '../state/store'
+import { AiSettings } from './AiSettings'
 import p from './pages.module.css'
 import ui from '../styles/ui.module.css'
 
@@ -190,6 +191,8 @@ export default function SettingsPage(): ReactNode {
             <span className={ui.faint}>minutes</span>
           </div>
         </div>
+
+        <AiSettings />
 
         <ArchiveSetting />
 

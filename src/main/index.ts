@@ -9,6 +9,7 @@ import {
   attach, broadcast, register, root, startArchiveSchedule, startReminders, watchRoot
 } from './ipc'
 import { exists } from './util/paths'
+import { shutdownStudio } from './studio/ipc'
 import { closeAuxiliaryWindows, loadRenderer, preloadOptions, iconPath } from './windows'
 
 registerScheme()
@@ -86,12 +87,14 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  shutdownStudio()
   timer.shutdown()
   db.close()
   app.quit()
 })
 
 app.on('before-quit', () => {
+  shutdownStudio()
   closeAuxiliaryWindows()
   timer.shutdown()
 })

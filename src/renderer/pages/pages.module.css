@@ -72,6 +72,12 @@
   word-break: break-all;
 }
 
+.studioBtn {
+  width: 100%;
+  justify-content: center;
+  margin-top: var(--s-3);
+}
+
 .backLink {
   display: inline-flex;
   align-items: center;
@@ -232,6 +238,19 @@
   gap: var(--s-4);
   padding: var(--s-4) 0;
   border-bottom: 1px solid var(--line);
+}
+
+.settingStack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.settingStack > :last-child {
+  flex-wrap: wrap;
+}
+
+.settingHint a {
+  color: var(--accent-hot);
 }
 
 .settingRow:last-child {

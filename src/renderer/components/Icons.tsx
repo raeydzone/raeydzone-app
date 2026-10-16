@@ -120,3 +120,36 @@ export const IconClose = ({ size = 11 }: Props): ReactNode => (
 
 export const IconEye = ({ size = 14 }: Props): ReactNode =>
   base(size, <><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="2.8" /></>)
+
+export const IconCursor = ({ size = 18 }: Props): ReactNode =>
+  base(size, <path d="M5 3.5 18.5 10l-6 1.8-2.6 6.2z" />)
+
+export const IconText = ({ size = 18 }: Props): ReactNode =>
+  base(size, <path d="M5 6V4.5h14V6M12 4.5v15M9 19.5h6" />)
+
+export const IconRect = ({ size = 18 }: Props): ReactNode =>
+  base(size, <rect x="4" y="6" width="16" height="12" rx="1.5" />)
+
+export const IconEllipse = ({ size = 18 }: Props): ReactNode =>
+  base(size, <ellipse cx="12" cy="12" rx="8.5" ry="6.5" />)
+
+export const IconPen = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="m12 3 6.5 9-3 7.5h-7l-3-7.5z" /><circle cx="12" cy="12" r="1.6" /><path d="M12 3v7.4" /></>)
+
+export const IconLasso = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><ellipse cx="12.5" cy="9.5" rx="8" ry="5.5" strokeDasharray="2.6 2.4" /><path d="M7 14c-1.5 1.2-1.8 3.4-.2 4.4 1.3.8 2.6-.3 2.3-1.7" /></>)
+
+export const IconBrush = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M19.5 4.5 11 13" /><path d="M10.5 12.5c-2.2-.4-4 1.2-4 3.4 0 1.5-.8 2.6-2 3.1 3.6 1 7.8-.4 7.6-4.3z" /></>)
+
+export const IconScissors = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><circle cx="6.5" cy="6.5" r="2.5" /><circle cx="6.5" cy="17.5" r="2.5" /><path d="M8.6 8 20 18M8.6 16 20 6" /></>)
+
+export const IconSparkle = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M12 3.5 13.8 9.2 19.5 11l-5.7 1.8L12 18.5l-1.8-5.7L4.5 11l5.7-1.8z" /><path d="M18.5 3.5v3M17 5h3" /></>)
+
+export const IconLock = ({ size = 13 }: Props): ReactNode =>
+  base(size, <><rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></>)
+
+export const IconWand = ({ size = 16 }: Props): ReactNode =>
+  base(size, <><path d="m4 20 11-11M14 4v3M19.5 9.5h-3M17.8 5.7l-2 2M18 13.5v2M10 4.5H8" /></>)

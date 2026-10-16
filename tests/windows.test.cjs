@@ -202,6 +202,7 @@ test('screen sources prefer the requesting window monitor and preserve IDs for o
     './services/premiere', './services/log', './services/settings', './util/paths', './util/dragIcon', './windows']) {
     dependencies[id] = {}
   }
+  dependencies['./studio/ipc'] = { registerStudio() {} }
   const ipc = loadModule('src/main/ipc.ts', dependencies)
   ipc.register()
   const response = await handlers.get('screen:sources')({ sender: { window: new Window() } })
@@ -312,6 +313,7 @@ test('main-window destruction and before-quit both clean up auxiliary windows', 
       './services/updater': { init() {} },
       './services/settings': { loadSettings: async () => ({}) },
       './ipc': { root() {}, attach() {}, register() {} },
+      './studio/ipc': { shutdownStudio() {} },
       './util/paths': {}
     })
     await readyWork

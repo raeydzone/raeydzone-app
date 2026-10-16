@@ -59,6 +59,19 @@ Drag anything onto a project. Video files move into `footage/`, everything else 
 `assets/`. Files are **moved, not copied**, so nothing is left behind to clean up later.
 Thumbnails and the base cut have their own single-occupancy slots that replace on drop.
 
+### Thumbnail Studio
+
+**Create Thumbnail** on any video opens a layered editor that Claude works in live. Describe
+the thumbnail, attach your photos and screenshots, pick how many versions you want, and
+watch each one get built layer by layer — cut-outs, outlines, glows, shadows, bold text —
+while you move things yourself or steer it with messages. Every tool Claude has is a tool
+you have too.
+
+- Claude runs through your own Claude Code install and subscription
+- Generative fill, generated assets and smart cut-outs run on a hosted image model through
+  OpenRouter (Nano Banana 2.1 by default)
+- Apply a finished version and it becomes the video's thumbnail
+
 ### Streams
 
 Lighter than videos: a name, a thumbnail, a scheduled time that fires a desktop
@@ -106,6 +119,8 @@ restarts into the new version.
 | OS | Windows 11 (Windows 10 should work; untested) |
 | Disk | ~200 MB for the app, plus whatever your footage needs |
 | Premiere Pro | Optional — only needed for project templating and launch |
+| Claude Code | Optional — signed in with a Claude subscription, for the Thumbnail Studio |
+| OpenRouter key | Optional — for generative fill, generated images and smart cut-outs |
 
 ## First run
 
@@ -126,6 +141,7 @@ RaeydZone/
 │       ├── <Video Name>.prproj
 │       ├── raw_base_video.mp4
 │       ├── thumbnail.png
+│       ├── thumbnail_studio/   studio versions and their images
 │       ├── footage/
 │       └── assets/
 └── Streams/
@@ -169,9 +185,11 @@ The installer lands in `dist/`.
 src/
 ├── main/          Electron main — filesystem, SQLite, IPC, updater
 │   ├── services/  db · library · timer · log · premiere · settings · updater
+│   ├── studio/    Claude Code runner · canvas MCP server · OpenRouter · studio files
 │   └── util/      path sanitising, safe joins, cross-device moves
 ├── preload/       the only bridge; contextIsolation on, nodeIntegration off
 ├── renderer/      React 19 — pages, components, CSS modules
+│   └── studio/    layer model, compositor, masks, tool executor, studio UI
 └── shared/        types and formatters used by both sides
 ```
 

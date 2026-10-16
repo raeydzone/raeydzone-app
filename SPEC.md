@@ -62,6 +62,7 @@ Videos/<Video Name>/
   <Video Name>.prproj      copy of template.prproj
   raw_base_video.mp4       the base video file, one slot
   thumbnail.<ext>          only once set
+  thumbnail_studio/        only once the studio is used
   footage/
   assets/
 ```
@@ -124,6 +125,55 @@ card image in the list. Preview URLs are cache-busted by mtime.
 
 Images are served through a custom `raeydzone://` protocol registered in main, scoped to
 paths inside the root folder. No `file://`, no disabled web security.
+
+### Thumbnail Studio
+
+**Create Thumbnail** on a video's detail page opens a full-window studio for that video. It
+is a layered editor — image, text and shape layers with position, size, rotation, flip,
+opacity, blend mode, outline, drop shadow, outer glow, colour tint and adjustments
+(brightness, contrast, saturation, hue, blur) — that a person and Claude drive through the
+**same operations**. Anything Claude can do on the canvas the person can do from the tools,
+layers panel and inspector, and the other way round.
+
+The brief goes in the chat panel: a message, any attached images (picked, dropped or pasted;
+**copied** into the studio, never moved), and a **Versions** slider (1–6). Each version is
+its own Claude session working on its own canvas from the same brief, told to differ in
+layout and accents. Every change lands on the canvas as it happens and is listed in that
+version's chat, and the layer Claude just touched flashes, so the work is visible step by
+step rather than only as a result. Messages sent while Claude works steer it; **Stop**
+interrupts it. A finished version can be refined by chat or by hand, duplicated, or applied:
+**Apply as thumbnail** renders it at 1280×720 and fills the video's thumbnail slot
+(PNG, or JPEG if the PNG would pass YouTube's 2 MB limit).
+
+**Claude** is the user's own Claude Code CLI run in the background with their subscription
+(`claude -p` with streaming JSON in and out, no built-in tools, the user's settings files not
+loaded). The canvas reaches it as an MCP server that main serves on `127.0.0.1` behind a
+per-run token; main forwards each tool call to the renderer, which executes it against the
+document and replies. Any `ANTHROPIC_API_KEY` is removed from the child environment so usage
+never silently moves to API billing. Sessions idle for 15 minutes are ended and resumed by id
+on the next message. The model (Opus 5.5 by default) is chosen in the chat header and in
+Settings.
+
+**OpenRouter** carries every image-model operation — there are no local models:
+
+- *Generate image* creates an asset (and optionally places and cuts it out)
+- *Generative fill* repaints a boxed region of the composite from a prompt; the result lands
+  as a new feathered image layer, so it stays editable and removable
+- *Smart cut-out* asks the model for a black-and-white matte of the subject (optionally
+  inside a box) and applies it as the layer's mask on the **original** pixels — the model
+  never repaints the person. Masks are then refined by hand or by Claude with a lasso of
+  anchor points, a brush, feather, invert and reset
+
+Inputs are padded to the nearest aspect ratio the model supports so mattes stay aligned. The
+default model is Nano Banana 2.1; Settings offers others. The key is stored with Electron
+`safeStorage` and only ever sent to openrouter.ai.
+
+Studio data lives in `<project>/thumbnail_studio/`: `studio.json` (versions, layers, chat)
+and `assets/` (attachments, generated images, masks). Unreferenced assets are pruned when the
+studio opens. Undo history is per version and in memory only.
+
+Fonts for text layers are bundled (Montserrat, Anton, Bebas Neue, Oswald, Archivo Black,
+Luckiest Guy, Bangers) alongside Impact, Arial Black and Segoe UI.
 
 ### Progress
 
@@ -291,7 +341,7 @@ Shown per-video on the detail page (filtered to that video) and in full on a glo
 | **Streams** | Upcoming and past |
 | **Timer** | Big clock, start/stop, 30-day chart |
 | **Log** | Global history |
-| **Settings** | Root folder, Premiere template, daily goal, rescan |
+| **Settings** | Root folder, Premiere template, Claude and OpenRouter connections, daily goal, rescan |
 
 ---
 

@@ -3,12 +3,17 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import { exists, isOneDrivePath, isRemovable } from '../util/paths'
 import type { RootProposal } from '@shared/types'
+import { DEFAULT_CLAUDE_MODEL, DEFAULT_IMAGE_MODEL } from '@shared/studio'
 
 export interface Settings {
   rootPath: string | null
   dailyGoalMs: number
   autoArchive: boolean
   archiveAfterDays: number
+  claudePath: string | null
+  claudeModel: string
+  imageModel: string
+  openrouterKey: string | null
 }
 
 // Archiving is destructive, so it stays off until switched on deliberately.
@@ -16,7 +21,11 @@ const DEFAULTS: Settings = {
   rootPath: null,
   dailyGoalMs: 60 * 60 * 1000,
   autoArchive: false,
-  archiveAfterDays: 30
+  archiveAfterDays: 30,
+  claudePath: null,
+  claudeModel: DEFAULT_CLAUDE_MODEL,
+  imageModel: DEFAULT_IMAGE_MODEL,
+  openrouterKey: null
 }
 
 let cache: Settings = { ...DEFAULTS }
