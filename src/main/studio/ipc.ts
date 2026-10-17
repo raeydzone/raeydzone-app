@@ -6,7 +6,13 @@ import * as claude from './claude'
 import * as files from './files'
 import * as mcp from './mcp'
 import * as openrouter from './openrouter'
-import type { ImageRequest, SendRequest, ToolReply } from '@shared/studio'
+import { CLAUDE_EFFORTS, CLAUDE_MODELS, IMAGE_MODELS } from '@shared/studio'
+import type { AiPrefs, ImageRequest, SendRequest, ToolReply } from '@shared/studio'
+
+function prefs(): AiPrefs {
+  const { claudeModel, claudeEffort, imageModel } = getSettings()
+  return { claudeModel, claudeEffort, imageModel }
+}
 
 const TOOL_TIMEOUT_MS = 5 * 60 * 1000
 const pending = new Map<string, (reply: ToolReply) => void>()
@@ -120,16 +126,15 @@ export function registerStudio(
   })
   quiet('ai:openrouterStatus', () => openrouter.status())
   quiet('ai:openrouterKey', (key: string | null) => openrouter.setKey(key))
-  quiet('ai:prefs', () => ({
-    claudeModel: getSettings().claudeModel,
-    imageModel: getSettings().imageModel
-  }))
-  quiet('ai:setPrefs', async (patch: { claudeModel?: string; imageModel?: string }) => {
-    const next: { claudeModel?: string; imageModel?: string } = {}
-    if (typeof patch.claudeModel === 'string') next.claudeModel = patch.claudeModel
-    if (typeof patch.imageModel === 'string') next.imageModel = patch.imageModel
-    const saved = await saveSettings(next)
-    return { claudeModel: saved.claudeModel, imageModel: saved.imageModel }
+  quiet('ai:prefs', () => prefs())
+  quiet('ai:setPrefs', async (patch: Partial<AiPrefs>) => {
+    const next: Partial<AiPrefs> = {}
+    if (CLAUDE_MODELS.some((m) => m.id === patch.claudeModel)) next.claudeModel = patch.claudeModel
+    if (CLAUDE_EFFORTS.some((e) => e.id === patch.claudeEffort)) next.claudeEffort = patch.claudeEffort
+    if (IMAGE_MODELS.some((m) => m.id === patch.imageModel)) next.imageModel = patch.imageModel
+    await saveSettings(next)
+    if (next.claudeModel || next.claudeEffort) claude.restartIdle()
+    return prefs()
   })
 }
 

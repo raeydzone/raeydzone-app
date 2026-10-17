@@ -1,4 +1,4 @@
-import { BLEND_MODES, CANVAS_H, CANVAS_W, FONTS } from './studio'
+import { BLEND_MODES, BUNDLED_FONTS, CANVAS_H, CANVAS_W } from './studio'
 
 type Schema = Record<string, unknown>
 
@@ -72,9 +72,9 @@ const common: Record<string, Schema> = {
 
 const textProps: Record<string, Schema> = {
   text: str('The text. Use \\n for line breaks. Wrap words in *asterisks* to paint them in the highlight colour, e.g. "IT\'S THE *ENDBOSS!*".'),
-  font: { type: 'string', enum: [...FONTS], description: 'Font family.' },
+  font: str(`Font family — any installed font (see list_fonts). Bundled thumbnail fonts: ${BUNDLED_FONTS.join(', ')}.`),
   size: num('Font size px. Thumbnail headlines are usually 90 to 180.'),
-  weight: num('100 to 900. Montserrat and Oswald support the range; most display fonts have one weight.'),
+  weight: num('100 to 900. Snaps to the nearest weight the font actually has; list_fonts shows them.'),
   italic: bool('Italic.'),
   uppercase: bool('Render in capitals.'),
   fill: color('Main text colour.'),
@@ -106,6 +106,11 @@ export const STUDIO_TOOLS: ToolDef[] = [
     name: 'get_document',
     description: 'Returns the canvas size, background, every layer top to bottom with all of its properties, and the image assets you can place (attachments, generated images). Call this first and whenever you are unsure of the current state — the human can edit the canvas at any time.',
     inputSchema: obj({})
+  },
+  {
+    name: 'list_fonts',
+    description: 'Lists the font families installed on this PC with the weights each one has. Bundled thumbnail fonts come first.',
+    inputSchema: obj({ search: str('Optional case-insensitive filter, e.g. "condensed" or "impact".') })
   },
   {
     name: 'view_canvas',

@@ -1,8 +1,9 @@
-import { BLEND_MODES, CANVAS_H, CANVAS_W, FONTS } from '@shared/studio'
+import { BLEND_MODES, CANVAS_H, CANVAS_W } from '@shared/studio'
 import type {
   Adjust, AssetInfo, BlendMode, Glow, Gradient, ImageLayer, Layer, Outline, Shadow,
   ShapeLayer, StudioDoc, TextLayer, Tint
 } from '@shared/studio'
+import { findFont } from './fonts'
 import { measureText } from './text'
 
 export const NEUTRAL: Adjust = { brightness: 100, contrast: 100, saturation: 100, hue: 0, blur: 0 }
@@ -177,9 +178,12 @@ export function patchLayer(layer: Layer, patch: Record<string, unknown>): PatchR
       case 'text':
         next[key] = String(value)
         break
-      case 'font':
-        next[key] = FONTS.includes(value as (typeof FONTS)[number]) ? value : layer.kind === 'text' ? layer.font : 'Montserrat'
+      case 'font': {
+        const font = findFont(String(value))
+        if (!font) throw new Error(`Font "${value}" is not installed. Call list_fonts for what is available.`)
+        next[key] = font.name
         break
+      }
       case 'blend':
         if (!BLEND_MODES.includes(value as BlendMode)) throw new Error('Unknown blend mode ' + value)
         next[key] = value

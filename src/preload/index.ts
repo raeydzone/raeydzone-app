@@ -4,7 +4,7 @@ import type {
   ScreenSource, StepId, Stream, Video
 } from '@shared/types'
 import type {
-  ClaudeStatus, ImageRequest, ImageResult, OpenRouterStatus, SendRequest, StudioEvent,
+  AiPrefs, ClaudeStatus, ImageRequest, ImageResult, OpenRouterStatus, SendRequest, StudioEvent,
   StudioFile, ToolCall, ToolReply
 } from '@shared/studio'
 
@@ -24,7 +24,6 @@ function listen<T extends unknown[]>(channel: string, cb: (...args: T) => void):
   }
 }
 
-type AiPrefs = { claudeModel: string; imageModel: string }
 type Imported = { file: string; name: string }
 
 const studio = {

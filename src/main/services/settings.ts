@@ -3,7 +3,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import { exists, isOneDrivePath, isRemovable } from '../util/paths'
 import type { RootProposal } from '@shared/types'
-import { DEFAULT_CLAUDE_MODEL, DEFAULT_IMAGE_MODEL } from '@shared/studio'
+import { DEFAULT_CLAUDE_EFFORT, DEFAULT_CLAUDE_MODEL, DEFAULT_IMAGE_MODEL } from '@shared/studio'
 
 export interface Settings {
   rootPath: string | null
@@ -12,6 +12,7 @@ export interface Settings {
   archiveAfterDays: number
   claudePath: string | null
   claudeModel: string
+  claudeEffort: string
   imageModel: string
   openrouterKey: string | null
 }
@@ -24,6 +25,7 @@ const DEFAULTS: Settings = {
   archiveAfterDays: 30,
   claudePath: null,
   claudeModel: DEFAULT_CLAUDE_MODEL,
+  claudeEffort: DEFAULT_CLAUDE_EFFORT,
   imageModel: DEFAULT_IMAGE_MODEL,
   openrouterKey: null
 }

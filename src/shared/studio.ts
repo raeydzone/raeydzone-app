@@ -8,9 +8,8 @@ export const BLEND_MODES = [
 ] as const
 export type BlendMode = (typeof BLEND_MODES)[number]
 
-export const FONTS = [
-  'Montserrat', 'Anton', 'Bebas Neue', 'Oswald', 'Archivo Black', 'Luckiest Guy',
-  'Bangers', 'Impact', 'Arial Black', 'Segoe UI'
+export const BUNDLED_FONTS = [
+  'Montserrat', 'Anton', 'Bebas Neue', 'Oswald', 'Archivo Black', 'Luckiest Guy', 'Bangers'
 ] as const
 
 export interface Shadow { color: string; opacity: number; blur: number; x: number; y: number }
@@ -139,7 +138,22 @@ export const IMAGE_MODELS = [
   { id: 'google/gemini-3.1-flash-lite-image', label: 'Nano Banana 2 Lite', note: 'cheapest, lower quality' }
 ] as const
 
+export const CLAUDE_EFFORTS = [
+  { id: 'low', label: 'Low', note: 'Quickest, lightest on usage' },
+  { id: 'medium', label: 'Medium', note: 'Balanced' },
+  { id: 'high', label: 'High', note: 'More careful, more usage' },
+  { id: 'xhigh', label: 'Extra high', note: 'Slow and thorough' },
+  { id: 'max', label: 'Max', note: 'Heaviest on usage' }
+] as const
+
 export const DEFAULT_CLAUDE_MODEL = CLAUDE_MODELS[0].id
+export const DEFAULT_CLAUDE_EFFORT = 'medium'
+
+export interface AiPrefs {
+  claudeModel: string
+  claudeEffort: string
+  imageModel: string
+}
 export const DEFAULT_IMAGE_MODEL = IMAGE_MODELS[0].id
 
 export interface ClaudeStatus {

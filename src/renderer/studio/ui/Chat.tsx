@@ -2,12 +2,13 @@ import * as Slider from '@radix-ui/react-slider'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { CLAUDE_MODELS } from '@shared/studio'
-import type { AssetInfo, ChatItem, ClaudeStatus } from '@shared/studio'
+import { DEFAULT_CLAUDE_EFFORT, DEFAULT_CLAUDE_MODEL, DEFAULT_IMAGE_MODEL } from '@shared/studio'
+import type { AiPrefs, AssetInfo, ChatItem, ClaudeStatus } from '@shared/studio'
 import { IconClaude, IconClose, IconImage, IconStop } from '../../components/Icons'
 import { useStore } from '../../state/store'
 import type { Studio, VariantState } from '../engine'
-import { ModelPicker, VersionPicker } from './Pickers'
+import { ClaudePicker, VersionPicker } from './Pickers'
+import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
 
 function Attachment({ studio, asset, onRemove }: { studio: Studio; asset: AssetInfo; onRemove?: () => void }): ReactNode {
@@ -92,7 +93,9 @@ export function Chat({
   const [text, setText] = useState('')
   const [attached, setAttached] = useState<AssetInfo[]>([])
   const [count, setCount] = useState(3)
-  const [model, setModel] = useState<string>(CLAUDE_MODELS[0].id)
+  const [prefs, setPrefs] = useState<AiPrefs>({
+    claudeModel: DEFAULT_CLAUDE_MODEL, claudeEffort: DEFAULT_CLAUDE_EFFORT, imageModel: DEFAULT_IMAGE_MODEL
+  })
   const [sending, setSending] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const fresh = generating || !variant
@@ -102,7 +105,7 @@ export function Chat({
   const variants = studio.state.variants
 
   useEffect(() => {
-    void window.raeydzone.ai.prefs().then((p) => setModel(p.claudeModel)).catch(() => {})
+    void window.raeydzone.ai.prefs().then(setPrefs).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -173,11 +176,11 @@ export function Chat({
             {fresh ? 'Claude builds every version live on the canvas' : STATUS_TEXT[variant!.status]}
           </div>
         </div>
-        <ModelPicker
-          model={model}
-          onChange={(id) => {
-            setModel(id)
-            void window.raeydzone.ai.setPrefs({ claudeModel: id })
+        <ClaudePicker
+          prefs={prefs}
+          onChange={(patch) => {
+            setPrefs({ ...prefs, ...patch })
+            void window.raeydzone.ai.setPrefs(patch).then(setPrefs).catch(() => {})
           }}
         />
       </div>
@@ -280,7 +283,7 @@ export function Chat({
             </div>
           )}
           <div className={s.composerBar}>
-            <button className={s.iconBtn} title="Attach images" onClick={() => void pick()}>
+            <button className={k.iconBtn} title="Attach images" onClick={() => void pick()}>
               <IconImage size={15} />
             </button>
             {usage?.fiveHour != null && (
@@ -290,22 +293,22 @@ export function Chat({
             )}
             <span className={s.grow} />
             {fresh && variant && (
-              <button className={`${s.btn} ${s.btnGhost}`} onClick={() => setGenerating(false)}>
+              <button className={`${k.btn} ${k.btnGhost}`} onClick={() => setGenerating(false)}>
                 Back to {variant.name}
               </button>
             )}
             {working ? (
               <>
-                <button className={`${s.btn} ${s.btnDanger}`} onClick={() => studio.stop(variant!.id)}>
+                <button className={`${k.btn} ${k.btnDanger}`} onClick={() => studio.stop(variant!.id)}>
                   <IconStop size={12} />
                   Stop
                 </button>
-                <button className={`${s.btn} ${s.btnPrimary}`} disabled={!text.trim() || sending} onClick={() => void submit()}>
+                <button className={`${k.btn} ${k.btnPrimary}`} disabled={!text.trim() || sending} onClick={() => void submit()}>
                   Steer
                 </button>
               </>
             ) : (
-              <button className={`${s.btn} ${s.btnPrimary}`} disabled={!text.trim() || sending || !!blocked} onClick={() => void submit()}>
+              <button className={`${k.btn} ${k.btnPrimary}`} disabled={!text.trim() || sending || !!blocked} onClick={() => void submit()}>
                 {fresh ? `Generate ${count}` : 'Send'}
               </button>
             )}

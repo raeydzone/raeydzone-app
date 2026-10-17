@@ -1,0 +1,245 @@
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--grad-raised);
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--edge-softer);
+  color: var(--text);
+  font-size: var(--fs-md);
+  font-weight: 550;
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), box-shadow var(--t-mid) var(--ease),
+    transform var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--grad-raised-hover);
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--edge-soft), var(--shadow-soft);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(var(--hairline)) scale(0.98);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  background: var(--grad-accent);
+  color: var(--text);
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--accent-deep);
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--grad-accent);
+  filter: brightness(1.1);
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--accent),
+    0 0 var(--s-5) var(--accent-glow);
+}
+
+.btnGhost {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-dim);
+}
+
+.btnGhost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  box-shadow: none;
+  color: var(--text);
+}
+
+.btnDanger {
+  background: var(--grad-accent-soft);
+  color: var(--accent-hot);
+  box-shadow: 0 0 0 var(--hairline) var(--accent-edge);
+}
+
+.btnDanger:hover:not(:disabled) {
+  background: var(--accent-wash);
+  box-shadow: 0 0 0 var(--hairline) var(--accent), 0 0 var(--s-4) var(--accent-glow);
+}
+
+.btnOn,
+
+.btnOn:hover:not(:disabled) {
+  color: var(--accent-hot);
+  background: var(--grad-accent-soft);
+  box-shadow: 0 0 0 var(--hairline) var(--accent-edge);
+}
+
+.iconBtn {
+  display: grid;
+  place-items: center;
+  width: var(--s-6);
+  height: var(--s-6);
+  border-radius: var(--r-md);
+  color: var(--text-dim);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.iconBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.field {
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--grad-field);
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--edge-softer);
+  color: var(--text);
+  font-size: var(--fs-md);
+  transition: background var(--t-fast) var(--ease), box-shadow var(--t-mid) var(--ease);
+}
+
+.field:hover {
+  background: var(--grad-field-hover);
+}
+
+.field:focus,
+
+.field:focus-visible {
+  outline: none;
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--accent-edge),
+    0 0 0 calc(var(--hairline) * 4) var(--accent-wash);
+}
+
+.field::placeholder {
+  color: var(--text-faint);
+}
+
+select.field {
+  appearance: none;
+  cursor: pointer;
+  padding-right: var(--s-6);
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%), var(--grad-field);
+  background-position: calc(100% - var(--s-4)) 52%, calc(100% - var(--s-3)) 52%, 0 0;
+  background-size: var(--s-1) var(--s-1), var(--s-1) var(--s-1), 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.tag {
+  padding: calc(var(--hairline) * 2) var(--s-2);
+  border-radius: var(--r-xl);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--text-dim);
+  background: var(--grad-raised);
+  box-shadow: 0 0 0 var(--hairline) var(--edge-soft);
+}
+
+.pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-xl);
+  background: var(--grad-raised);
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--edge-softer);
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text);
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), box-shadow var(--t-mid) var(--ease);
+}
+
+.pill:hover,
+.pill[data-state='open'] {
+  background: var(--grad-raised-hover);
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--accent-edge),
+    0 0 var(--s-4) var(--accent-wash);
+}
+
+.pillClaude {
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--claude-edge);
+}
+
+.pillClaude:hover,
+.pillClaude[data-state='open'] {
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--claude),
+    0 0 var(--s-4) var(--claude-wash);
+}
+
+.menu {
+  min-width: calc(var(--studio-chat-w) * 0.62);
+  max-height: var(--menu-max-h);
+  overflow-y: auto;
+  padding: var(--s-1);
+  border-radius: var(--r-lg);
+  background: var(--grad-raised);
+  box-shadow: 0 0 0 var(--hairline) var(--edge-soft), var(--shadow-panel);
+  z-index: 85;
+  animation: rise var(--t-mid) var(--ease);
+}
+
+.menuLabel {
+  padding: var(--s-1) var(--s-2);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2);
+  border-radius: var(--r-md);
+  font-size: var(--fs-md);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  transition: background var(--t-fast) var(--ease);
+}
+
+.menuItem[data-highlighted] {
+  background: var(--grad-accent-soft);
+}
+
+.menuText {
+  flex: 1;
+  display: grid;
+}
+
+.menuNote {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.menuMeta {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.menuSep {
+  height: var(--hairline);
+  margin: var(--s-1) var(--s-2);
+  background: var(--edge-soft);
+}
+
+.menu ::-webkit-scrollbar-thumb,
+.menu::-webkit-scrollbar-thumb {
+  border-color: transparent;
+  background-clip: padding-box;
+}

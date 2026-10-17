@@ -184,6 +184,7 @@ async function spawnSession(
   const args = [
     '-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
     '--model', getSettings().claudeModel,
+    '--effort', getSettings().claudeEffort,
     '--mcp-config', mcpFile, '--strict-mcp-config',
     '--tools', '', '--allowedTools', 'mcp__canvas',
     '--system-prompt-file', systemFile,
@@ -258,6 +259,14 @@ export function stop(variantId: string): void {
     JSON.stringify({ type: 'control_request', request_id: randomUUID(), request: { subtype: 'interrupt' } }) + '\n'
   )
   s.killTimer = setTimeout(() => s.proc.kill(), 5000)
+}
+
+// Model and effort are fixed per process; ending idle ones makes the next message resume
+// the same conversation under the new choice.
+export function restartIdle(): void {
+  for (const s of sessions.values()) {
+    if (s.status !== 'working') s.proc.kill()
+  }
 }
 
 export function stopAll(): void {

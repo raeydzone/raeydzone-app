@@ -178,3 +178,6 @@ export const IconClaude = ({ size = 16 }: Props): ReactNode => (
 
 export const IconChevron = ({ size = 12 }: Props): ReactNode =>
   base(size, <path d="m6 9 6 6 6-6" />)
+
+export const IconRoute = ({ size = 16 }: Props): ReactNode =>
+  base(size, <path d="M3 12h4.5l4-6.5H20M7.5 12l4 6.5H20M17 2.5l3 3-3 3M17 15.5l3 3-3 3" />)

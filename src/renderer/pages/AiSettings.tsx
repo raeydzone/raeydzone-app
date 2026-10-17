@@ -1,27 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { CLAUDE_MODELS, IMAGE_MODELS } from '@shared/studio'
-import type { ClaudeStatus, OpenRouterStatus } from '@shared/studio'
-import { IconClaude } from '../components/Icons'
+import { CLAUDE_EFFORTS, CLAUDE_MODELS, IMAGE_MODELS } from '@shared/studio'
+import type { AiPrefs, ClaudeStatus, OpenRouterStatus } from '@shared/studio'
+import { IconClaude, IconRoute } from '../components/Icons'
+import { MenuSelect } from '../components/MenuSelect'
 import { useStore } from '../state/store'
+import k from '../styles/soft.module.css'
 import p from './pages.module.css'
-import ui from '../styles/ui.module.css'
 
-function describeClaude(c: ClaudeStatus | null): string {
-  if (!c) return 'checking…'
-  if (!c.found) return 'Claude Code is not installed on this PC'
-  if (!c.loggedIn) return c.error ? 'could not read the sign-in — ' + c.error : 'installed, not signed in'
-  return `signed in${c.email ? ' as ' + c.email : ''}${c.plan ? ' · ' + c.plan + ' plan' : ''}${c.version ? ' · Claude Code ' + c.version : ''}`
+type Update = (patch: Partial<AiPrefs>) => void
+
+function Status({ ok, children }: { ok: boolean; children: ReactNode }): ReactNode {
+  return (
+    <div className={p.aiStatus}>
+      <span className={`${p.aiDot} ${ok ? p.aiDotOk : ''}`} />
+      {children}
+    </div>
+  )
 }
 
-function describeOpenRouter(o: OpenRouterStatus | null): string {
-  if (!o) return 'checking…'
-  if (!o.set) return 'no key saved'
-  if (!o.ok) return 'key saved but not working — ' + (o.error ?? 'unknown error')
-  return `connected${o.label ? ' · ' + o.label : ''}${o.remaining != null ? ` · $${o.remaining.toFixed(2)} left` : ''}`
+function claudeLine(c: ClaudeStatus | null, waiting: boolean): string {
+  if (!c) return 'Checking…'
+  if (c.found && c.loggedIn) {
+    const plan = c.plan ? c.plan[0].toUpperCase() + c.plan.slice(1) + ' plan' : null
+    return [c.email ?? 'Signed in', plan].filter(Boolean).join(' · ')
+  }
+  if (waiting) return 'Finish signing in in the window that opened…'
+  return c.found ? 'Not signed in' : 'Claude Code not installed'
 }
 
-function ClaudeRow({ model, setModel }: { model: string; setModel: (m: string) => void }): ReactNode {
+function ClaudeRow({ prefs, update }: { prefs: AiPrefs; update: Update }): ReactNode {
   const { run } = useStore()
   const ai = window.raeydzone.ai
   const [status, setStatus] = useState<ClaudeStatus | null>(null)
@@ -31,7 +39,6 @@ function ClaudeRow({ model, setModel }: { model: string; setModel: (m: string) =
   const check = useCallback(async () => {
     const next = await run(() => ai.claudeStatus())
     if (next) setStatus(next)
-    return next
   }, [ai, run])
 
   useEffect(() => {
@@ -58,50 +65,65 @@ function ClaudeRow({ model, setModel }: { model: string; setModel: (m: string) =
   }
 
   const ok = !!status?.found && status.loggedIn
+  const model = CLAUDE_MODELS.find((m) => m.id === prefs.claudeModel) ?? CLAUDE_MODELS[0]
+  const effort = CLAUDE_EFFORTS.find((e) => e.id === prefs.claudeEffort) ?? CLAUDE_EFFORTS[1]
+
   return (
-    <div className={`${p.settingRow} ${p.settingStack}`}>
+    <div className={p.settingRow}>
       <div>
-        <div className={`${p.settingLabel} ${p.settingLabelIcon}`}>
-          <IconClaude size={16} />
-          Claude — the thumbnail designer
+        <div className={p.aiName}>
+          <span className={`${p.aiMark} ${p.aiMarkClaude}`}>
+            <IconClaude size={16} />
+          </span>
+          Claude
         </div>
-        <div className={p.settingHint}>
-          The studio runs Claude Code in the background with your own Claude subscription, so designs come out of your
-          plan’s usage, not a per-token bill. Connecting opens a window to sign in{status && !status.found ? ' after installing Claude Code' : ''}.
-        </div>
-        <div className={ui.faint} style={{ marginTop: 6 }}>
-          {waiting && !ok ? 'Waiting for you to finish in the window that opened…' : describeClaude(status)}
-        </div>
+        <Status ok={ok}>{claudeLine(status, waiting)}</Status>
       </div>
-      <div className={ui.row}>
-        <span className={`${ui.tag} ${ok ? ui.tagOk : ''}`}>{ok ? 'connected' : 'not connected'}</span>
-        <select className={ui.input} style={{ width: 170 }} value={model} onChange={(e) => setModel(e.target.value)}>
-          {CLAUDE_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
-        {!ok && (
-          <button className={`${ui.btn} ${ui.btnPrimary}`} onClick={() => void connect()}>
-            {status && !status.found ? 'Install & connect' : 'Connect Claude'}
+      <div className={p.aiControls}>
+        <MenuSelect
+          claude
+          title="Higher effort designs more carefully and uses more of your plan"
+          trigger={
+            <>
+              <IconClaude size={14} />
+              {model.label.replace('Claude ', '')}
+              <span className={p.aiDim}>· {effort.label} effort</span>
+            </>
+          }
+          groups={[
+            { title: 'Model', value: model.id, options: CLAUDE_MODELS, onChange: (claudeModel) => update({ claudeModel }) },
+            { title: 'Effort', value: effort.id, options: CLAUDE_EFFORTS, onChange: (claudeEffort) => update({ claudeEffort }) }
+          ]}
+        />
+        {ok ? (
+          <button className={`${k.btn} ${k.btnGhost}`} onClick={() => void check()}>
+            Refresh
           </button>
+        ) : (
+          <>
+            {status && !status.found && (
+              <button
+                className={`${k.btn} ${k.btnGhost}`}
+                title="Point to claude.exe if it is installed somewhere unusual"
+                onClick={async () => {
+                  const next = await run(() => ai.claudeLocate())
+                  if (next) setStatus(next)
+                }}
+              >
+                Locate…
+              </button>
+            )}
+            <button className={`${k.btn} ${k.btnPrimary}`} onClick={() => void connect()}>
+              {status && !status.found ? 'Install Claude' : 'Connect'}
+            </button>
+          </>
         )}
-        {status && !status.found && (
-          <button className={ui.btn} title="Point to claude.exe if it is installed somewhere unusual" onClick={async () => {
-            const next = await run(() => ai.claudeLocate())
-            if (next) setStatus(next)
-          }}>
-            Locate…
-          </button>
-        )}
-        <button className={`${ui.btn} ${ui.btnGhost}`} onClick={() => void check()}>
-          Check
-        </button>
       </div>
     </div>
   )
 }
 
-function OpenRouterRow({ model, setModel }: { model: string; setModel: (m: string) => void }): ReactNode {
+function OpenRouterRow({ prefs, update }: { prefs: AiPrefs; update: Update }): ReactNode {
   const { run, notify } = useStore()
   const ai = window.raeydzone.ai
   const [status, setStatus] = useState<OpenRouterStatus | null>(null)
@@ -121,45 +143,58 @@ function OpenRouterRow({ model, setModel }: { model: string; setModel: (m: strin
   }
 
   const ok = !!status?.ok
-  const note = IMAGE_MODELS.find((m) => m.id === model)?.note
+  const model = IMAGE_MODELS.find((m) => m.id === prefs.imageModel) ?? IMAGE_MODELS[0]
+  const remaining = status?.remaining != null ? `$${status.remaining.toFixed(2)} left` : null
+  const line = !status
+    ? 'Checking…'
+    : ok
+      ? ['Connected', status.label, remaining].filter(Boolean).join(' · ')
+      : status.set
+        ? 'Key not working — ' + (status.error ?? 'unknown error')
+        : 'Not connected'
+
   return (
-    <div className={`${p.settingRow} ${p.settingStack}`}>
+    <div className={p.settingRow}>
       <div>
-        <div className={p.settingLabel}>OpenRouter — images, generative fill and cut-outs</div>
-        <div className={p.settingHint}>
-          Generated assets, generative fill and smart cut-outs run on a hosted image model through your OpenRouter
-          account. Create a key at{' '}
-          <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer">openrouter.ai/settings/keys</a>
-          {' '}— it is stored encrypted on this PC.
+        <div className={p.aiName}>
+          <span className={p.aiMark}>
+            <IconRoute size={15} />
+          </span>
+          OpenRouter
         </div>
-        <div className={ui.faint} style={{ marginTop: 6 }}>
-          {describeOpenRouter(status)}
-          {note ? ' · ' + note : ''}
-        </div>
+        <Status ok={ok}>
+          {line}
+          {!ok && (
+            <a className={p.aiLink} href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer">
+              Get a key
+            </a>
+          )}
+        </Status>
       </div>
-      <div className={ui.row}>
-        <span className={`${ui.tag} ${ok ? ui.tagOk : ''}`}>{ok ? 'connected' : 'not connected'}</span>
-        <select className={ui.input} style={{ width: 190 }} value={model} onChange={(e) => setModel(e.target.value)}>
-          {IMAGE_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
-        <input
-          className={ui.input}
-          style={{ width: 170 }}
-          type="password"
-          placeholder={status?.set ? 'Replace key…' : 'sk-or-…'}
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && key.trim() && void save(key)}
+      <div className={p.aiControls}>
+        <MenuSelect
+          title="Image model for generative fill, cut-outs and generated assets"
+          trigger={<>{model.label}</>}
+          groups={[{ title: 'Image model', value: model.id, options: IMAGE_MODELS, onChange: (imageModel) => update({ imageModel }) }]}
         />
-        <button className={`${ui.btn} ${ui.btnPrimary}`} disabled={!key.trim()} onClick={() => void save(key)}>
-          Connect
-        </button>
-        {status?.set && (
-          <button className={`${ui.btn} ${ui.btnGhost}`} onClick={() => void save(null)}>
-            Remove
+        {ok ? (
+          <button className={`${k.btn} ${k.btnGhost}`} onClick={() => void save(null)}>
+            Disconnect
           </button>
+        ) : (
+          <>
+            <input
+              className={`${k.field} ${p.aiKey}`}
+              type="password"
+              placeholder="Paste API key"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && key.trim() && void save(key)}
+            />
+            <button className={`${k.btn} ${k.btnPrimary}`} disabled={!key.trim()} onClick={() => void save(key)}>
+              Connect
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -169,22 +204,22 @@ function OpenRouterRow({ model, setModel }: { model: string; setModel: (m: strin
 export function AiSettings(): ReactNode {
   const { run } = useStore()
   const ai = window.raeydzone.ai
-  const [prefs, setPrefs] = useState<{ claudeModel: string; imageModel: string } | null>(null)
+  const [prefs, setPrefs] = useState<AiPrefs | null>(null)
 
   useEffect(() => {
     void ai.prefs().then(setPrefs).catch(() => {})
   }, [ai])
 
-  const update = async (patch: Partial<{ claudeModel: string; imageModel: string }>): Promise<void> => {
-    const next = await run(() => ai.setPrefs(patch))
-    if (next) setPrefs(next)
+  const update: Update = (patch) => {
+    if (prefs) setPrefs({ ...prefs, ...patch })
+    void run(() => ai.setPrefs(patch)).then((next) => next && setPrefs(next))
   }
 
   if (!prefs) return null
   return (
     <>
-      <ClaudeRow model={prefs.claudeModel} setModel={(claudeModel) => void update({ claudeModel })} />
-      <OpenRouterRow model={prefs.imageModel} setModel={(imageModel) => void update({ imageModel })} />
+      <ClaudeRow prefs={prefs} update={update} />
+      <OpenRouterRow prefs={prefs} update={update} />
     </>
   )
 }

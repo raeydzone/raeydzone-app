@@ -6,6 +6,7 @@ import { useStore } from '../../state/store'
 import { placeAsset } from '../ai'
 import type { Studio, VariantState } from '../engine'
 import { Segmented } from './fields'
+import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
 
 function AssetThumb({ studio, asset }: { studio: Studio; asset: AssetInfo }): ReactNode {
@@ -189,11 +190,11 @@ export function LayersPanel({
             ))}
           </div>
           <div className={s.panelFoot}>
-            <button className={`${s.btn} ${s.grow}`} onClick={() => void importFiles()}>
+            <button className={`${k.btn} ${s.grow}`} onClick={() => void importFiles()}>
               <IconImage size={14} />
               Import
             </button>
-            <button className={`${s.btn} ${s.grow}`} onClick={onGenerate}>
+            <button className={`${k.btn} ${s.grow}`} onClick={onGenerate}>
               Generate…
             </button>
           </div>

@@ -153,8 +153,9 @@ loaded). The canvas reaches it as an MCP server that main serves on `127.0.0.1` 
 per-run token; main forwards each tool call to the renderer, which executes it against the
 document and replies. Any `ANTHROPIC_API_KEY` is removed from the child environment so usage
 never silently moves to API billing. Sessions idle for 15 minutes are ended and resumed by id
-on the next message. The model (Opus 5.5 by default) is chosen in the chat header and in
-Settings.
+on the next message. The model (Opus 5.5 by default) and its **effort** (low → max, medium by
+default — higher effort spends more of the plan) are chosen in the chat header and in Settings;
+changing either ends idle sessions so the next message resumes under the new choice.
 
 **OpenRouter** carries every image-model operation — there are no local models:
 
@@ -174,8 +175,15 @@ Studio data lives in `<project>/thumbnail_studio/`: `studio.json` (versions, lay
 and `assets/` (attachments, generated images, masks). Unreferenced assets are pruned when the
 studio opens. Undo history is per version and in memory only.
 
-Fonts for text layers are bundled (Montserrat, Anton, Bebas Neue, Oswald, Archivo Black,
-Luckiest Guy, Bangers) alongside Impact, Arial Black and Segoe UI.
+Text layers can use any font installed on the PC, discovered with Chromium's Local Font
+Access API together with the weights each family really has (a requested weight snaps to the
+nearest real face, so there is no synthetic bold). Seven display fonts are bundled for a
+consistent look on any machine: Montserrat, Anton, Bebas Neue, Oswald, Archivo Black, Luckiest
+Guy and Bangers. The picker is searchable and previews each family in its own face; Claude gets
+the same list through `list_fonts`.
+
+Settings keeps both connections to one line each: account and plan for Claude with a model and
+effort menu, and connection state, image model and key for OpenRouter.
 
 ### Progress
 

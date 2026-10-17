@@ -1,4 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
+import { PresenceContext } from 'motion/react'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -21,6 +22,7 @@ import type { Tool, ToolOptions } from './Stage'
 import { Strip } from './Strip'
 import { ToolBar, ToolOptionsBar } from './ToolBar'
 import c from '../../components/components.module.css'
+import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
 
 const SHORTCUTS: Record<string, Tool> = {
@@ -142,7 +144,10 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
     setTool('move')
   }
 
+  // The studio is portalled out of the page's route transition; left inside its presence
+  // tree, the studio's own animations hold the next page's entry hostage after it closes.
   return createPortal(
+    <PresenceContext.Provider value={null}>
     <div className={s.studio}>
       <header className={s.head}>
         <button className={s.back} onClick={onBack}>
@@ -153,13 +158,13 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
         <span className={s.grow} />
         {variant && (
           <>
-            <button className={`${s.btn} ${s.btnGhost}`} disabled={!variant.past.length} title="Undo (Ctrl+Z)" onClick={() => studio.undo(variant.id)}>
+            <button className={`${k.btn} ${k.btnGhost}`} disabled={!variant.past.length} title="Undo (Ctrl+Z)" onClick={() => studio.undo(variant.id)}>
               Undo
             </button>
-            <button className={`${s.btn} ${s.btnGhost}`} disabled={!variant.future.length} title="Redo (Ctrl+Y)" onClick={() => studio.redo(variant.id)}>
+            <button className={`${k.btn} ${k.btnGhost}`} disabled={!variant.future.length} title="Redo (Ctrl+Y)" onClick={() => studio.redo(variant.id)}>
               Redo
             </button>
-            <button className={`${s.btn} ${s.btnPrimary}`} disabled={!!job} onClick={apply}>
+            <button className={`${k.btn} ${k.btnPrimary}`} disabled={!!job} onClick={apply}>
               Apply as thumbnail
             </button>
           </>
@@ -189,7 +194,7 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
                 <>
                   <p>No versions yet.</p>
                   <p className={s.hint}>Describe the thumbnail in the panel on the right, or start from a blank canvas.</p>
-                  <button className={s.btn} onClick={() => studio.addVariant(emptyDoc())}>
+                  <button className={k.btn} onClick={() => studio.addVariant(emptyDoc())}>
                     Blank canvas
                   </button>
                 </>
@@ -282,10 +287,10 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
             </Dialog.Description>
             <div className={c.modalActions}>
               <Dialog.Close asChild>
-                <button className={`${s.btn} ${s.btnGhost}`}>Cancel</button>
+                <button className={`${k.btn} ${k.btnGhost}`}>Cancel</button>
               </Dialog.Close>
               <button
-                className={`${s.btn} ${s.btnDanger}`}
+                className={`${k.btn} ${k.btnDanger}`}
                 onClick={() => {
                   if (discard) studio.removeVariant(discard)
                   setDiscard(null)
@@ -297,7 +302,8 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-    </div>,
+    </div>
+    </PresenceContext.Provider>,
     document.body
   )
 }

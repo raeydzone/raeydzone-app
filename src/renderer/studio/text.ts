@@ -1,4 +1,5 @@
 import type { TextLayer } from '@shared/studio'
+import { nearestWeight } from './fonts'
 
 interface Run {
   text: string
@@ -20,11 +21,8 @@ type TextProps = Pick<
 
 const scratch = document.createElement('canvas').getContext('2d')!
 
-const WEIGHTED = new Set(['Montserrat', 'Oswald', 'Segoe UI'])
-
-// Single-weight display faces get a smeared synthetic bold if asked for 900.
 export function fontString(l: Pick<TextLayer, 'italic' | 'weight' | 'size' | 'font'>): string {
-  const weight = WEIGHTED.has(l.font) ? l.weight : 400
+  const weight = nearestWeight(l.font, l.weight)
   return `${l.italic ? 'italic ' : ''}${weight} ${l.size}px "${l.font}"`
 }
 

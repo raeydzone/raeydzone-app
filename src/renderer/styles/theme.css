@@ -54,6 +54,7 @@
   --fs-xs: 11px;
   --fs-sm: 12px;
   --fs-md: 13px;
+  --fs-font-preview: 17px;
   --hairline: 1px;
 
   --studio-tools-w: 52px;
@@ -61,6 +62,7 @@
   --studio-chat-w: 352px;
   --studio-strip-h: 118px;
   --studio-handle: 10px;
+  --menu-max-h: 420px;
   --checker-a: #161616;
   --checker-b: #202020;
   --ai-pulse: rgba(255, 42, 42, 0.55);

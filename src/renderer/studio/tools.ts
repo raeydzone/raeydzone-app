@@ -5,6 +5,7 @@ import type { Box } from './ai'
 import { asColor, describeLayer, findLayer, makeShape, makeText, patchLayer } from './doc'
 import type { Studio } from './engine'
 import type { Pt } from './mask'
+import { fontFamilies } from './fonts'
 import { renderDoc } from './render'
 
 type Args = Record<string, unknown>
@@ -111,6 +112,17 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
           })
         },
         summary: 'Read the canvas'
+      }
+    }
+
+    case 'list_fonts': {
+      const needle = typeof args.search === 'string' ? args.search.trim().toLowerCase() : ''
+      const list = fontFamilies()
+        .filter((f) => !needle || f.name.toLowerCase().includes(needle))
+        .map((f) => `${f.name}${f.bundled ? ' (bundled)' : ''}: ${f.weights.join('/')}`)
+      return {
+        reply: { text: list.length ? list.join('\n') : 'No installed font matches "' + needle + '".' },
+        summary: needle ? `Looked for fonts like "${needle}"` : 'Listed the installed fonts'
       }
     }
 
