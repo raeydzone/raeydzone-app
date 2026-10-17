@@ -812,35 +812,48 @@ export async function rescan(root: string): Promise<{ added: number; missing: nu
   return { added, missing }
 }
 
-export async function studioDir(root: string, videoId: string): Promise<string> {
-  const video = findVideo(videoId)
-  await repairVideo(root, video)
-  const dir = path.join(videoPath(root, video), 'thumbnail_studio')
+interface Owner {
+  kind: 'video' | 'stream'
+  entity: Video | Stream
+  dir: string
+}
+
+async function ownerOf(root: string, id: string): Promise<Owner> {
+  const video = db.state().videos.find((v) => v.id === id)
+  const owner: Owner = video
+    ? { kind: 'video', entity: video, dir: videoPath(root, video) }
+    : { kind: 'stream', entity: findStream(id), dir: streamPath(root, findStream(id)) }
+  if (owner.kind === 'video') await repairVideo(root, owner.entity as Video)
+  else await repairStream(root, owner.entity as Stream)
+  assertInside(root, owner.dir)
+  return owner
+}
+
+export async function studioDir(root: string, projectId: string): Promise<string> {
+  const dir = path.join((await ownerOf(root, projectId)).dir, 'thumbnail_studio')
   assertInside(root, dir)
   return dir
 }
 
 export async function writeThumbnail(
   root: string,
-  videoId: string,
+  projectId: string,
   data: Uint8Array,
   ext: 'png' | 'jpg'
 ): Promise<string> {
-  const video = findVideo(videoId)
-  await repairVideo(root, video)
-  const dir = videoPath(root, video)
-  assertInside(root, dir)
+  const { kind, entity, dir } = await ownerOf(root, projectId)
   const filename = THUMB_STEM + '.' + ext
   const temp = path.join(dir, '.' + filename + '.tmp')
   await fs.writeFile(temp, data)
   const existing = await findByStem(dir, THUMB_STEM)
   if (existing && existing !== filename) await fs.unlink(path.join(dir, existing)).catch(() => {})
   await fs.rename(temp, path.join(dir, filename))
-  video.thumbnail = filename
-  db.saveVideo(video)
-  log('video.thumbnail', 'Applied a studio thumbnail to "' + video.name + '"', {
-    id: videoId,
-    name: video.name
+  entity.thumbnail = filename
+  if (kind === 'video') db.saveVideo(entity as Video)
+  else db.saveStream(entity as Stream)
+  log(kind === 'video' ? 'video.thumbnail' : 'stream.thumbnail', 'Applied a studio thumbnail to "' + entity.name + '"', {
+    id: projectId,
+    name: entity.name
   })
   return filename
 }

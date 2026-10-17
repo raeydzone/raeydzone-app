@@ -63,20 +63,20 @@ export function registerStudio(
 
   quiet('studio:toolDone', (callId: string, reply: ToolReply) => pending.get(callId)?.(reply))
 
-  quiet('studio:load', (videoId: string) => files.load(requireRoot(), videoId))
-  quiet('studio:save', (videoId: string, json: string) => files.save(requireRoot(), videoId, json))
-  quiet('studio:putAsset', (videoId: string, file: string, data: Uint8Array) =>
-    files.putAsset(requireRoot(), videoId, file, data)
+  quiet('studio:load', (projectId: string) => files.load(requireRoot(), projectId))
+  quiet('studio:save', (projectId: string, json: string) => files.save(requireRoot(), projectId, json))
+  quiet('studio:putAsset', (projectId: string, file: string, data: Uint8Array) =>
+    files.putAsset(requireRoot(), projectId, file, data)
   )
-  quiet('studio:readAsset', (videoId: string, file: string) =>
-    files.readAsset(requireRoot(), videoId, file)
+  quiet('studio:readAsset', (projectId: string, file: string) =>
+    files.readAsset(requireRoot(), projectId, file)
   )
-  quiet('studio:import', (videoId: string, paths: string[]) =>
-    files.importFiles(requireRoot(), videoId, paths)
+  quiet('studio:import', (projectId: string, paths: string[]) =>
+    files.importFiles(requireRoot(), projectId, paths)
   )
-  quiet('studio:paste', (videoId: string) => files.pasteImage(requireRoot(), videoId))
-  quiet('studio:prune', (videoId: string, keep: string[]) =>
-    files.prune(requireRoot(), videoId, keep)
+  quiet('studio:paste', (projectId: string) => files.pasteImage(requireRoot(), projectId))
+  quiet('studio:prune', (projectId: string, keep: string[]) =>
+    files.prune(requireRoot(), projectId, keep)
   )
   quiet('studio:pickImages', async () => {
     const win = getWin()
@@ -88,9 +88,9 @@ export function registerStudio(
     return result.canceled ? [] : result.filePaths
   })
 
-  ipcMain.handle('studio:apply', async (_e, videoId: string, data: Uint8Array, ext: 'png' | 'jpg') => {
+  ipcMain.handle('studio:apply', async (_e, projectId: string, data: Uint8Array, ext: 'png' | 'jpg') => {
     try {
-      const value = await lib.writeThumbnail(requireRoot(), videoId, data, ext === 'jpg' ? 'jpg' : 'png')
+      const value = await lib.writeThumbnail(requireRoot(), projectId, data, ext === 'jpg' ? 'jpg' : 'png')
       await broadcast()
       return { ok: true, value }
     } catch (err) {

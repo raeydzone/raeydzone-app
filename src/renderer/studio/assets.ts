@@ -52,7 +52,7 @@ export class AssetStore {
   infos = new Map<string, AssetInfo>()
 
   constructor(
-    private videoId: string,
+    private projectId: string,
     private onLoaded: () => void
   ) {}
 
@@ -80,7 +80,7 @@ export class AssetStore {
     if (pending) return pending
     const info = this.info(id)
     const job = window.raeydzone.studio
-      .readAsset(this.videoId, info.file)
+      .readAsset(this.projectId, info.file)
       .then(decode)
       .then((bitmap) => {
         this.pixels.set(id, bitmap)
@@ -108,14 +108,14 @@ export class AssetStore {
   async addCanvas(c: HTMLCanvasElement, label: string, source: AssetInfo['source']): Promise<AssetInfo> {
     const id = this.unique()
     const info: AssetInfo = { id, file: id + '.png', w: c.width, h: c.height, label, source }
-    await window.raeydzone.studio.putAsset(this.videoId, info.file, await encode(c))
+    await window.raeydzone.studio.putAsset(this.projectId, info.file, await encode(c))
     this.pixels.set(id, c)
     this.infos.set(id, info)
     return info
   }
 
   async addFile(file: string, label: string, source: AssetInfo['source']): Promise<AssetInfo> {
-    const bytes = await window.raeydzone.studio.readAsset(this.videoId, file)
+    const bytes = await window.raeydzone.studio.readAsset(this.projectId, file)
     const bitmap = await decode(bytes)
     const id = this.unique()
     const info: AssetInfo = { id, file, w: bitmap.width, h: bitmap.height, label, source }

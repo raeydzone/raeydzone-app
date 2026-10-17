@@ -5,10 +5,11 @@ import type { Stream } from '@shared/types'
 import { formatStamp } from '@shared/format'
 import { DropZone, Prompt, RemoveDialog, Thumb } from '../components/Bits'
 import {
-  IconCalendar, IconCheck, IconFolder, IconImage, IconPlus, IconTrash
+  IconCalendar, IconCheck, IconFolder, IconImage, IconPlus, IconSparkle, IconTrash
 } from '../components/Icons'
 import { lastStreamActivityAt, mediaUrl, useAppState, useStore } from '../state/store'
 import mascot from '../assets/mascot.png'
+import Studio from '../studio/ui/Studio'
 import c from '../components/components.module.css'
 import p from './pages.module.css'
 import ui from '../styles/ui.module.css'
@@ -25,6 +26,7 @@ export default function Streams(): ReactNode {
   const { run, rev, notify } = useStore()
   const [creating, setCreating] = useState(false)
   const [removing, setRemoving] = useState<Stream | null>(null)
+  const [studioId, setStudioId] = useState<string | null>(null)
   const api = window.raeydzone
 
   const upcoming = state.streams
@@ -39,6 +41,16 @@ export default function Streams(): ReactNode {
     .filter((s) => s.streamedAt)
     .slice()
     .sort((a, b) => lastStreamActivityAt(b) - lastStreamActivityAt(a))
+
+  const designing = state.streams.find((s) => s.id === studioId)
+  if (designing) {
+    return (
+      <Studio
+        project={{ kind: 'stream', id: designing.id, name: designing.name }}
+        onBack={() => setStudioId(null)}
+      />
+    )
+  }
 
   const drop = async (stream: Stream, paths: string[], target: 'auto' | 'thumbnail') => {
     const res = await run(() => api.dropFiles('stream', stream.id, paths, target))
@@ -94,6 +106,11 @@ export default function Streams(): ReactNode {
           {stream.streamedAt && (
             <div className={ui.faint}>Streamed {formatStamp(stream.streamedAt)}</div>
           )}
+
+          <button className={`${ui.btn} ${p.studioBtn}`} onClick={() => setStudioId(stream.id)}>
+            <IconSparkle size={15} />
+            Create thumbnail
+          </button>
 
           <div className={p.streamActions}>
             <button

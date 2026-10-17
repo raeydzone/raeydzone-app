@@ -40,7 +40,9 @@ export default function Videos(): ReactNode {
       .sort(byProgress)
   }, [state.videos, showDone, query])
 
-  if (open && studioId === open.id) return <Studio video={open} onBack={() => setStudioId(null)} />
+  if (open && studioId === open.id) {
+    return <Studio project={{ kind: 'video', id: open.id, name: open.name }} onBack={() => setStudioId(null)} />
+  }
   if (open) return <Detail video={open} onBack={() => setOpenId(null)} onStudio={() => setStudioId(open.id)} />
 
   const create = (name: string): void => {

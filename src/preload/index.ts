@@ -27,19 +27,19 @@ function listen<T extends unknown[]>(channel: string, cb: (...args: T) => void):
 type Imported = { file: string; name: string }
 
 const studio = {
-  load: (videoId: string) => call<StudioFile | null>('studio:load', videoId),
-  save: (videoId: string, json: string) => call<void>('studio:save', videoId, json),
-  putAsset: (videoId: string, file: string, data: Uint8Array) =>
-    call<void>('studio:putAsset', videoId, file, data),
-  readAsset: (videoId: string, file: string) =>
-    call<Uint8Array>('studio:readAsset', videoId, file),
-  importFiles: (videoId: string, paths: string[]) =>
-    call<Imported[]>('studio:import', videoId, paths),
-  paste: (videoId: string) => call<Imported | null>('studio:paste', videoId),
-  prune: (videoId: string, keep: string[]) => call<number>('studio:prune', videoId, keep),
+  load: (projectId: string) => call<StudioFile | null>('studio:load', projectId),
+  save: (projectId: string, json: string) => call<void>('studio:save', projectId, json),
+  putAsset: (projectId: string, file: string, data: Uint8Array) =>
+    call<void>('studio:putAsset', projectId, file, data),
+  readAsset: (projectId: string, file: string) =>
+    call<Uint8Array>('studio:readAsset', projectId, file),
+  importFiles: (projectId: string, paths: string[]) =>
+    call<Imported[]>('studio:import', projectId, paths),
+  paste: (projectId: string) => call<Imported | null>('studio:paste', projectId),
+  prune: (projectId: string, keep: string[]) => call<number>('studio:prune', projectId, keep),
   pickImages: () => call<string[]>('studio:pickImages'),
-  apply: (videoId: string, data: Uint8Array, ext: 'png' | 'jpg') =>
-    call<string>('studio:apply', videoId, data, ext),
+  apply: (projectId: string, data: Uint8Array, ext: 'png' | 'jpg') =>
+    call<string>('studio:apply', projectId, data, ext),
   send: (req: SendRequest) => call<void>('studio:send', req),
   stop: (variantId: string) => call<void>('studio:stop', variantId),
   image: (req: ImageRequest) => call<ImageResult>('studio:image', req),
@@ -117,8 +117,8 @@ const api = {
   moveTime: (from: string, to: string, ms: number) => call<void>('timer:move', from, to, ms),
 
   popoutTool: (tool: 'sound' | 'screen' | 'shot') => call<void>('tools:popout', tool),
-  saveRecording: (videoId: string, name: string, data: Uint8Array, ext: string) =>
-    call<string>('tools:save', videoId, name, data, ext),
+  saveRecording: (projectId: string, name: string, data: Uint8Array, ext: string) =>
+    call<string>('tools:save', projectId, name, data, ext),
 
   screenSources: () => call<ScreenSource[]>('screen:sources'),
   selectRegion: (hint?: string) => call<Region | null>('screen:region', hint),

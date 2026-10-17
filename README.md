@@ -61,7 +61,7 @@ Thumbnails and the base cut have their own single-occupancy slots that replace o
 
 ### Thumbnail Studio
 
-**Create Thumbnail** on any video opens a layered editor that Claude works in live. Describe
+**Create Thumbnail** on any video or stream opens a layered editor that Claude works in live. Describe
 the thumbnail, attach your photos and screenshots, pick how many versions you want, and
 watch each one get built layer by layer — cut-outs, outlines, glows, shadows, bold text —
 while you move things yourself or steer it with messages. Every tool Claude has is a tool

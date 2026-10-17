@@ -8,8 +8,8 @@ import type { StudioFile } from '@shared/studio'
 
 const ASSET_NAME = /^[\w-]+\.(png|jpe?g|webp|gif|bmp|avif)$/i
 
-async function assetsDir(root: string, videoId: string): Promise<string> {
-  const dir = path.join(await studioDir(root, videoId), 'assets')
+async function assetsDir(root: string, projectId: string): Promise<string> {
+  const dir = path.join(await studioDir(root, projectId), 'assets')
   await fs.mkdir(dir, { recursive: true })
   return dir
 }
@@ -19,8 +19,8 @@ function assetPath(dir: string, file: string): string {
   return path.join(dir, file)
 }
 
-export async function load(root: string, videoId: string): Promise<StudioFile | null> {
-  const file = path.join(await studioDir(root, videoId), 'studio.json')
+export async function load(root: string, projectId: string): Promise<StudioFile | null> {
+  const file = path.join(await studioDir(root, projectId), 'studio.json')
   try {
     return JSON.parse(await fs.readFile(file, 'utf-8')) as StudioFile
   } catch {
@@ -28,9 +28,9 @@ export async function load(root: string, videoId: string): Promise<StudioFile | 
   }
 }
 
-export async function save(root: string, videoId: string, json: string): Promise<void> {
+export async function save(root: string, projectId: string, json: string): Promise<void> {
   JSON.parse(json)
-  const dir = await studioDir(root, videoId)
+  const dir = await studioDir(root, projectId)
   await fs.mkdir(dir, { recursive: true })
   const target = path.join(dir, 'studio.json')
   const temp = target + '.tmp'
@@ -40,17 +40,17 @@ export async function save(root: string, videoId: string, json: string): Promise
 
 export async function putAsset(
   root: string,
-  videoId: string,
+  projectId: string,
   file: string,
   data: Uint8Array
 ): Promise<void> {
-  const target = assetPath(await assetsDir(root, videoId), file)
+  const target = assetPath(await assetsDir(root, projectId), file)
   assertInside(root, target)
   await fs.writeFile(target, data)
 }
 
-export async function readAsset(root: string, videoId: string, file: string): Promise<Uint8Array> {
-  const target = assetPath(await assetsDir(root, videoId), file)
+export async function readAsset(root: string, projectId: string, file: string): Promise<Uint8Array> {
+  const target = assetPath(await assetsDir(root, projectId), file)
   assertInside(root, target)
   return new Uint8Array(await fs.readFile(target))
 }
@@ -58,10 +58,10 @@ export async function readAsset(root: string, videoId: string, file: string): Pr
 // Attachments are references to the creator's own files, so they are copied, never moved.
 export async function importFiles(
   root: string,
-  videoId: string,
+  projectId: string,
   sources: string[]
 ): Promise<{ file: string; name: string }[]> {
-  const dir = await assetsDir(root, videoId)
+  const dir = await assetsDir(root, projectId)
   const out: { file: string; name: string }[] = []
   for (const src of sources) {
     const ext = path.extname(src).toLowerCase()
@@ -75,17 +75,17 @@ export async function importFiles(
 
 export async function pasteImage(
   root: string,
-  videoId: string
+  projectId: string
 ): Promise<{ file: string; name: string } | null> {
   const image = clipboard.readImage()
   if (image.isEmpty()) return null
   const file = randomUUID() + '.png'
-  await fs.writeFile(path.join(await assetsDir(root, videoId), file), image.toPNG())
+  await fs.writeFile(path.join(await assetsDir(root, projectId), file), image.toPNG())
   return { file, name: 'Pasted image' }
 }
 
-export async function prune(root: string, videoId: string, keep: string[]): Promise<number> {
-  const dir = await assetsDir(root, videoId)
+export async function prune(root: string, projectId: string, keep: string[]): Promise<number> {
+  const dir = await assetsDir(root, projectId)
   const wanted = new Set(keep)
   let removed = 0
   for (const entry of await fs.readdir(dir)) {

@@ -1,6 +1,6 @@
 import { DEFAULT_CLAUDE, DEFAULT_IMAGE_MODELS, variantBrief } from '@shared/studio'
 import type {
-  AssetInfo, ChatImage, ChatItem, ClaudeChoice, ImageModels, ImageTask, Layer, StudioDoc, StudioEvent, StudioFile, ToolCall,
+  AssetInfo, ChatImage, ChatItem, ClaudeChoice, ImageModels, ImageTask, Layer, StudioProject, StudioDoc, StudioEvent, StudioFile, ToolCall,
   ToolReply, Variant, VariantStatus
 } from '@shared/studio'
 import { AssetStore, copyOf, encode } from './assets'
@@ -59,9 +59,11 @@ export class Studio {
   private listeners = new Set<() => void>()
   private saveTimer: ReturnType<typeof setTimeout> | null = null
   private lastRecord: { variantId: string; key: string; at: number } | null = null
+  project: StudioProject
 
-  constructor(public videoId: string) {
-    this.assets = new AssetStore(videoId, () => this.set({ tick: this.state.tick + 1 }, false))
+  constructor(public projectId: string, project: StudioProject) {
+    this.project = project
+    this.assets = new AssetStore(projectId, () => this.set({ tick: this.state.tick + 1 }, false))
   }
 
   subscribe = (fn: () => void): (() => void) => {
@@ -83,7 +85,7 @@ export class Studio {
 
   async load(): Promise<void> {
     try {
-      const [file] = await Promise.all([api().load(this.videoId), loadFonts()])
+      const [file] = await Promise.all([api().load(this.projectId), loadFonts()])
       const claude = { ...DEFAULT_CLAUDE, ...file?.claude }
       const variants = (file?.variants ?? []).map((v) => ({
         ...v,
@@ -109,7 +111,7 @@ export class Studio {
         },
         false
       )
-      void api().prune(this.videoId, this.referencedFiles()).catch(() => {})
+      void api().prune(this.projectId, this.referencedFiles()).catch(() => {})
     } catch (err) {
       this.set({ error: (err as Error).message }, false)
     }
@@ -137,7 +139,7 @@ export class Studio {
         id, name, createdAt, doc, chat: chat.slice(-400), sessionId, claude
       }))
     }
-    await api().save(this.videoId, JSON.stringify(file)).catch(() => {})
+    await api().save(this.projectId, JSON.stringify(file)).catch(() => {})
   }
 
   has(variantId: string): boolean {
@@ -237,7 +239,7 @@ export class Studio {
   }
 
   async importPaths(paths: string[]): Promise<AssetInfo[]> {
-    const imported = await window.raeydzone.studio.importFiles(this.videoId, paths)
+    const imported = await window.raeydzone.studio.importFiles(this.projectId, paths)
     const out: AssetInfo[] = []
     for (const f of imported) {
       const info = await this.assets.addFile(f.file, f.name.replace(/\.[^.]+$/, ''), 'upload')
@@ -248,7 +250,7 @@ export class Studio {
   }
 
   async pasteClipboard(): Promise<AssetInfo | null> {
-    const pasted = await window.raeydzone.studio.paste(this.videoId)
+    const pasted = await window.raeydzone.studio.paste(this.projectId)
     if (!pasted) return null
     const info = await this.assets.addFile(pasted.file, pasted.name, 'upload')
     this.addAsset(info)
@@ -333,7 +335,7 @@ export class Studio {
     this.setVariant(variantId, (x) => ({ ...x, status: 'working' }), false)
     try {
       await api().send({
-        videoId: this.videoId,
+        projectId: this.projectId,
         variantId,
         text: text + this.describeAttachments(attachments),
         images,
@@ -354,7 +356,7 @@ export class Studio {
     await Promise.all(
       created.map((v, i) => {
         this.pushChat(v.id, { kind: 'user', text: brief, images: attachments.map((a) => a.id) })
-        return this.dispatch(v.id, variantBrief(brief, i + 1, count), attachments, images)
+        return this.dispatch(v.id, variantBrief(this.project, brief, i + 1, count), attachments, images)
       })
     )
   }
@@ -416,13 +418,14 @@ function wire(): void {
   api().onEvent((variantId, event) => owner(variantId)?.onEvent(variantId, event))
 }
 
-export function openStudio(videoId: string): Studio {
+export function openStudio(project: StudioProject): Studio {
   wire()
-  let studio = studios.get(videoId)
+  let studio = studios.get(project.id)
   if (!studio) {
-    studio = new Studio(videoId)
-    studios.set(videoId, studio)
+    studio = new Studio(project.id, project)
+    studios.set(project.id, studio)
     void studio.load()
   }
+  studio.project = project
   return studio
 }

@@ -109,6 +109,12 @@ export type ChatItem =
 
 export type VariantStatus = 'idle' | 'working' | 'stopped' | 'error'
 
+export interface StudioProject {
+  kind: 'video' | 'stream'
+  id: string
+  name: string
+}
+
 export interface ClaudeChoice {
   model: string
   effort: string
@@ -232,7 +238,7 @@ export interface ChatImage {
 }
 
 export interface SendRequest {
-  videoId: string
+  projectId: string
   variantId: string
   text: string
   images: ChatImage[]
@@ -274,9 +280,13 @@ export function closestAspect(w: number, h: number, aspects: string[] = NANO_ASP
   return best
 }
 
-export function variantBrief(brief: string, index: number, total: number): string {
-  if (total <= 1) return brief
-  return `${brief}
+export function variantBrief(project: StudioProject, brief: string, index: number, total: number): string {
+  const what = project.kind === 'stream' ? 'livestream' : 'video'
+  const framed = `Thumbnail for the ${what} "${project.name}":
+
+${brief}`
+  if (total <= 1) return framed
+  return `${framed}
 
 (You are making version ${index} of ${total}, each built by a separate designer from this same brief. Make yours clearly distinct in layout, composition and colour accents while still matching the brief.)`
 }

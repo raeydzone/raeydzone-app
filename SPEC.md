@@ -128,7 +128,8 @@ paths inside the root folder. No `file://`, no disabled web security.
 
 ### Thumbnail Studio
 
-**Create Thumbnail** on a video's detail page opens a full-window studio for that video. It
+**Create Thumbnail** on a video's detail page — or **Create thumbnail** on a stream card —
+opens a full-window studio for that project. It
 is a layered editor — image, text and shape layers with position, size, rotation, flip,
 opacity, blend mode, outline, drop shadow, outer glow, colour tint and adjustments
 (brightness, contrast, saturation, hue, blur) — that a person and Claude drive through the
@@ -145,7 +146,8 @@ interrupts it. Versions are never hidden by starting new ones: the strip under t
 the version menu in the chat header both switch to any version and its chat, and **New
 versions** only changes what the composer sends. A finished version can be refined by chat or by hand, duplicated, or applied:
 **Apply as thumbnail** renders it at 1280×720 and fills the video's thumbnail slot
-(PNG, or JPEG if the PNG would pass YouTube's 2 MB limit).
+(PNG, or JPEG if the PNG would pass YouTube's 2 MB limit). Claude's first message names the
+project and whether it is a video or a livestream, so the design fits what it is for.
 
 **Claude** is the user's own Claude Code CLI run in the background with their subscription
 (`claude -p` with streaming JSON in and out, no built-in tools, the user's settings files not
@@ -180,7 +182,7 @@ to the nearest aspect ratio the chosen model supports so mattes stay aligned. Th
 generic OpenRouter key, stored with Electron `safeStorage` and only ever sent to
 openrouter.ai.
 
-Studio data lives in `<project>/thumbnail_studio/`: `studio.json` (versions, layers, chat)
+Studio data lives in `<project>/thumbnail_studio/` (the video or stream folder): `studio.json` (versions, layers, chat)
 and `assets/` (attachments, generated images, masks). Unreferenced assets are pruned when the
 studio opens. Undo history is per version and in memory only.
 
@@ -244,7 +246,7 @@ Streams/<Stream Name>/
   <dropped files land here directly>
 ```
 
-Same thumbnail rules. No `footage/` or `assets/` split and no `.prproj` — streams carry
+Same thumbnail rules, including the Thumbnail Studio. No `footage/` or `assets/` split and no `.prproj` — streams carry
 little enough that a flat folder is the right shape. Dropped files go straight into the
 stream folder.
 

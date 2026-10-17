@@ -3,8 +3,7 @@ import { PresenceContext } from 'motion/react'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import type { ClaudeStatus } from '@shared/studio'
-import type { Video } from '@shared/types'
+import type { ClaudeStatus, StudioProject } from '@shared/studio'
 import { Prompt } from '../../components/Bits'
 import { useStore } from '../../state/store'
 import { cutOut, generateAsset, generativeFill, placeAsset } from '../ai'
@@ -34,9 +33,9 @@ function typing(): boolean {
   return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement
 }
 
-export default function Studio({ video, onBack }: { video: Video; onBack: () => void }): ReactNode {
+export default function Studio({ project, onBack }: { project: StudioProject; onBack: () => void }): ReactNode {
   const { notify } = useStore()
-  const studio = useMemo(() => openStudio(video.id), [video.id])
+  const studio = useMemo(() => openStudio(project), [project])
   const state = useSyncExternalStore(studio.subscribe, studio.getState)
   const [tool, setTool] = useState<Tool>('move')
   const [options, setOptions] = useState<ToolOptions>({ brush: 24, maskShow: false, glowPen: true })
@@ -133,8 +132,8 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
         data = await encode(out, 'image/jpeg', 0.93)
         ext = 'jpg'
       }
-      await window.raeydzone.studio.apply(video.id, data, ext)
-      notify(`${variant.name} is now the thumbnail of “${video.name}”`)
+      await window.raeydzone.studio.apply(project.id, data, ext)
+      notify(`${variant.name} is now the thumbnail of “${project.name}”`)
     })
   }
 
@@ -151,7 +150,7 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
     <div className={s.studio}>
       <header className={s.head}>
         <button className={s.back} onClick={onBack}>
-          ← {video.name}
+          ← {project.name}
         </button>
         <span className={s.headTitle}>Thumbnail Studio</span>
         {job && <span className={s.jobPill}>{job}</span>}
