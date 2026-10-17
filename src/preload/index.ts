@@ -4,7 +4,7 @@ import type {
   ScreenSource, StepId, Stream, Video
 } from '@shared/types'
 import type {
-  AiPrefs, ClaudeStatus, ImageRequest, ImageResult, OpenRouterStatus, SendRequest, StudioEvent,
+  ClaudeStatus, ImageRequest, ImageResult, OpenRouterStatus, SendRequest, StudioEvent,
   StudioFile, ToolCall, ToolReply
 } from '@shared/studio'
 
@@ -54,9 +54,7 @@ const ai = {
   claudeConnect: () => call<void>('ai:claudeConnect'),
   claudeLocate: () => call<ClaudeStatus>('ai:claudeLocate'),
   openrouterStatus: () => call<OpenRouterStatus>('ai:openrouterStatus'),
-  setOpenrouterKey: (key: string | null) => call<OpenRouterStatus>('ai:openrouterKey', key),
-  prefs: () => call<AiPrefs>('ai:prefs'),
-  setPrefs: (patch: Partial<AiPrefs>) => call<AiPrefs>('ai:setPrefs', patch)
+  setOpenrouterKey: (key: string | null) => call<OpenRouterStatus>('ai:openrouterKey', key)
 }
 
 const api = {

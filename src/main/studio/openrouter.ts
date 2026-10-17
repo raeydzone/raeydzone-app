@@ -1,5 +1,6 @@
 import { safeStorage } from 'electron'
 import { getSettings, saveSettings } from '../services/settings'
+import { imageModel } from '@shared/studio'
 import type { ImageRequest, ImageResult, OpenRouterStatus } from '@shared/studio'
 
 const API = 'https://openrouter.ai/api/v1'
@@ -57,57 +58,46 @@ function sniffMime(data: Uint8Array): string {
   return 'image/png'
 }
 
-async function decodeImageUrl(url: string): Promise<Uint8Array> {
-  if (url.startsWith('data:')) {
-    return new Uint8Array(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'))
-  }
-  const res = await fetch(url, { signal: AbortSignal.timeout(60_000) })
-  if (!res.ok) throw new Error('Could not download the generated image')
-  return new Uint8Array(await res.arrayBuffer())
-}
-
-interface Completion {
+interface ImagesResponse {
   error?: { message?: string }
+  data?: { b64_json?: string; media_type?: string }[]
   usage?: { cost?: number }
-  choices?: {
-    message?: { content?: string | null; images?: { image_url?: { url?: string } }[] }
-  }[]
 }
 
 export async function generate(req: ImageRequest): Promise<ImageResult> {
   const key = readKey()
   if (!key) throw new Error('Connect OpenRouter in Settings to use image generation.')
-
-  const content: unknown[] = [{ type: 'text', text: req.prompt }]
-  for (const image of req.images) {
-    const data = Buffer.from(image).toString('base64')
-    content.push({ type: 'image_url', image_url: { url: `data:${sniffMime(image)};base64,${data}` } })
-  }
+  const model = imageModel(req.model)
 
   const body: Record<string, unknown> = {
-    model: getSettings().imageModel,
-    modalities: ['image', 'text'],
-    messages: [{ role: 'user', content }],
-    usage: { include: true }
+    model: model.id,
+    prompt: req.prompt,
+    n: 1,
+    output_format: 'png'
   }
-  if (req.aspect) body.image_config = { aspect_ratio: req.aspect }
+  if (req.aspect && model.aspects.includes(req.aspect)) body.aspect_ratio = req.aspect
+  if (req.images.length) {
+    body.input_references = req.images.slice(0, model.maxRefs).map((image) => ({
+      type: 'image_url',
+      image_url: { url: `data:${sniffMime(image)};base64,${Buffer.from(image).toString('base64')}` }
+    }))
+  }
+  if (model.quality) body.quality = req.detail === 'final' ? 'high' : 'medium'
+  if (model.resolution) body.resolution = req.detail === 'final' ? '2K' : '1K'
+  if (req.transparent && model.transparent) body.background = 'transparent'
 
-  const res = await fetch(API + '/chat/completions', {
+  const res = await fetch(API + '/images', {
     method: 'POST',
     headers: headers(key),
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(180_000)
+    signal: AbortSignal.timeout(240_000)
   })
-  const json = (await res.json().catch(() => ({}))) as Completion
+  const json = (await res.json().catch(() => ({}))) as ImagesResponse
   if (!res.ok || json.error) {
-    throw new Error('OpenRouter: ' + (json.error?.message ?? 'HTTP ' + res.status))
+    throw new Error(`${model.label}: ` + (json.error?.message ?? 'HTTP ' + res.status))
   }
-  const message = json.choices?.[0]?.message
-  const url = message?.images?.[0]?.image_url?.url
-  if (!url) {
-    const said = typeof message?.content === 'string' ? message.content.trim() : ''
-    throw new Error('The image model returned no image' + (said ? ' — ' + said.slice(0, 300) : ''))
-  }
-  const data = await decodeImageUrl(url)
+  const b64 = json.data?.[0]?.b64_json
+  if (!b64) throw new Error(`${model.label} returned no image`)
+  const data = new Uint8Array(Buffer.from(b64, 'base64'))
   return { data, mime: sniffMime(data), cost: json.usage?.cost ?? null }
 }

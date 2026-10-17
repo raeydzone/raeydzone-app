@@ -153,13 +153,17 @@ loaded). The canvas reaches it as an MCP server that main serves on `127.0.0.1` 
 per-run token; main forwards each tool call to the renderer, which executes it against the
 document and replies. Any `ANTHROPIC_API_KEY` is removed from the child environment so usage
 never silently moves to API billing. Sessions idle for 15 minutes are ended and resumed by id
-on the next message. The model (Opus 5.5 by default) and its **effort** (low → max, medium by
-default — higher effort spends more of the plan) are chosen in the chat header and in Settings;
-changing either ends idle sessions so the next message resumes under the new choice.
+on the next message. Model and **effort** (low → max — higher effort spends more of the plan)
+belong to each version, not to the app: the picker in the chat header changes the version being
+viewed, and while composing new versions it sets what they start with (Opus 5.5 at medium the
+first time, then whatever was last chosen in that studio). A changed choice restarts an idle
+session on the same conversation.
 
 **OpenRouter** carries every image-model operation — there are no local models:
 
-- *Generate image* creates an asset (and optionally places and cuts it out)
+- *Generate image* creates an asset, optionally from reference images — attachments, single
+  layers or the whole current canvas — and on GPT Image models with a transparent background;
+  it can also be placed and cut out
 - *Generative fill* repaints a boxed region of the composite from a prompt; the result lands
   as a new feathered image layer, so it stays editable and removable
 - *Smart cut-out* asks the model for a black-and-white matte of the subject (optionally
@@ -167,9 +171,14 @@ changing either ends idle sessions so the next message resumes under the new cho
   never repaints the person. Masks are then refined by hand or by Claude with a lasso of
   anchor points, a brush, feather, invert and reset
 
-Inputs are padded to the nearest aspect ratio the model supports so mattes stay aligned. The
-default model is Nano Banana 2.1; Settings offers others. The key is stored with Electron
-`safeStorage` and only ever sent to openrouter.ai.
+Every call goes through OpenRouter's Images API with the source images as
+`input_references`, capped at what the chosen model accepts. Each studio picks a model **per
+task** from its header — generate, generative fill, cut-out — out of GPT Image 2.5 Sunburst
+(highest quality) and Flare (fast), Grok Imagine Quality and 2.0, and Nano Banana 2.1, Pro and
+2. Defaults: Sunburst for generating, Nano Banana 2.1 for fills and cut-outs. Inputs are padded
+to the nearest aspect ratio the chosen model supports so mattes stay aligned. The key is one
+generic OpenRouter key, stored with Electron `safeStorage` and only ever sent to
+openrouter.ai.
 
 Studio data lives in `<project>/thumbnail_studio/`: `studio.json` (versions, layers, chat)
 and `assets/` (attachments, generated images, masks). Unreferenced assets are pruned when the
@@ -182,8 +191,8 @@ consistent look on any machine: Montserrat, Anton, Bebas Neue, Oswald, Archivo B
 Guy and Bangers. The picker is searchable and previews each family in its own face; Claude gets
 the same list through `list_fonts`.
 
-Settings keeps both connections to one line each: account and plan for Claude with a model and
-effort menu, and connection state, image model and key for OpenRouter.
+Dropdowns cap their height to the space left in the window and keep a margin from its edges,
+so none can spill past the frame.
 
 ### Progress
 
@@ -351,7 +360,7 @@ Shown per-video on the detail page (filtered to that video) and in full on a glo
 | **Streams** | Upcoming and past |
 | **Timer** | Big clock, start/stop, 30-day chart |
 | **Log** | Global history |
-| **Settings** | Root folder, Premiere template, Claude and OpenRouter connections, daily goal, rescan |
+| **Settings** | Grouped into Library (root folder, rescan), Projects (Premiere template, archiving), Daily goal, AI connections (Claude account, OpenRouter key — models are chosen in the studio) and App (updates) |
 
 ---
 

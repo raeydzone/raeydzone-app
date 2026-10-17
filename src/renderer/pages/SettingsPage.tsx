@@ -5,29 +5,65 @@ import { formatBytes, formatDuration } from '@shared/format'
 import { Toggle } from '../components/Bits'
 import { IconFolder, IconPremiere } from '../components/Icons'
 import { useAppState, useStore } from '../state/store'
-import { AiSettings } from './AiSettings'
+import { ClaudeAccount, OpenRouterKey } from './AiSettings'
+import k from '../styles/soft.module.css'
 import p from './pages.module.css'
 import ui from '../styles/ui.module.css'
+
+const SECTIONS = [
+  { id: 'library', title: 'Library', sub: 'Where your projects live on disk.' },
+  { id: 'projects', title: 'Projects', sub: 'Premiere and cleaning up finished videos.' },
+  { id: 'goal', title: 'Daily goal', sub: 'How hard the timer pushes you.' },
+  { id: 'ai', title: 'AI connections', sub: 'Accounts only — models are picked where they are used, in the Thumbnail Studio.' },
+  { id: 'app', title: 'App', sub: 'Version and updates.' }
+] as const
+
+type SectionId = (typeof SECTIONS)[number]['id']
 
 function describeUpdate(u: UpdateState): string {
   switch (u.status) {
     case 'checking':
-      return 'checking for updates…'
+      return 'Checking for updates…'
     case 'downloading':
-      return `downloading ${u.version} — ${u.percent}%`
+      return `Downloading ${u.version} — ${u.percent}%`
     case 'ready':
-      return `${u.version} downloaded and ready to install`
+      return `${u.version} is ready to install`
     case 'error':
-      return `last check failed — ${u.error ?? 'unknown error'}`
+      return `Last check failed — ${u.error ?? 'unknown error'}`
     default:
-      return 'up to date'
+      return 'Up to date'
   }
 }
 
 function describeArchive(preview: ArchivePreview | null): string {
-  if (!preview) return 'measuring…'
-  if (preview.candidates.length === 0) return 'nothing old enough to archive'
+  if (!preview) return 'Measuring…'
+  if (preview.candidates.length === 0) return 'Nothing old enough to archive'
   return `${preview.candidates.length} ready · ${formatBytes(preview.bytes)} → Recycle Bin`
+}
+
+function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }): ReactNode {
+  return (
+    <div className={p.settingRow}>
+      <div>
+        <div className={p.settingLabel}>{label}</div>
+        {hint && <div className={p.settingHint}>{hint}</div>}
+      </div>
+      <div className={p.aiControls}>{children}</div>
+    </div>
+  )
+}
+
+function Section({ id, children }: { id: SectionId; children: ReactNode }): ReactNode {
+  const meta = SECTIONS.find((x) => x.id === id)!
+  return (
+    <section id={'settings-' + id} className={p.settingsSection}>
+      <div className={p.settingsSectionHead}>
+        <h2>{meta.title}</h2>
+        <p>{meta.sub}</p>
+      </div>
+      <div className={p.settingsCard}>{children}</div>
+    </section>
+  )
 }
 
 function ArchiveSetting(): ReactNode {
@@ -54,47 +90,37 @@ function ArchiveSetting(): ReactNode {
   }
 
   return (
-    <div className={p.settingRow}>
-      <div>
-        <div className={p.settingLabel}>Auto-archive finished videos</div>
-        <div className={p.settingHint}>
-          Footage, assets and the base video of a finished project go to the Recycle Bin
-          once it is old enough. Thumbnail, steps and history stay. Empty the bin to get
-          the disk space back.
-        </div>
-        <div className={ui.faint} style={{ marginTop: 6 }}>
-          {describeArchive(preview)}
-        </div>
-      </div>
-      <div className={ui.row}>
-        <Toggle
-          checked={state.autoArchive}
-          onChange={(v) => void run(() => api.setArchive(v, state.archiveAfterDays))}
-          label="on"
-        />
+    <Row
+      label="Auto-archive finished videos"
+      hint={<>Sends footage, assets and the base cut to the Recycle Bin · {describeArchive(preview)}</>}
+    >
+      <Toggle
+        checked={state.autoArchive}
+        onChange={(v) => void run(() => api.setArchive(v, state.archiveAfterDays))}
+        label=""
+      />
+      <label className={p.unitField}>
         <input
-          className={ui.input}
-          style={{ width: 70 }}
+          className={k.field}
           type="number"
           min={1}
           step={1}
           defaultValue={state.archiveAfterDays}
           onBlur={(e) => {
             const days = Number(e.target.value)
-            if (days > 0)
-              void run(() => api.setArchive(state.autoArchive, days), 'Archive age updated')
+            if (days > 0) void run(() => api.setArchive(state.autoArchive, days), 'Archive age updated')
           }}
         />
-        <span className={ui.faint}>days old</span>
-        <button
-          className={ui.btn}
-          disabled={busy || !preview || preview.candidates.length === 0}
-          onClick={() => void archiveNow()}
-        >
-          Archive now
-        </button>
-      </div>
-    </div>
+        <span>days</span>
+      </label>
+      <button
+        className={k.btn}
+        disabled={busy || !preview || preview.candidates.length === 0}
+        onClick={() => void archiveNow()}
+      >
+        Archive now
+      </button>
+    </Row>
   )
 }
 
@@ -110,6 +136,10 @@ export default function SettingsPage(): ReactNode {
     if (ok) await refresh()
   }
 
+  const jump = (id: SectionId): void => {
+    document.getElementById('settings-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div className={ui.page}>
       <div className={ui.pageHead}>
@@ -119,66 +149,67 @@ export default function SettingsPage(): ReactNode {
         </div>
       </div>
 
-      <div className={ui.panel}>
-        <div className={p.settingRow}>
-          <div>
-            <div className={p.settingLabel}>Root folder</div>
-            <div className={p.settingHint}>
-              Everything RaeydZone manages lives here. Changing it re-points the app — it
-              never moves your files.
-            </div>
-            <div className={p.pathBox} style={{ marginTop: 'var(--s-3)' }}>
-              {state.rootPath ?? 'Not set'}
-            </div>
-            <div className={ui.faint} style={{ marginTop: 6 }}>
-              {state.freeBytes !== null ? `${formatBytes(state.freeBytes)} free` : ''}
+      <nav className={p.settingsNav}>
+        {SECTIONS.map((x) => (
+          <button key={x.id} className={p.settingsChip} onClick={() => jump(x.id)}>
+            {x.title}
+          </button>
+        ))}
+      </nav>
+
+      <Section id="library">
+        <Row
+          label="Root folder"
+          hint={
+            <>
+              <span className={p.pathText}>{state.rootPath ?? 'Not set'}</span>
+              {state.freeBytes !== null ? ` · ${formatBytes(state.freeBytes)} free` : ''}
               {state.removableRoot ? ' · removable drive' : ''}
-            </div>
-          </div>
-          <div className={ui.row}>
-            <button className={ui.btn} onClick={() => void run(() => api.openRoot())}>
-              <IconFolder />
-              Open
-            </button>
-            <button className={ui.btn} onClick={changeRoot}>
-              Change…
-            </button>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <button className={k.btn} onClick={() => void run(() => api.openRoot())}>
+            <IconFolder />
+            Open
+          </button>
+          <button className={k.btn} onClick={changeRoot}>
+            Change…
+          </button>
+        </Row>
+        <Row label="Rescan folder" hint="Picks up folders added by hand and flags ones that vanished.">
+          <button
+            className={k.btn}
+            onClick={async () => {
+              const res = await run(() => api.rescan())
+              if (res) notify(`${res.added} added · ${res.missing} missing`)
+            }}
+          >
+            Rescan
+          </button>
+        </Row>
+      </Section>
 
-        <div className={p.settingRow}>
-          <div>
-            <div className={p.settingLabel}>Premiere template</div>
-            <div className={p.settingHint}>
-              Save one blank project from Premiere Pro as <b>template.prproj</b> inside the
-              <b> .raeydzone</b> folder. Every new video copies it.
-            </div>
-          </div>
-          <div className={ui.row}>
-            <span className={`${ui.tag} ${state.hasPremiereTemplate ? ui.tagOk : ''}`}>
-              {state.hasPremiereTemplate ? 'installed' : 'missing'}
-            </span>
-            <button
-              className={`${ui.btn} ${ui.btnPremiere}`}
-              onClick={() => void run(() => api.openTemplateFolder())}
-            >
-              <IconPremiere />
-              Open folder
-            </button>
-          </div>
-        </div>
+      <Section id="projects">
+        <Row
+          label="Premiere template"
+          hint={<>Blank <b>template.prproj</b> in the <b>.raeydzone</b> folder, copied for every new video.</>}
+        >
+          <span className={`${ui.tag} ${state.hasPremiereTemplate ? ui.tagOk : ''}`}>
+            {state.hasPremiereTemplate ? 'installed' : 'missing'}
+          </span>
+          <button className={`${ui.btn} ${ui.btnPremiere}`} onClick={() => void run(() => api.openTemplateFolder())}>
+            <IconPremiere />
+            Open folder
+          </button>
+        </Row>
+        <ArchiveSetting />
+      </Section>
 
-        <div className={p.settingRow}>
-          <div>
-            <div className={p.settingLabel}>Daily goal</div>
-            <div className={p.settingHint}>
-              The progress bar hits 100% here. Currently {formatDuration(state.dailyGoalMs)}.
-            </div>
-          </div>
-          <div className={ui.row}>
+      <Section id="goal">
+        <Row label="Daily goal" hint={`The progress bar fills at ${formatDuration(state.dailyGoalMs)}.`}>
+          <label className={p.unitField}>
             <input
-              className={ui.input}
-              style={{ width: 90 }}
+              className={k.field}
               type="number"
               min={5}
               step={5}
@@ -188,62 +219,36 @@ export default function SettingsPage(): ReactNode {
                 if (mins > 0) void run(() => api.setGoal(mins * 60000), 'Goal updated')
               }}
             />
-            <span className={ui.faint}>minutes</span>
-          </div>
-        </div>
+            <span>min</span>
+          </label>
+        </Row>
+      </Section>
 
-        <AiSettings />
+      <Section id="ai">
+        <ClaudeAccount />
+        <OpenRouterKey />
+      </Section>
 
-        <ArchiveSetting />
-
-        <div className={p.settingRow}>
-          <div>
-            <div className={p.settingLabel}>Updates</div>
-            <div className={p.settingHint}>
-              Version {state.appVersion} · {describeUpdate(state.update)}
-            </div>
-          </div>
-          <div className={ui.row}>
-            {state.update.status === 'ready' ? (
-              <button
-                className={`${ui.btn} ${ui.btnPrimary}`}
-                onClick={() => void api.installUpdate()}
-              >
-                Install {state.update.version}
-              </button>
-            ) : (
-              <button
-                className={ui.btn}
-                disabled={state.update.status === 'checking'}
-                onClick={() => void run(() => api.checkUpdate(), 'Checking for updates…')}
-              >
-                Check now
-              </button>
-            )}
-            <button className={`${ui.btn} ${ui.btnGhost}`} onClick={() => void api.openUpdateLog()}>
-              Log
+      <Section id="app">
+        <Row label={`RaeydZone ${state.appVersion}`} hint={describeUpdate(state.update)}>
+          {state.update.status === 'ready' ? (
+            <button className={`${k.btn} ${k.btnPrimary}`} onClick={() => void api.installUpdate()}>
+              Install {state.update.version}
             </button>
-          </div>
-        </div>
-
-        <div className={p.settingRow}>
-          <div>
-            <div className={p.settingLabel}>Rescan folder</div>
-            <div className={p.settingHint}>
-              Picks up folders added by hand and flags entries whose folder has vanished.
-            </div>
-          </div>
-          <button
-            className={ui.btn}
-            onClick={async () => {
-              const res = await run(() => api.rescan())
-              if (res) notify(`${res.added} added · ${res.missing} missing`)
-            }}
-          >
-            Rescan
+          ) : (
+            <button
+              className={k.btn}
+              disabled={state.update.status === 'checking'}
+              onClick={() => void run(() => api.checkUpdate(), 'Checking for updates…')}
+            >
+              Check now
+            </button>
+          )}
+          <button className={`${k.btn} ${k.btnGhost}`} onClick={() => void api.openUpdateLog()}>
+            Log
           </button>
-        </div>
-      </div>
+        </Row>
+      </Section>
     </div>
   )
 }

@@ -62,6 +62,7 @@ function TextSection({ layer, patch, focus }: { layer: TextLayer; patch: Patch; 
         <FontPicker value={layer.font} onChange={(font) => patch({ font })} />
         {weights.length > 1 ? (
           <MenuSelect
+            wide
             align="start"
             trigger={<span className={s.pillGrow}>{WEIGHT_NAMES[nearestWeight(layer.font, layer.weight)] ?? layer.weight}</span>}
             groups={[{
@@ -272,11 +273,17 @@ export function Inspector({
           </div>
         </div>
         <SliderField label="Opacity" value={Math.round(layer.opacity * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ opacity: v / 100 }, 'opacity')} />
-        <select className={k.field} value={layer.blend} onChange={(e) => patch({ blend: e.target.value })}>
-          {BLEND_MODES.map((b) => (
-            <option key={b} value={b}>Blend · {b}</option>
-          ))}
-        </select>
+        <MenuSelect
+          wide
+          align="start"
+          trigger={<span className={s.pillGrow}>Blend · {layer.blend}</span>}
+          groups={[{
+            title: 'Blend mode',
+            value: layer.blend,
+            options: BLEND_MODES.map((b) => ({ id: b, label: b })),
+            onChange: (blend) => patch({ blend })
+          }]}
+        />
       </Section>
 
       {layer.kind === 'text' && <TextSection layer={layer} patch={patch} focus={focusText} />}

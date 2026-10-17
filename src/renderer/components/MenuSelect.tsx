@@ -21,22 +21,24 @@ export function MenuSelect({
   trigger,
   title,
   align = 'end',
-  claude = false
+  claude = false,
+  wide = false
 }: {
   groups: MenuGroup[]
   trigger: ReactNode
   title?: string
   align?: 'start' | 'end'
   claude?: boolean
+  wide?: boolean
 }): ReactNode {
   return (
     <Menu.Root>
-      <Menu.Trigger className={`${k.pill} ${claude ? k.pillClaude : ''}`} title={title}>
+      <Menu.Trigger className={`${k.pill} ${claude ? k.pillClaude : ''} ${wide ? k.pillWide : ''}`} title={title}>
         {trigger}
         <IconChevron size={12} />
       </Menu.Trigger>
       <Menu.Portal>
-        <Menu.Content className={k.menu} align={align} sideOffset={6}>
+        <Menu.Content className={k.menu} align={align} sideOffset={6} collisionPadding={12}>
           {groups.map((g, i) => (
             <div key={g.title}>
               {i > 0 && <Menu.Separator className={k.menuSep} />}

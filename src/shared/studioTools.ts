@@ -176,7 +176,7 @@ export const STUDIO_TOOLS: ToolDef[] = [
   },
   {
     name: 'cut_out',
-    description: 'Smart cut-out: hides everything except the subject in an image layer by writing its mask. Describe the subject when the image holds more than one thing, and pass a box (canvas pixels) around it to cut one object out of a busy screenshot. Check the result with view_canvas and fix edges with edit_mask.',
+    description: 'Smart cut-out: the cut-out model sees the layer image and hides everything except the subject in an image layer by writing its mask. Describe the subject when the image holds more than one thing, and pass a box (canvas pixels) around it to cut one object out of a busy screenshot. Check the result with view_canvas and fix edges with edit_mask.',
     inputSchema: obj({
       layer_id: str('Image layer id.'),
       subject: str('What to keep, e.g. "the man with the hand on his face".'),
@@ -195,13 +195,16 @@ export const STUDIO_TOOLS: ToolDef[] = [
   },
   {
     name: 'generate_image',
-    description: 'Generates a new image with the image model and stores it as an asset (effects, objects, backgrounds, props). Ask for a plain flat background when you plan to cut it out, or set cut_out. With place it is added as a layer. Costs money per call — be deliberate.',
+    description: 'Generates a new image with the image model the creator picked for generation and stores it as an asset (effects, objects, backgrounds, props). The model can see reference images: pass assets, layers, or the whole current canvas to restyle, extend or match them. Set transparent for a cut-out-ready result on models that support it; otherwise ask for a plain flat background and set cut_out. With place it is added as a layer. Costs money per call — be deliberate.',
     inputSchema: obj({
-      prompt: str('Detailed description of the image.'),
-      reference_asset_ids: { type: 'array', items: { type: 'string' }, description: 'Assets the model should see and draw on, e.g. to restyle or extend.' },
+      prompt: str('Detailed description of the image. Refer to the reference images by order, e.g. "the person in the first reference".'),
+      reference_asset_ids: { type: 'array', items: { type: 'string' }, description: 'Assets the model should see.' },
+      reference_layer_ids: { type: 'array', items: { type: 'string' }, description: 'Layers to render on their own and show the model.' },
+      reference_canvas: bool('Show the model the current full canvas as a reference.'),
       aspect_ratio: { type: 'string', enum: ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] },
+      transparent: bool('Ask for a transparent background (GPT Image models only).'),
       place: bool('Add the result as a layer on top.'),
-      cut_out: bool('When placing, also cut the main subject out.')
+      cut_out: bool('When placing, also cut the main subject out (skipped when the result is already transparent).')
     }, ['prompt'])
   },
   {

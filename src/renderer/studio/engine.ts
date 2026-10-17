@@ -1,6 +1,6 @@
-import { variantBrief } from '@shared/studio'
+import { DEFAULT_CLAUDE, DEFAULT_IMAGE_MODELS, variantBrief } from '@shared/studio'
 import type {
-  AssetInfo, ChatImage, ChatItem, Layer, StudioDoc, StudioEvent, StudioFile, ToolCall,
+  AssetInfo, ChatImage, ChatItem, ClaudeChoice, ImageModels, ImageTask, Layer, StudioDoc, StudioEvent, StudioFile, ToolCall,
   ToolReply, Variant, VariantStatus
 } from '@shared/studio'
 import { AssetStore, copyOf, encode } from './assets'
@@ -28,6 +28,8 @@ export interface StudioState {
   activeId: string | null
   usage: { fiveHour: number | null; weekly: number | null } | null
   tick: number
+  claude: ClaudeChoice
+  imageModels: ImageModels
 }
 
 interface CommitOptions {
@@ -50,7 +52,8 @@ type ChatDraft =
 
 export class Studio {
   state: StudioState = {
-    ready: false, error: null, assets: [], variants: [], activeId: null, usage: null, tick: 0
+    ready: false, error: null, assets: [], variants: [], activeId: null, usage: null, tick: 0,
+    claude: { ...DEFAULT_CLAUDE }, imageModels: { ...DEFAULT_IMAGE_MODELS }
   }
   assets: AssetStore
   private listeners = new Set<() => void>()
@@ -81,8 +84,10 @@ export class Studio {
   async load(): Promise<void> {
     try {
       const [file] = await Promise.all([api().load(this.videoId), loadFonts()])
+      const claude = { ...DEFAULT_CLAUDE, ...file?.claude }
       const variants = (file?.variants ?? []).map((v) => ({
         ...v,
+        claude: { ...claude, ...v.claude },
         doc: { ...v.doc, layers: v.doc.layers.map(refitText) },
         status: 'idle' as VariantStatus,
         past: [],
@@ -96,6 +101,8 @@ export class Studio {
       this.set(
         {
           ready: true,
+          claude,
+          imageModels: { ...DEFAULT_IMAGE_MODELS, ...file?.imageModels },
           assets,
           variants,
           activeId: variants.some((v) => v.id === file?.activeId) ? file!.activeId : variants[0]?.id ?? null
@@ -124,8 +131,10 @@ export class Studio {
       version: 1,
       assets: this.state.assets,
       activeId: this.state.activeId,
-      variants: this.state.variants.map(({ id, name, createdAt, doc, chat, sessionId }) => ({
-        id, name, createdAt, doc, chat: chat.slice(-400), sessionId
+      claude: this.state.claude,
+      imageModels: this.state.imageModels,
+      variants: this.state.variants.map(({ id, name, createdAt, doc, chat, sessionId, claude }) => ({
+        id, name, createdAt, doc, chat: chat.slice(-400), sessionId, claude
       }))
     }
     await api().save(this.videoId, JSON.stringify(file)).catch(() => {})
@@ -246,7 +255,7 @@ export class Studio {
     return info
   }
 
-  addVariant(doc: StudioDoc = emptyDoc()): VariantState {
+  addVariant(doc: StudioDoc = emptyDoc(), claude: ClaudeChoice = this.state.claude): VariantState {
     const used = this.state.variants.map((v) => Number(/(\d+)$/.exec(v.name)?.[1] ?? 0))
     const v: VariantState = {
       id: crypto.randomUUID(),
@@ -255,6 +264,7 @@ export class Studio {
       doc,
       chat: [],
       sessionId: null,
+      claude: { ...claude },
       status: 'idle',
       past: [],
       future: [],
@@ -267,9 +277,18 @@ export class Studio {
 
   duplicateVariant(id: string): VariantState {
     const source = this.variant(id)
-    const copy = this.addVariant(source.doc)
+    const copy = this.addVariant(source.doc, source.claude)
     this.setVariant(copy.id, (v) => ({ ...v, name: source.name + ' copy' }))
     return copy
+  }
+
+  setClaude(variantId: string | null, patch: Partial<ClaudeChoice>): void {
+    if (variantId) this.setVariant(variantId, (v) => ({ ...v, claude: { ...v.claude, ...patch } }))
+    else this.set({ claude: { ...this.state.claude, ...patch } })
+  }
+
+  setImageModel(task: ImageTask, model: string): void {
+    this.set({ imageModels: { ...this.state.imageModels, [task]: model } })
   }
 
   removeVariant(id: string): void {
@@ -318,7 +337,8 @@ export class Studio {
         variantId,
         text: text + this.describeAttachments(attachments),
         images,
-        resume: v.sessionId
+        resume: v.sessionId,
+        claude: v.claude
       })
     } catch (err) {
       this.setVariant(variantId, (x) => ({ ...x, status: 'error' }), false)

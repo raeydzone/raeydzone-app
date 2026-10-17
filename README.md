@@ -68,8 +68,10 @@ while you move things yourself or steer it with messages. Every tool Claude has 
 you have too.
 
 - Claude runs through your own Claude Code install and subscription
-- Generative fill, generated assets and smart cut-outs run on a hosted image model through
-  OpenRouter (Nano Banana 2.1 by default)
+- Generative fill, generated assets and smart cut-outs run on hosted image models through
+  OpenRouter — GPT Image 2.5, Grok Imagine or Nano Banana, picked per task in the studio
+- Claude's model and effort are picked per version, so you decide how much of your plan each
+  one spends
 - Apply a finished version and it becomes the video's thumbnail
 
 ### Streams

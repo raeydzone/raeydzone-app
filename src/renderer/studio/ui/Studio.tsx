@@ -12,10 +12,10 @@ import type { Box } from '../ai'
 import { encode } from '../assets'
 import { emptyDoc } from '../doc'
 import { openStudio } from '../engine'
-import { renderDoc } from '../render'
-import { loadDocAssets } from '../tools'
+import { loadDocAssets, renderDoc } from '../render'
 import { Chat } from './Chat'
 import { Inspector } from './Inspector'
+import { ImageModelsPicker } from './Pickers'
 import { LayersPanel } from './LayersPanel'
 import { Stage } from './Stage'
 import type { Tool, ToolOptions } from './Stage'
@@ -125,7 +125,7 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
   const apply = (): void => {
     if (!variant) return
     void runJob('Applying…', async () => {
-      await loadDocAssets(studio, variant.doc)
+      await loadDocAssets(studio.assets, variant.doc)
       const out = renderDoc(variant.doc, studio.assets)
       let data = await encode(out, 'image/png')
       let ext: 'png' | 'jpg' = 'png'
@@ -156,6 +156,7 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
         <span className={s.headTitle}>Thumbnail Studio</span>
         {job && <span className={s.jobPill}>{job}</span>}
         <span className={s.grow} />
+        <ImageModelsPicker models={state.imageModels} onChange={(task, id) => studio.setImageModel(task, id)} />
         {variant && (
           <>
             <button className={`${k.btn} ${k.btnGhost}`} disabled={!variant.past.length} title="Undo (Ctrl+Z)" onClick={() => studio.undo(variant.id)}>
@@ -269,7 +270,7 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
         onConfirm={(prompt) => {
           if (!variant) return
           void runJob('Generating image…', async () => {
-            const { info } = await generateAsset(studio, prompt)
+            const { info } = await generateAsset(studio, variant.id, { prompt })
             studio.select(variant.id, placeAsset(studio, variant.id, info).id)
           })
         }}

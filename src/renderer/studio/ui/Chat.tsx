@@ -2,8 +2,7 @@ import * as Slider from '@radix-ui/react-slider'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { DEFAULT_CLAUDE_EFFORT, DEFAULT_CLAUDE_MODEL, DEFAULT_IMAGE_MODEL } from '@shared/studio'
-import type { AiPrefs, AssetInfo, ChatItem, ClaudeStatus } from '@shared/studio'
+import type { AssetInfo, ChatItem, ClaudeStatus } from '@shared/studio'
 import { IconClaude, IconClose, IconImage, IconStop } from '../../components/Icons'
 import { useStore } from '../../state/store'
 import type { Studio, VariantState } from '../engine'
@@ -93,9 +92,6 @@ export function Chat({
   const [text, setText] = useState('')
   const [attached, setAttached] = useState<AssetInfo[]>([])
   const [count, setCount] = useState(3)
-  const [prefs, setPrefs] = useState<AiPrefs>({
-    claudeModel: DEFAULT_CLAUDE_MODEL, claudeEffort: DEFAULT_CLAUDE_EFFORT, imageModel: DEFAULT_IMAGE_MODEL
-  })
   const [sending, setSending] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const fresh = generating || !variant
@@ -103,10 +99,6 @@ export function Chat({
   const usage = studio.state.usage
   const blocked = claude && (!claude.found || !claude.loggedIn)
   const variants = studio.state.variants
-
-  useEffect(() => {
-    void window.raeydzone.ai.prefs().then(setPrefs).catch(() => {})
-  }, [])
 
   useEffect(() => {
     const el = listRef.current
@@ -177,11 +169,9 @@ export function Chat({
           </div>
         </div>
         <ClaudePicker
-          prefs={prefs}
-          onChange={(patch) => {
-            setPrefs({ ...prefs, ...patch })
-            void window.raeydzone.ai.setPrefs(patch).then(setPrefs).catch(() => {})
-          }}
+          choice={fresh ? studio.state.claude : variant!.claude}
+          scope={fresh ? 'new versions' : variant!.name}
+          onChange={(patch) => studio.setClaude(fresh ? null : variant!.id, patch)}
         />
       </div>
 

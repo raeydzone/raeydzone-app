@@ -1,11 +1,11 @@
-import { closestAspect } from '@shared/studio'
-import type { AssetInfo, ImageLayer, Layer } from '@shared/studio'
+import { closestAspect, imageModel } from '@shared/studio'
+import type { AssetInfo, ImageLayer, ImageTask, Layer } from '@shared/studio'
 import { canvas, copyOf, ctx2d, decode, encode } from './assets'
 import { findLayer, makeImage } from './doc'
 import type { Studio } from './engine'
 import { baseMask, featherMask, invertMask, matteToMask, paintBrush, paintPolygon, toSource } from './mask'
 import type { Pt } from './mask'
-import { renderDoc } from './render'
+import { loadDocAssets, renderDoc } from './render'
 
 export interface Box {
   x: number
@@ -22,8 +22,10 @@ function imageLayer(studio: Studio, variantId: string, layerId: string): ImageLa
   return layer
 }
 
-function padToAspect(src: HTMLCanvasElement): { padded: HTMLCanvasElement; ox: number; oy: number; aspect: string } {
-  const { label, ratio } = closestAspect(src.width, src.height)
+const modelFor = (studio: Studio, task: ImageTask) => imageModel(studio.state.imageModels[task])
+
+function padToAspect(src: HTMLCanvasElement, aspects: string[]): { padded: HTMLCanvasElement; ox: number; oy: number; aspect: string } {
+  const { label, ratio } = closestAspect(src.width, src.height, aspects)
   const w = src.width / src.height < ratio ? Math.round(src.height * ratio) : src.width
   const h = src.width / src.height < ratio ? src.height : Math.round(src.width / ratio)
   const padded = canvas(w, h)
@@ -81,7 +83,8 @@ export async function cutOut(
   const cg = ctx2d(crop)
   cg.imageSmoothingQuality = 'high'
   cg.drawImage(src, rx, ry, rw, rh, 0, 0, crop.width, crop.height)
-  const { padded, ox, oy, aspect } = padToAspect(crop)
+  const model = modelFor(studio, 'cutout')
+  const { padded, ox, oy, aspect } = padToAspect(crop, model.aspects)
 
   const what = subject?.trim() ? subject.trim() : 'the main subject'
   const prompt =
@@ -90,7 +93,7 @@ export async function cutOut(
     (ox || oy ? ', including the flat grey border, which is only padding' : '') +
     '. Keep exactly the same framing, scale and outline as the input: no cropping, zooming, shifting or redrawing. Output only the matte.'
 
-  const res = await image()({ prompt, images: [await encode(padded)], aspect })
+  const res = await image()({ model: model.id, prompt, images: [await encode(padded)], aspect, detail: 'edit' })
   const out = await decode(res.data)
   const matte = canvas(crop.width, crop.height)
   const mg = ctx2d(matte)
@@ -148,27 +151,52 @@ export async function editMask(
   await saveMask(studio, variantId, layer, result)
 }
 
+export interface AssetRequest {
+  prompt: string
+  refs?: string[]
+  layers?: string[]
+  canvas?: boolean
+  aspect?: string
+  transparent?: boolean
+}
+
+async function references(studio: Studio, variantId: string | null, req: AssetRequest): Promise<Uint8Array[]> {
+  const out: Uint8Array[] = []
+  for (const id of req.refs ?? []) out.push(await encode(copyOf(await studio.assets.get(id), 1536)))
+  if (variantId && (req.canvas || req.layers?.length)) {
+    const doc = studio.doc(variantId)
+    await loadDocAssets(studio.assets, doc)
+    if (req.canvas) out.push(await encode(renderDoc(doc, studio.assets)))
+    for (const id of req.layers ?? []) out.push(await encode(renderDoc(doc, studio.assets, findLayer(doc, id).id)))
+  }
+  return out
+}
+
 export async function generateAsset(
   studio: Studio,
-  prompt: string,
-  refs: string[] = [],
-  aspect = '16:9'
-): Promise<{ info: AssetInfo; cost: number | null }> {
-  const images: Uint8Array[] = []
-  for (const id of refs) images.push(await encode(copyOf(await studio.assets.get(id), 1536)))
-  const res = await image()({ prompt, images, aspect })
+  variantId: string | null,
+  req: AssetRequest
+): Promise<{ info: AssetInfo; cost: number | null; transparent: boolean; model: string }> {
+  const model = modelFor(studio, 'generate')
+  const images = await references(studio, variantId, req)
+  if (images.length > model.maxRefs) {
+    throw new Error(`${model.label} takes at most ${model.maxRefs} reference images; ${images.length} were given.`)
+  }
+  const aspect = req.aspect && model.aspects.includes(req.aspect) ? req.aspect : closestAspect(16, 9, model.aspects).label
+  const transparent = !!req.transparent && model.transparent
+  const res = await image()({ model: model.id, prompt: req.prompt, images, aspect, transparent, detail: 'final' })
   const bitmap = await decode(res.data)
-  const info = await studio.assets.addCanvas(copyOf(bitmap), prompt.slice(0, 48), 'generated')
+  const info = await studio.assets.addCanvas(copyOf(bitmap), req.prompt.slice(0, 48), 'generated')
   studio.addAsset(info)
-  return { info, cost: res.cost }
+  return { info, cost: res.cost, transparent, model: model.label }
 }
 
 export function placeAsset(studio: Studio, variantId: string, info: AssetInfo, fit: 'cover' | 'contain' = 'contain', touched = false): Layer {
   return studio.addLayer(variantId, makeImage(studio.doc(variantId), info, fit), null, touched)
 }
 
-function fitAspect(r: Box, W: number, H: number): Box {
-  const { ratio } = closestAspect(r.width, r.height)
+function fitAspect(r: Box, W: number, H: number, aspects: string[]): Box {
+  const { ratio } = closestAspect(r.width, r.height, aspects)
   let { x, y, width, height } = r
   if (width / height < ratio) width = Math.min(W, height * ratio)
   else height = Math.min(H, width / ratio)
@@ -200,8 +228,9 @@ export async function generativeFill(
     width: Math.min(doc.width, r.x + r.width + margin) - Math.max(0, r.x - margin),
     height: Math.min(doc.height, r.y + r.height + margin) - Math.max(0, r.y - margin)
   }
-  const ctxBox = fitAspect(grown, doc.width, doc.height)
-  const { label: aspect } = closestAspect(ctxBox.width, ctxBox.height)
+  const model = modelFor(studio, 'fill')
+  const ctxBox = fitAspect(grown, doc.width, doc.height, model.aspects)
+  const { label: aspect } = closestAspect(ctxBox.width, ctxBox.height, model.aspects)
 
   const up = Math.max(1, 1024 / Math.max(ctxBox.width, ctxBox.height))
   const composite = renderDoc(doc, studio.assets)
@@ -219,7 +248,13 @@ export async function generativeFill(
     `Repaint only the area that is white in the mask: ${prompt}. ` +
     'Match the surrounding lighting, perspective, grain and style so it looks photographed and real, never AI-generated. ' +
     'Keep everything outside the white area unchanged and keep the same framing. No text, no borders.'
-  const res = await image()({ prompt: instruction, images: [await encode(context), await encode(guide)], aspect })
+  const res = await image()({
+    model: model.id,
+    prompt: instruction,
+    images: [await encode(context), await encode(guide)],
+    aspect,
+    detail: 'edit'
+  })
   const out = await decode(res.data)
 
   const filled = canvas(ctxBox.width, ctxBox.height)

@@ -6,7 +6,7 @@ import { asColor, describeLayer, findLayer, makeShape, makeText, patchLayer } fr
 import type { Studio } from './engine'
 import type { Pt } from './mask'
 import { fontFamilies } from './fonts'
-import { renderDoc } from './render'
+import { loadDocAssets, renderDoc } from './render'
 
 type Args = Record<string, unknown>
 
@@ -38,11 +38,6 @@ function box(value: unknown): Box | undefined {
   return { x: n('x'), y: n('y'), width: n('width'), height: n('height') }
 }
 
-export async function loadDocAssets(studio: Studio, doc: StudioDoc): Promise<void> {
-  const ids = doc.layers.flatMap((l) => (l.kind === 'image' ? [l.asset, ...(l.mask ? [l.mask] : [])] : []))
-  await Promise.all(ids.map((id) => studio.assets.load(id)))
-}
-
 async function picture(c: HTMLCanvasElement, text: string): Promise<ToolReply> {
   return { text, image: { data: toBase64(await encode(c, 'image/jpeg', 0.9)), mime: 'image/jpeg' } }
 }
@@ -72,7 +67,7 @@ function drawOutlines(c: HTMLCanvasElement, doc: StudioDoc): void {
 
 async function viewCanvas(studio: Studio, variantId: string, args: Args): Promise<Outcome> {
   const doc = studio.doc(variantId)
-  await loadDocAssets(studio, doc)
+  await loadDocAssets(studio.assets, doc)
   const only = typeof args.layer_id === 'string' ? findLayer(doc, args.layer_id).id : null
   let out = renderDoc(doc, studio.assets, only)
   if (args.outlines) drawOutlines(out, doc)
@@ -215,19 +210,26 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
 
     case 'generate_image': {
       const prompt = str(args, 'prompt')
-      const refs = Array.isArray(args.reference_asset_ids) ? args.reference_asset_ids.map(String) : []
-      const aspect = typeof args.aspect_ratio === 'string' ? args.aspect_ratio : '16:9'
-      const { info, cost } = await generateAsset(studio, prompt, refs, aspect)
-      let text = `Generated asset ${info.id} (${info.w}x${info.h}).`
+      const list = (key: string): string[] => (Array.isArray(args[key]) ? (args[key] as unknown[]).map(String) : [])
+      const { info, cost, transparent, model } = await generateAsset(studio, v, {
+        prompt,
+        refs: list('reference_asset_ids'),
+        layers: list('reference_layer_ids'),
+        canvas: !!args.reference_canvas,
+        aspect: typeof args.aspect_ratio === 'string' ? args.aspect_ratio : undefined,
+        transparent: !!args.transparent
+      })
+      let text = `${model} generated asset ${info.id} (${info.w}x${info.h})` +
+        (args.transparent ? (transparent ? ' with a transparent background.' : '. This model cannot make transparent backgrounds — use cut_out.') : '.')
       if (args.place) {
         const layer = placeAsset(studio, v, info, 'contain', true)
         text += ` Placed as layer ${layer.id}.`
-        if (args.cut_out) {
+        if (args.cut_out && !transparent) {
           await cutOut(studio, v, layer.id)
           text += ' Subject cut out.'
         }
       }
-      return { reply: { text }, summary: `Generated "${prompt.slice(0, 40)}"${money(cost)}` }
+      return { reply: { text }, summary: `Generated "${prompt.slice(0, 40)}" · ${model}${money(cost)}` }
     }
 
     case 'generative_fill': {

@@ -169,6 +169,11 @@ select.field {
     0 0 var(--s-4) var(--accent-wash);
 }
 
+.pillWide {
+  width: 100%;
+  justify-content: space-between;
+}
+
 .pillClaude {
   box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--claude-edge);
 }
@@ -181,7 +186,11 @@ select.field {
 
 .menu {
   min-width: calc(var(--studio-chat-w) * 0.62);
-  max-height: var(--menu-max-h);
+  max-height: min(
+    var(--menu-max-h),
+    var(--radix-dropdown-menu-content-available-height, var(--menu-max-h)),
+    var(--radix-popover-content-available-height, var(--menu-max-h))
+  );
   overflow-y: auto;
   padding: var(--s-1);
   border-radius: var(--r-lg);

@@ -57,7 +57,7 @@ export function FontPicker({ value, onChange }: { value: string; onChange: (font
         <IconChevron size={12} />
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content className={`${k.menu} ${s.fontMenu}`} align="start" sideOffset={6} onKeyDown={onKey}>
+        <Popover.Content className={`${k.menu} ${s.fontMenu}`} align="start" sideOffset={6} collisionPadding={12} onKeyDown={onKey}>
           <label className={s.fontSearch}>
             <IconSearch size={13} />
             <input

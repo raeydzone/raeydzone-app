@@ -7,10 +7,12 @@ import fs from 'node:fs/promises'
 import { getSettings } from '../services/settings'
 import { exists } from '../util/paths'
 import { SYSTEM_PROMPT } from './prompt'
-import type { ClaudeStatus, SendRequest, StudioEvent, VariantStatus } from '@shared/studio'
+import { CLAUDE_EFFORTS, CLAUDE_MODELS, DEFAULT_CLAUDE } from '@shared/studio'
+import type { ClaudeChoice, ClaudeStatus, SendRequest, StudioEvent, VariantStatus } from '@shared/studio'
 
 interface Session {
   proc: ChildProcessWithoutNullStreams
+  choice: ClaudeChoice
   status: VariantStatus
   stopping: boolean
   stdout: string
@@ -169,7 +171,7 @@ async function spawnSession(
   const dir = workDir()
   await fs.mkdir(dir, { recursive: true })
   const systemFile = path.join(dir, 'system-prompt.md')
-  const mcpFile = path.join(dir, 'mcp-' + req.variantId + '.json')
+  const mcpFile = path.join(dir, `mcp-${req.variantId}-${randomUUID().slice(0, 8)}.json`)
   await fs.writeFile(systemFile, SYSTEM_PROMPT, 'utf-8')
   await fs.writeFile(
     mcpFile,
@@ -183,8 +185,8 @@ async function spawnSession(
 
   const args = [
     '-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
-    '--model', getSettings().claudeModel,
-    '--effort', getSettings().claudeEffort,
+    '--model', CLAUDE_MODELS.some((m) => m.id === req.claude.model) ? req.claude.model : DEFAULT_CLAUDE.model,
+    '--effort', CLAUDE_EFFORTS.some((e) => e.id === req.claude.effort) ? req.claude.effort : DEFAULT_CLAUDE.effort,
     '--mcp-config', mcpFile, '--strict-mcp-config',
     '--tools', '', '--allowedTools', 'mcp__canvas',
     '--system-prompt-file', systemFile,
@@ -198,7 +200,7 @@ async function spawnSession(
 
   const proc = spawn(exe, args, { cwd: dir, env, windowsHide: true })
   const s: Session = {
-    proc, status: 'working', stopping: false, stdout: '', stderr: '', idleTimer: null, killTimer: null
+    proc, choice: req.claude, status: 'working', stopping: false, stdout: '', stderr: '', idleTimer: null, killTimer: null
   }
   sessions.set(req.variantId, s)
 
@@ -235,6 +237,15 @@ async function spawnSession(
 
 export async function send(req: SendRequest, mcp: { url: string; token: string }): Promise<void> {
   let s = sessions.get(req.variantId)
+  const changed = s && s.status !== 'working' &&
+    (s.choice.model !== req.claude.model || s.choice.effort !== req.claude.effort)
+  // Model and effort are fixed per process, so a changed choice restarts it on the same
+  // conversation instead of silently keeping the old one.
+  if (s && changed) {
+    sessions.delete(req.variantId)
+    s.proc.kill()
+    s = undefined
+  }
   if (!s || s.proc.exitCode !== null) s = await spawnSession(req, mcp)
 
   const content: unknown[] = []
@@ -259,14 +270,6 @@ export function stop(variantId: string): void {
     JSON.stringify({ type: 'control_request', request_id: randomUUID(), request: { subtype: 'interrupt' } }) + '\n'
   )
   s.killTimer = setTimeout(() => s.proc.kill(), 5000)
-}
-
-// Model and effort are fixed per process; ending idle ones makes the next message resume
-// the same conversation under the new choice.
-export function restartIdle(): void {
-  for (const s of sessions.values()) {
-    if (s.status !== 'working') s.proc.kill()
-  }
 }
 
 export function stopAll(): void {

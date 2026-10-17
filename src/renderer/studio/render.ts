@@ -269,3 +269,8 @@ export function isReady(doc: StudioDoc, assets: AssetStore): boolean {
   return doc.layers.every((l) => l.kind !== 'image' || (assets.peek(l.asset) && (!l.mask || assets.peek(l.mask))))
 }
 
+
+export async function loadDocAssets(assets: AssetStore, doc: StudioDoc): Promise<void> {
+  const ids = doc.layers.flatMap((l) => (l.kind === 'image' ? [l.asset, ...(l.mask ? [l.mask] : [])] : []))
+  await Promise.all(ids.map((id) => assets.load(id)))
+}

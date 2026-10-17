@@ -1,9 +1,9 @@
 import * as Menu from '@radix-ui/react-dropdown-menu'
 import type { ReactNode } from 'react'
-import { CLAUDE_EFFORTS, CLAUDE_MODELS } from '@shared/studio'
-import type { AiPrefs } from '@shared/studio'
+import { CLAUDE_EFFORTS, CLAUDE_MODELS, IMAGE_MODELS, IMAGE_TASKS } from '@shared/studio'
+import type { ClaudeChoice, ImageModels, ImageTask } from '@shared/studio'
 import { MenuSelect } from '../../components/MenuSelect'
-import { IconCheck, IconChevron, IconClaude, IconPlus } from '../../components/Icons'
+import { IconCheck, IconChevron, IconClaude, IconImage, IconPlus } from '../../components/Icons'
 import type { VariantState } from '../engine'
 import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
@@ -37,7 +37,7 @@ export function VersionPicker({
         {variants.length > 0 && <IconChevron size={13} />}
       </Menu.Trigger>
       <Menu.Portal>
-        <Menu.Content className={k.menu} align="start" sideOffset={6}>
+        <Menu.Content className={k.menu} align="start" sideOffset={6} collisionPadding={12}>
           <Menu.Label className={k.menuLabel}>Versions · {variants.length}</Menu.Label>
           {variants.map((v) => (
             <Menu.Item key={v.id} className={k.menuItem} onSelect={() => onPick(v.id)}>
@@ -59,18 +59,20 @@ export function VersionPicker({
 }
 
 export function ClaudePicker({
-  prefs,
+  choice,
+  scope,
   onChange
 }: {
-  prefs: AiPrefs
-  onChange: (patch: Partial<AiPrefs>) => void
+  choice: ClaudeChoice
+  scope: string
+  onChange: (patch: Partial<ClaudeChoice>) => void
 }): ReactNode {
-  const model = CLAUDE_MODELS.find((m) => m.id === prefs.claudeModel) ?? CLAUDE_MODELS[0]
-  const effort = CLAUDE_EFFORTS.find((e) => e.id === prefs.claudeEffort) ?? CLAUDE_EFFORTS[1]
+  const model = CLAUDE_MODELS.find((m) => m.id === choice.model) ?? CLAUDE_MODELS[0]
+  const effort = CLAUDE_EFFORTS.find((e) => e.id === choice.effort) ?? CLAUDE_EFFORTS[1]
   return (
     <MenuSelect
       claude
-      title="Model and effort Claude designs with — higher effort uses more of your plan"
+      title={`Model and effort for ${scope} — higher effort uses more of your plan`}
       trigger={
         <>
           <IconClaude size={15} />
@@ -79,9 +81,35 @@ export function ClaudePicker({
         </>
       }
       groups={[
-        { title: 'Model', value: model.id, options: CLAUDE_MODELS, onChange: (claudeModel) => onChange({ claudeModel }) },
-        { title: 'Effort', value: effort.id, options: CLAUDE_EFFORTS, onChange: (claudeEffort) => onChange({ claudeEffort }) }
+        { title: `Model · ${scope}`, value: model.id, options: CLAUDE_MODELS, onChange: (id) => onChange({ model: id }) },
+        { title: 'Effort', value: effort.id, options: CLAUDE_EFFORTS, onChange: (id) => onChange({ effort: id }) }
       ]}
+    />
+  )
+}
+
+export function ImageModelsPicker({
+  models,
+  onChange
+}: {
+  models: ImageModels
+  onChange: (task: ImageTask, id: string) => void
+}): ReactNode {
+  return (
+    <MenuSelect
+      title="Image models used by this studio — by you and by Claude"
+      trigger={
+        <>
+          <IconImage size={14} />
+          <span>Image models</span>
+        </>
+      }
+      groups={IMAGE_TASKS.map((t) => ({
+        title: t.label,
+        value: models[t.id],
+        options: IMAGE_MODELS,
+        onChange: (id: string) => onChange(t.id, id)
+      }))}
     />
   )
 }

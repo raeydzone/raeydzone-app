@@ -109,6 +109,11 @@ export type ChatItem =
 
 export type VariantStatus = 'idle' | 'working' | 'stopped' | 'error'
 
+export interface ClaudeChoice {
+  model: string
+  effort: string
+}
+
 export interface Variant {
   id: string
   name: string
@@ -116,26 +121,31 @@ export interface Variant {
   doc: StudioDoc
   chat: ChatItem[]
   sessionId: string | null
+  claude: ClaudeChoice
 }
+
+export const IMAGE_TASKS = [
+  { id: 'generate', label: 'Generate images' },
+  { id: 'fill', label: 'Generative fill' },
+  { id: 'cutout', label: 'Smart cut-out' }
+] as const
+
+export type ImageTask = (typeof IMAGE_TASKS)[number]['id']
+export type ImageModels = Record<ImageTask, string>
 
 export interface StudioFile {
   version: 1
   assets: AssetInfo[]
   variants: Variant[]
   activeId: string | null
+  claude?: ClaudeChoice
+  imageModels?: Partial<ImageModels>
 }
 
 export const CLAUDE_MODELS = [
   { id: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
   { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
   { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' }
-] as const
-
-export const IMAGE_MODELS = [
-  { id: 'google/gemini-nano-banana-2.1', label: 'Nano Banana 2.1', note: '≈ $0.04 per image' },
-  { id: 'google/gemini-3-pro-image', label: 'Nano Banana Pro (Gemini 3 Pro Image)', note: '≈ $0.14 per image' },
-  { id: 'openai/gpt-5.4-image-2', label: 'GPT-5.4 Image 2', note: 'priciest, strongest text rendering' },
-  { id: 'google/gemini-3.1-flash-lite-image', label: 'Nano Banana 2 Lite', note: 'cheapest, lower quality' }
 ] as const
 
 export const CLAUDE_EFFORTS = [
@@ -146,15 +156,42 @@ export const CLAUDE_EFFORTS = [
   { id: 'max', label: 'Max', note: 'Heaviest on usage' }
 ] as const
 
-export const DEFAULT_CLAUDE_MODEL = CLAUDE_MODELS[0].id
-export const DEFAULT_CLAUDE_EFFORT = 'medium'
+export const DEFAULT_CLAUDE: ClaudeChoice = { model: CLAUDE_MODELS[0].id, effort: 'medium' }
 
-export interface AiPrefs {
-  claudeModel: string
-  claudeEffort: string
-  imageModel: string
+const GPT_ASPECTS = ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9']
+const GROK_ASPECTS = ['1:1', '3:4', '4:3', '9:16', '16:9', '2:3', '3:2', '1:2', '2:1']
+const NANO_ASPECTS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9']
+
+export interface ImageModel {
+  id: string
+  label: string
+  note: string
+  maxRefs: number
+  aspects: string[]
+  transparent: boolean
+  quality: boolean
+  resolution: boolean
 }
-export const DEFAULT_IMAGE_MODEL = IMAGE_MODELS[0].id
+
+export const IMAGE_MODELS: ImageModel[] = [
+  { id: 'openai/gpt-image-2.5-sunburst', label: 'GPT Image 2.5 Sunburst', note: 'Highest quality · slower', maxRefs: 16, aspects: GPT_ASPECTS, transparent: true, quality: true, resolution: false },
+  { id: 'openai/gpt-image-2.5-flare', label: 'GPT Image 2.5 Flare', note: 'Fast GPT Image', maxRefs: 16, aspects: GPT_ASPECTS, transparent: true, quality: true, resolution: false },
+  { id: 'x-ai/grok-imagine-image-quality', label: 'Grok Imagine Quality', note: 'Photoreal · up to 3 reference images', maxRefs: 3, aspects: GROK_ASPECTS, transparent: false, quality: false, resolution: true },
+  { id: 'x-ai/grok-imagine-image-2.0', label: 'Grok Imagine 2.0', note: 'Up to 3 reference images', maxRefs: 3, aspects: GROK_ASPECTS, transparent: false, quality: false, resolution: true },
+  { id: 'google/gemini-nano-banana-2.1', label: 'Nano Banana 2.1', note: 'Precise edits · best value', maxRefs: 14, aspects: NANO_ASPECTS, transparent: false, quality: false, resolution: true },
+  { id: 'google/gemini-3-pro-image', label: 'Nano Banana Pro', note: 'Google’s strongest', maxRefs: 14, aspects: NANO_ASPECTS, transparent: false, quality: false, resolution: true },
+  { id: 'google/gemini-3.1-flash-image', label: 'Nano Banana 2', note: 'Fast', maxRefs: 14, aspects: NANO_ASPECTS, transparent: false, quality: false, resolution: true }
+]
+
+export const DEFAULT_IMAGE_MODELS: ImageModels = {
+  generate: 'openai/gpt-image-2.5-sunburst',
+  fill: 'google/gemini-nano-banana-2.1',
+  cutout: 'google/gemini-nano-banana-2.1'
+}
+
+export function imageModel(id: string): ImageModel {
+  return IMAGE_MODELS.find((m) => m.id === id) ?? IMAGE_MODELS[0]
+}
 
 export interface ClaudeStatus {
   found: boolean
@@ -175,9 +212,12 @@ export interface OpenRouterStatus {
 }
 
 export interface ImageRequest {
+  model: string
   prompt: string
   images: Uint8Array[]
   aspect: string | null
+  transparent?: boolean
+  detail?: 'edit' | 'final'
 }
 
 export interface ImageResult {
@@ -197,6 +237,7 @@ export interface SendRequest {
   text: string
   images: ChatImage[]
   resume: string | null
+  claude: ClaudeChoice
 }
 
 export type StudioEvent =
@@ -218,13 +259,11 @@ export interface ToolReply {
   isError?: boolean
 }
 
-export const ASPECTS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const
-
-export function closestAspect(w: number, h: number): { label: string; ratio: number } {
+export function closestAspect(w: number, h: number, aspects: string[] = NANO_ASPECTS): { label: string; ratio: number } {
   const target = Math.log(w / h)
   let best = { label: '16:9', ratio: 16 / 9 }
   let gap = Infinity
-  for (const label of ASPECTS) {
+  for (const label of aspects) {
     const [a, b] = label.split(':').map(Number)
     const d = Math.abs(Math.log(a / b) - target)
     if (d < gap) {

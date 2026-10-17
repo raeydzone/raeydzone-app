@@ -38,7 +38,7 @@ export function ToolBar({ tool, setTool, disabled }: { tool: Tool; setTool: (t: 
               </button>
             </Tooltip.Trigger>
             <Tooltip.Portal>
-              <Tooltip.Content className={s.tooltip} side="right" sideOffset={8}>
+              <Tooltip.Content className={s.tooltip} side="right" sideOffset={8} collisionPadding={8}>
                 {t.label} <span className={s.tooltipKey}>{t.key}</span>
               </Tooltip.Content>
             </Tooltip.Portal>
