@@ -153,3 +153,28 @@ export const IconLock = ({ size = 13 }: Props): ReactNode =>
 
 export const IconWand = ({ size = 16 }: Props): ReactNode =>
   base(size, <><path d="m4 20 11-11M14 4v3M19.5 9.5h-3M17.8 5.7l-2 2M18 13.5v2M10 4.5H8" /></>)
+
+const CLAUDE_RAYS = [10, 8.2, 9.4, 7.6, 9.8, 8.4, 9.2, 7.8, 10, 8, 9.5, 7.7]
+
+export const IconClaude = ({ size = 16 }: Props): ReactNode => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <g stroke="var(--claude)" strokeLinecap="round">
+      {CLAUDE_RAYS.map((len, i) => {
+        const a = (i / CLAUDE_RAYS.length) * Math.PI * 2 + 0.2
+        return (
+          <line
+            key={i}
+            x1={12 + Math.cos(a) * 1.4}
+            y1={12 + Math.sin(a) * 1.4}
+            x2={12 + Math.cos(a) * len}
+            y2={12 + Math.sin(a) * len}
+            strokeWidth={i % 2 ? 1.9 : 2.3}
+          />
+        )
+      })}
+    </g>
+  </svg>
+)
+
+export const IconChevron = ({ size = 12 }: Props): ReactNode =>
+  base(size, <path d="m6 9 6 6 6-6" />)

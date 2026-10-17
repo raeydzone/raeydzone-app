@@ -10,7 +10,6 @@ import type { Studio } from '../engine'
 import { ColorField, NumField, Section, Segmented, SliderField } from './fields'
 import type { Tool } from './Stage'
 import s from './studio.module.css'
-import ui from '../../styles/ui.module.css'
 
 type Patch = (patch: Record<string, unknown>, key?: string) => void
 
@@ -50,20 +49,20 @@ function TextSection({ layer, patch, focus }: { layer: TextLayer; patch: Patch; 
     <Section title="Text">
       <textarea
         ref={ref}
-        className={`${ui.input} ${s.textArea}`}
+        className={`${s.field} ${s.textArea}`}
         value={layer.text}
         rows={2}
         onChange={(e) => patch({ text: e.target.value }, 'text')}
       />
       <p className={s.hint}>Wrap words in *stars* to paint them in the highlight colour.</p>
       <div className={s.grid2}>
-        <select className={ui.input} value={layer.font} onChange={(e) => patch({ font: e.target.value })}>
+        <select className={s.field} value={layer.font} onChange={(e) => patch({ font: e.target.value })}>
           {FONTS.map((f) => (
             <option key={f} value={f}>{f}</option>
           ))}
         </select>
         {WEIGHTED.has(layer.font) ? (
-          <select className={ui.input} value={layer.weight} onChange={(e) => patch({ weight: Number(e.target.value) })}>
+          <select className={s.field} value={layer.weight} onChange={(e) => patch({ weight: Number(e.target.value) })}>
             {[400, 500, 600, 700, 800, 900].map((w) => (
               <option key={w} value={w}>{w}</option>
             ))}
@@ -166,30 +165,30 @@ function ImageSection({
   }
 
   return (
-    <Section title="Cut-out & mask" aside={layer.mask ? <span className={ui.tag}>masked</span> : null}>
+    <Section title="Cut-out & mask" aside={layer.mask ? <span className={s.tag}>masked</span> : null}>
       <input
-        className={ui.input}
+        className={s.field}
         placeholder="What to keep (optional) — e.g. the man"
         value={subject}
         onChange={(e) => setSubject(e.target.value)}
       />
       <div className={s.rowGap}>
         <button
-          className={`${ui.btn} ${ui.btnPrimary} ${s.grow}`}
+          className={`${s.btn} ${s.btnPrimary} ${s.grow}`}
           disabled={!!busy}
           onClick={() => void run('cut', () => cutOut(studio, variantId, layer.id, subject || undefined))}
         >
           {busy === 'cut' ? 'Cutting out…' : 'Smart cut-out'}
         </button>
-        <button className={ui.btn} title="Drag a box around one object to cut it out" onClick={() => setTool('cut')}>
+        <button className={s.btn} title="Drag a box around one object to cut it out" onClick={() => setTool('cut')}>
           In box
         </button>
       </div>
       <div className={s.rowGap}>
-        <button className={`${ui.btn} ${s.grow}`} onClick={() => setTool('brush')}>Brush</button>
-        <button className={`${ui.btn} ${s.grow}`} onClick={() => setTool('lasso')}>Lasso</button>
+        <button className={`${s.btn} ${s.grow}`} onClick={() => setTool('brush')}>Brush</button>
+        <button className={`${s.btn} ${s.grow}`} onClick={() => setTool('lasso')}>Lasso</button>
         <button
-          className={`${ui.btn} ${s.grow}`}
+          className={`${s.btn} ${s.grow}`}
           disabled={!!busy}
           onClick={() => void run('invert', () => editMask(studio, variantId, layer.id, 'invert'))}
         >
@@ -199,14 +198,14 @@ function ImageSection({
       <SliderField label="Feather amount" value={feather} min={1} max={40} unit="px" onChange={setFeather} />
       <div className={s.rowGap}>
         <button
-          className={`${ui.btn} ${s.grow}`}
+          className={`${s.btn} ${s.grow}`}
           disabled={!!busy || !layer.mask}
           onClick={() => void run('feather', () => editMask(studio, variantId, layer.id, 'feather', [], feather))}
         >
           Feather edges
         </button>
         <button
-          className={`${ui.btn} ${ui.btnGhost}`}
+          className={`${s.btn} ${s.btnGhost}`}
           disabled={!!busy || !layer.mask}
           onClick={() => void run('reset', () => editMask(studio, variantId, layer.id, 'reset'))}
         >
@@ -251,8 +250,8 @@ export function Inspector({
 
   return (
     <div className={s.inspector}>
-      <Section title="Layer" aside={<span className={ui.tag}>{layer.kind}</span>}>
-        <input className={ui.input} value={layer.name} onChange={(e) => patch({ name: e.target.value }, 'name')} />
+      <Section title="Layer" aside={<span className={s.tag}>{layer.kind}</span>}>
+        <input className={s.field} value={layer.name} onChange={(e) => patch({ name: e.target.value }, 'name')} />
         <div className={s.grid2}>
           <NumField label="X" value={layer.x} onChange={(x) => patch({ x }, 'x')} />
           <NumField label="Y" value={layer.y} onChange={(y) => patch({ y }, 'y')} />
@@ -264,12 +263,12 @@ export function Inspector({
         <div className={s.grid2}>
           <NumField label="Rotate" value={layer.rotation} onChange={(rotation) => patch({ rotation }, 'rot')} />
           <div className={s.rowGap}>
-            <button className={`${ui.btn} ${s.grow} ${layer.flipX ? s.btnOn : ''}`} onClick={() => patch({ flipX: !layer.flipX })}>Flip H</button>
-            <button className={`${ui.btn} ${s.grow} ${layer.flipY ? s.btnOn : ''}`} onClick={() => patch({ flipY: !layer.flipY })}>Flip V</button>
+            <button className={`${s.btn} ${s.grow} ${layer.flipX ? s.btnOn : ''}`} onClick={() => patch({ flipX: !layer.flipX })}>Flip H</button>
+            <button className={`${s.btn} ${s.grow} ${layer.flipY ? s.btnOn : ''}`} onClick={() => patch({ flipY: !layer.flipY })}>Flip V</button>
           </div>
         </div>
         <SliderField label="Opacity" value={Math.round(layer.opacity * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ opacity: v / 100 }, 'opacity')} />
-        <select className={ui.input} value={layer.blend} onChange={(e) => patch({ blend: e.target.value })}>
+        <select className={s.field} value={layer.blend} onChange={(e) => patch({ blend: e.target.value })}>
           {BLEND_MODES.map((b) => (
             <option key={b} value={b}>Blend · {b}</option>
           ))}

@@ -65,6 +65,25 @@
   --checker-b: #202020;
   --ai-pulse: rgba(255, 42, 42, 0.55);
 
+  --claude: #d97757;
+  --claude-wash: rgba(217, 119, 87, 0.13);
+  --claude-edge: rgba(217, 119, 87, 0.38);
+
+  --grad-panel: linear-gradient(180deg, #131313 0%, #0e0e0e 100%);
+  --grad-head: linear-gradient(90deg, rgba(225, 29, 33, 0.1) 0%, rgba(20, 20, 20, 0) 45%), linear-gradient(180deg, #151515 0%, #101010 100%);
+  --grad-field: linear-gradient(180deg, #202020 0%, #1a1a1a 100%);
+  --grad-field-hover: linear-gradient(180deg, #262626 0%, #1f1f1f 100%);
+  --grad-raised: linear-gradient(180deg, #232323 0%, #1a1a1a 100%);
+  --grad-raised-hover: linear-gradient(180deg, #2b2b2b 0%, #202020 100%);
+  --grad-accent: linear-gradient(135deg, #ff3b3b 0%, #e11d21 55%, #a3141a 100%);
+  --grad-accent-soft: linear-gradient(135deg, rgba(255, 42, 42, 0.2) 0%, rgba(140, 17, 20, 0.08) 100%);
+  --grad-user: linear-gradient(135deg, #3a1517 0%, #241112 100%);
+  --grad-stage: radial-gradient(70% 80% at 50% 45%, rgba(225, 29, 33, 0.09) 0%, rgba(10, 10, 10, 0) 70%), #0b0b0b;
+  --grad-claude: linear-gradient(135deg, rgba(217, 119, 87, 0.16) 0%, rgba(217, 119, 87, 0.03) 100%);
+  --edge-soft: rgba(255, 255, 255, 0.06);
+  --edge-softer: rgba(255, 255, 255, 0.035);
+  --shadow-soft: 0 6px 20px rgba(0, 0, 0, 0.35);
+
   --titlebar-h: 38px;
   --sidebar-w: 232px;
   --guide-stroke: 1px;

@@ -141,7 +141,9 @@ its own Claude session working on its own canvas from the same brief, told to di
 layout and accents. Every change lands on the canvas as it happens and is listed in that
 version's chat, and the layer Claude just touched flashes, so the work is visible step by
 step rather than only as a result. Messages sent while Claude works steer it; **Stop**
-interrupts it. A finished version can be refined by chat or by hand, duplicated, or applied:
+interrupts it. Versions are never hidden by starting new ones: the strip under the canvas and
+the version menu in the chat header both switch to any version and its chat, and **New
+versions** only changes what the composer sends. A finished version can be refined by chat or by hand, duplicated, or applied:
 **Apply as thumbnail** renders it at 1280×720 and fills the video's thumbnail slot
 (PNG, or JPEG if the PNG would pass YouTube's 2 MB limit).
 

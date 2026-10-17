@@ -25,12 +25,16 @@ function Preview({ studio, variant }: { studio: Studio; variant: VariantState })
 export function Strip({
   studio,
   activeId,
+  generating,
+  onPick,
   onNew,
   onBlank,
   onDiscard
 }: {
   studio: Studio
   activeId: string | null
+  generating: boolean
+  onPick: (id: string) => void
   onNew: () => void
   onBlank: () => void
   onDiscard: (id: string) => void
@@ -45,8 +49,9 @@ export function Strip({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.18 }}
-          className={`${s.card} ${v.id === activeId ? s.cardOn : ''}`}
-          onClick={() => studio.setActive(v.id)}
+          className={`${s.card} ${v.id === activeId && !generating ? s.cardOn : ''}`}
+          whileHover={{ y: -2 }}
+          onClick={() => onPick(v.id)}
         >
           <Preview studio={studio} variant={v} />
           <div className={s.cardFoot}>
@@ -57,7 +62,7 @@ export function Strip({
               title="Duplicate this version to try something else"
               onClick={(e) => {
                 e.stopPropagation()
-                studio.duplicateVariant(v.id)
+                onPick(studio.duplicateVariant(v.id).id)
               }}
             >
               <IconCopy size={11} />
@@ -76,7 +81,7 @@ export function Strip({
         </motion.div>
       ))}
       <div className={s.stripActions}>
-        <button className={s.stripBtn} onClick={onNew}>
+        <button className={`${s.stripBtn} ${generating ? s.stripBtnOn : ''}`} onClick={onNew}>
           <IconPlus size={14} />
           New versions
         </button>

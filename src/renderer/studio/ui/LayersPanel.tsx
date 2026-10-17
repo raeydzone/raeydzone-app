@@ -7,7 +7,6 @@ import { placeAsset } from '../ai'
 import type { Studio, VariantState } from '../engine'
 import { Segmented } from './fields'
 import s from './studio.module.css'
-import ui from '../../styles/ui.module.css'
 
 function AssetThumb({ studio, asset }: { studio: Studio; asset: AssetInfo }): ReactNode {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -190,11 +189,11 @@ export function LayersPanel({
             ))}
           </div>
           <div className={s.panelFoot}>
-            <button className={`${ui.btn} ${s.grow}`} onClick={() => void importFiles()}>
+            <button className={`${s.btn} ${s.grow}`} onClick={() => void importFiles()}>
               <IconImage size={14} />
               Import
             </button>
-            <button className={`${ui.btn} ${s.grow}`} onClick={onGenerate}>
+            <button className={`${s.btn} ${s.grow}`} onClick={onGenerate}>
               Generate…
             </button>
           </div>

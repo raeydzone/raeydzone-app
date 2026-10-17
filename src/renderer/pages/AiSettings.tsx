@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CLAUDE_MODELS, IMAGE_MODELS } from '@shared/studio'
 import type { ClaudeStatus, OpenRouterStatus } from '@shared/studio'
+import { IconClaude } from '../components/Icons'
 import { useStore } from '../state/store'
 import p from './pages.module.css'
 import ui from '../styles/ui.module.css'
@@ -60,7 +61,10 @@ function ClaudeRow({ model, setModel }: { model: string; setModel: (m: string) =
   return (
     <div className={`${p.settingRow} ${p.settingStack}`}>
       <div>
-        <div className={p.settingLabel}>Claude — the thumbnail designer</div>
+        <div className={`${p.settingLabel} ${p.settingLabelIcon}`}>
+          <IconClaude size={16} />
+          Claude — the thumbnail designer
+        </div>
         <div className={p.settingHint}>
           The studio runs Claude Code in the background with your own Claude subscription, so designs come out of your
           plan’s usage, not a per-token bill. Connecting opens a window to sign in{status && !status.found ? ' after installing Claude Code' : ''}.

@@ -22,7 +22,6 @@ import { Strip } from './Strip'
 import { ToolBar, ToolOptionsBar } from './ToolBar'
 import c from '../../components/components.module.css'
 import s from './studio.module.css'
-import ui from '../../styles/ui.module.css'
 
 const SHORTCUTS: Record<string, Tool> = {
   v: 'move', t: 'text', r: 'rect', e: 'ellipse', p: 'pen', l: 'lasso', b: 'brush', c: 'cut', g: 'fill'
@@ -137,7 +136,11 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
     })
   }
 
-  const fresh = generating || !variant
+  const pickVersion = (id: string): void => {
+    studio.setActive(id)
+    setGenerating(false)
+    setTool('move')
+  }
 
   return createPortal(
     <div className={s.studio}>
@@ -150,13 +153,13 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
         <span className={s.grow} />
         {variant && (
           <>
-            <button className={`${ui.btn} ${ui.btnGhost}`} disabled={!variant.past.length} title="Undo (Ctrl+Z)" onClick={() => studio.undo(variant.id)}>
+            <button className={`${s.btn} ${s.btnGhost}`} disabled={!variant.past.length} title="Undo (Ctrl+Z)" onClick={() => studio.undo(variant.id)}>
               Undo
             </button>
-            <button className={`${ui.btn} ${ui.btnGhost}`} disabled={!variant.future.length} title="Redo (Ctrl+Y)" onClick={() => studio.redo(variant.id)}>
+            <button className={`${s.btn} ${s.btnGhost}`} disabled={!variant.future.length} title="Redo (Ctrl+Y)" onClick={() => studio.redo(variant.id)}>
               Redo
             </button>
-            <button className={`${ui.btn} ${ui.btnPrimary}`} disabled={!!job} onClick={apply}>
+            <button className={`${s.btn} ${s.btnPrimary}`} disabled={!!job} onClick={apply}>
               Apply as thumbnail
             </button>
           </>
@@ -186,7 +189,7 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
                 <>
                   <p>No versions yet.</p>
                   <p className={s.hint}>Describe the thumbnail in the panel on the right, or start from a blank canvas.</p>
-                  <button className={ui.btn} onClick={() => studio.addVariant(emptyDoc())}>
+                  <button className={s.btn} onClick={() => studio.addVariant(emptyDoc())}>
                     Blank canvas
                   </button>
                 </>
@@ -199,10 +202,11 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
             <Strip
               studio={studio}
               activeId={state.activeId}
+              generating={generating}
+              onPick={pickVersion}
               onNew={() => setGenerating(true)}
               onBlank={() => {
-                studio.addVariant(emptyDoc())
-                setGenerating(false)
+                pickVersion(studio.addVariant(emptyDoc()).id)
               }}
               onDiscard={setDiscard}
             />
@@ -224,7 +228,14 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
           </div>
         )}
 
-        <Chat studio={studio} variant={fresh ? null : variant} generating={fresh} setGenerating={setGenerating} claude={claude} />
+        <Chat
+          studio={studio}
+          variant={variant}
+          generating={generating}
+          setGenerating={setGenerating}
+          onPick={pickVersion}
+          claude={claude}
+        />
       </div>
 
       <Prompt
@@ -271,10 +282,10 @@ export default function Studio({ video, onBack }: { video: Video; onBack: () => 
             </Dialog.Description>
             <div className={c.modalActions}>
               <Dialog.Close asChild>
-                <button className={`${ui.btn} ${ui.btnGhost}`}>Cancel</button>
+                <button className={`${s.btn} ${s.btnGhost}`}>Cancel</button>
               </Dialog.Close>
               <button
-                className={`${ui.btn} ${ui.btnDanger}`}
+                className={`${s.btn} ${s.btnDanger}`}
                 onClick={() => {
                   if (discard) studio.removeVariant(discard)
                   setDiscard(null)

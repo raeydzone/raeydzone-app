@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CLAUDE_MODELS } from '@shared/studio'
 import type { AssetInfo, ChatItem, ClaudeStatus } from '@shared/studio'
-import { IconClose, IconImage, IconStop } from '../../components/Icons'
+import { IconClaude, IconClose, IconImage, IconStop } from '../../components/Icons'
 import { useStore } from '../../state/store'
 import type { Studio, VariantState } from '../engine'
+import { ModelPicker, VersionPicker } from './Pickers'
 import s from './studio.module.css'
-import ui from '../../styles/ui.module.css'
 
 function Attachment({ studio, asset, onRemove }: { studio: Studio; asset: AssetInfo; onRemove?: () => void }): ReactNode {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -56,12 +56,19 @@ function Message({ studio, item }: { studio: Studio; item: ChatItem }): ReactNod
       </div>
     )
   }
-  return <div className={s.aiMsg}>{item.text}</div>
+  return (
+    <div className={s.aiMsg}>
+      <span className={s.aiAvatar}>
+        <IconClaude size={14} />
+      </span>
+      <div className={s.aiText}>{item.text}</div>
+    </div>
+  )
 }
 
 const STATUS_TEXT: Record<VariantState['status'], string> = {
-  idle: 'Ready',
-  working: 'Claude is working…',
+  idle: 'Ready for changes',
+  working: 'Claude is designing…',
   stopped: 'Stopped',
   error: 'Stopped with an error'
 }
@@ -71,12 +78,14 @@ export function Chat({
   variant,
   generating,
   setGenerating,
+  onPick,
   claude
 }: {
   studio: Studio
   variant: VariantState | null
   generating: boolean
   setGenerating: (v: boolean) => void
+  onPick: (id: string) => void
   claude: ClaudeStatus | null
 }): ReactNode {
   const { notify } = useStore()
@@ -86,9 +95,11 @@ export function Chat({
   const [model, setModel] = useState<string>(CLAUDE_MODELS[0].id)
   const [sending, setSending] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
-  const working = variant?.status === 'working'
+  const fresh = generating || !variant
+  const working = !fresh && variant?.status === 'working'
   const usage = studio.state.usage
   const blocked = claude && (!claude.found || !claude.loggedIn)
+  const variants = studio.state.variants
 
   useEffect(() => {
     void window.raeydzone.ai.prefs().then((p) => setModel(p.claudeModel)).catch(() => {})
@@ -96,8 +107,8 @@ export function Chat({
 
   useEffect(() => {
     const el = listRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [variant?.chat.length, variant?.id])
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [variant?.chat.length, variant?.id, fresh])
 
   const attach = async (fn: () => Promise<AssetInfo[]>): Promise<void> => {
     try {
@@ -119,11 +130,11 @@ export function Chat({
     if (!brief || sending) return
     setSending(true)
     try {
-      if (generating || !variant) {
+      if (fresh) {
         await studio.generate(brief, attached, count)
         setGenerating(false)
       } else {
-        await studio.message(variant.id, brief, attached)
+        await studio.message(variant!.id, brief, attached)
       }
       setText('')
       setAttached([])
@@ -134,7 +145,6 @@ export function Chat({
     }
   }
 
-  const fresh = generating || !variant
   const placeholder = fresh
     ? 'Describe the thumbnail — the idea, the text, the mood. Attach photos and screenshots.'
     : `Message ${variant!.name} — steer it or ask for changes…`
@@ -142,141 +152,164 @@ export function Chat({
   return (
     <div className={s.chat}>
       <div className={s.chatHead}>
-        <div>
-          <div className={s.chatTitle}>{fresh ? 'New thumbnails' : variant!.name}</div>
+        <div className={s.chatHeadMain}>
+          <VersionPicker
+            variants={variants}
+            activeId={variant?.id ?? studio.state.activeId}
+            generating={fresh}
+            onPick={onPick}
+            onNew={() => setGenerating(true)}
+          />
           <div className={`${s.chatStatus} ${working ? s.chatWorking : ''}`}>
-            {fresh ? 'Claude designs each version on the canvas' : STATUS_TEXT[variant!.status]}
+            {working && (
+              <motion.span
+                className={s.spin}
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2.4, ease: 'linear', repeat: Infinity }}
+              >
+                <IconClaude size={12} />
+              </motion.span>
+            )}
+            {fresh ? 'Claude builds every version live on the canvas' : STATUS_TEXT[variant!.status]}
           </div>
         </div>
-        <select
-          className={`${ui.input} ${s.modelSelect}`}
-          value={model}
-          title="Model that designs the thumbnail"
-          onChange={(e) => {
-            setModel(e.target.value)
-            void window.raeydzone.ai.setPrefs({ claudeModel: e.target.value })
+        <ModelPicker
+          model={model}
+          onChange={(id) => {
+            setModel(id)
+            void window.raeydzone.ai.setPrefs({ claudeModel: id })
           }}
-        >
-          {CLAUDE_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
+        />
       </div>
 
       <div ref={listRef} className={s.chatList}>
-        {fresh ? (
-          <div className={s.chatIntro}>
-            <p>
-              Write what the thumbnail should be. Claude builds it layer by layer on the canvas — you watch every
-              step, can move things yourself at any time, and steer it with messages.
-            </p>
-            <p className={s.hint}>Each version runs as its own Claude session from your subscription.</p>
-          </div>
-        ) : (
-          <AnimatePresence initial={false}>
-            {variant!.chat.map((item) => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
-              >
-                <Message studio={studio} item={item} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        )}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={fresh ? 'fresh' : variant!.id}
+            className={s.chatThread}
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
+          >
+            {fresh ? (
+              <div className={s.chatIntro}>
+                <div className={s.introMark}>
+                  <IconClaude size={30} />
+                </div>
+                <p>
+                  Write what the thumbnail should be. Claude builds it layer by layer on the canvas — you watch every
+                  step, can move things yourself at any time, and steer it with messages.
+                </p>
+                <p className={s.hint}>
+                  Each version runs as its own Claude session from your subscription.
+                  {variants.length > 0 ? ' Your existing versions stay in the strip below the canvas.' : ''}
+                </p>
+              </div>
+            ) : (
+              <AnimatePresence initial={false}>
+                {variant!.chat.map((item) => (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
+                  >
+                    <Message studio={studio} item={item} />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      <div className={s.composer}>
+      <div className={s.composerWrap}>
         {blocked && (
-          <div className={s.noteBad + ' ' + s.note}>
+          <div className={`${s.note} ${s.noteBad}`}>
             {claude!.found ? 'Claude is not signed in.' : 'Claude Code is not installed.'} Connect it in Settings.
           </div>
         )}
-        {attached.length > 0 && (
-          <div className={s.attachRow}>
-            {attached.map((a) => (
-              <Attachment key={a.id} studio={studio} asset={a} onRemove={() => setAttached((l) => l.filter((x) => x.id !== a.id))} />
-            ))}
-          </div>
-        )}
-        <textarea
-          className={s.composerInput}
-          value={text}
-          placeholder={placeholder}
-          rows={fresh ? 4 : 2}
-          onChange={(e) => setText(e.target.value)}
-          onPaste={(e) => {
-            if (!e.clipboardData.types.includes('Files')) return
-            e.preventDefault()
-            const paths = window.raeydzone.pathsOf(Array.from(e.clipboardData.files)).filter(Boolean)
-            void attach(async () => {
-              if (paths.length) return studio.importPaths(paths)
-              const one = await studio.pasteClipboard()
-              return one ? [one] : []
-            })
-          }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault()
-            const paths = window.raeydzone.pathsOf(Array.from(e.dataTransfer.files)).filter(Boolean)
-            if (paths.length) void attach(() => studio.importPaths(paths))
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+        <div className={s.composer}>
+          {attached.length > 0 && (
+            <div className={s.attachRow}>
+              {attached.map((a) => (
+                <Attachment key={a.id} studio={studio} asset={a} onRemove={() => setAttached((l) => l.filter((x) => x.id !== a.id))} />
+              ))}
+            </div>
+          )}
+          <textarea
+            className={s.composerInput}
+            value={text}
+            placeholder={placeholder}
+            rows={fresh ? 4 : 2}
+            onChange={(e) => setText(e.target.value)}
+            onPaste={(e) => {
+              if (!e.clipboardData.types.includes('Files')) return
               e.preventDefault()
-              void submit()
-            }
-          }}
-        />
-        {fresh && (
-          <div className={s.countRow}>
-            <span>Versions</span>
-            <Slider.Root className={s.slider} value={[count]} min={1} max={6} step={1} onValueChange={([n]) => setCount(n)}>
-              <Slider.Track className={s.sliderTrack}>
-                <Slider.Range className={s.sliderRange} />
-              </Slider.Track>
-              <Slider.Thumb className={s.sliderThumb} aria-label="Number of versions" />
-            </Slider.Root>
-            <span className={s.countValue}>{count}</span>
+              const paths = window.raeydzone.pathsOf(Array.from(e.clipboardData.files)).filter(Boolean)
+              void attach(async () => {
+                if (paths.length) return studio.importPaths(paths)
+                const one = await studio.pasteClipboard()
+                return one ? [one] : []
+              })
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              const paths = window.raeydzone.pathsOf(Array.from(e.dataTransfer.files)).filter(Boolean)
+              if (paths.length) void attach(() => studio.importPaths(paths))
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                void submit()
+              }
+            }}
+          />
+          {fresh && (
+            <div className={s.countRow}>
+              <span>Versions</span>
+              <Slider.Root className={s.slider} value={[count]} min={1} max={6} step={1} onValueChange={([n]) => setCount(n)}>
+                <Slider.Track className={s.sliderTrack}>
+                  <Slider.Range className={s.sliderRange} />
+                </Slider.Track>
+                <Slider.Thumb className={s.sliderThumb} aria-label="Number of versions" />
+              </Slider.Root>
+              <span className={s.countValue}>{count}</span>
+            </div>
+          )}
+          <div className={s.composerBar}>
+            <button className={s.iconBtn} title="Attach images" onClick={() => void pick()}>
+              <IconImage size={15} />
+            </button>
+            {usage?.fiveHour != null && (
+              <span className={s.usage} title="Claude subscription usage in the current 5-hour window">
+                {Math.round(usage.fiveHour * 100)}% of 5h limit
+              </span>
+            )}
+            <span className={s.grow} />
+            {fresh && variant && (
+              <button className={`${s.btn} ${s.btnGhost}`} onClick={() => setGenerating(false)}>
+                Back to {variant.name}
+              </button>
+            )}
+            {working ? (
+              <>
+                <button className={`${s.btn} ${s.btnDanger}`} onClick={() => studio.stop(variant!.id)}>
+                  <IconStop size={12} />
+                  Stop
+                </button>
+                <button className={`${s.btn} ${s.btnPrimary}`} disabled={!text.trim() || sending} onClick={() => void submit()}>
+                  Steer
+                </button>
+              </>
+            ) : (
+              <button className={`${s.btn} ${s.btnPrimary}`} disabled={!text.trim() || sending || !!blocked} onClick={() => void submit()}>
+                {fresh ? `Generate ${count}` : 'Send'}
+              </button>
+            )}
           </div>
-        )}
-        <div className={s.composerBar}>
-          <button className={`${ui.btn} ${ui.btnGhost}`} title="Attach images" onClick={() => void pick()}>
-            <IconImage size={15} />
-          </button>
-          {usage?.fiveHour != null && (
-            <span className={s.usage} title="Claude subscription usage in the current 5-hour window">
-              {Math.round(usage.fiveHour * 100)}% of 5h limit
-            </span>
-          )}
-          <span className={s.grow} />
-          {!fresh && variant && generating === false && (
-            <button className={`${ui.btn} ${ui.btnGhost}`} onClick={() => setGenerating(true)}>
-              New versions
-            </button>
-          )}
-          {fresh && variant && (
-            <button className={`${ui.btn} ${ui.btnGhost}`} onClick={() => setGenerating(false)}>
-              Back to chat
-            </button>
-          )}
-          {working && !fresh ? (
-            <>
-              <button className={`${ui.btn} ${ui.btnDanger}`} onClick={() => studio.stop(variant!.id)}>
-                <IconStop size={13} />
-                Stop
-              </button>
-              <button className={`${ui.btn} ${ui.btnPrimary}`} disabled={!text.trim() || sending} onClick={() => void submit()}>
-                Steer
-              </button>
-            </>
-          ) : (
-            <button className={`${ui.btn} ${ui.btnPrimary}`} disabled={!text.trim() || sending || !!blocked} onClick={() => void submit()}>
-              {fresh ? `Generate ${count}` : 'Send'}
-            </button>
-          )}
         </div>
       </div>
     </div>
