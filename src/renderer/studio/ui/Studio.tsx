@@ -16,6 +16,8 @@ import { Chat } from './Chat'
 import { Inspector } from './Inspector'
 import { ImageModelsPicker } from './Pickers'
 import { LayersPanel } from './LayersPanel'
+import { ReportsButton } from './Reports'
+import { SpendPill } from './Spend'
 import { Stage } from './Stage'
 import type { Tool, ToolOptions } from './Stage'
 import { Strip } from './Strip'
@@ -155,6 +157,8 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
         <span className={s.headTitle}>Thumbnail Studio</span>
         {job && <span className={s.jobPill}>{job}</span>}
         <span className={s.grow} />
+        <ReportsButton />
+        <SpendPill project={project} />
         <ImageModelsPicker models={state.imageModels} onChange={(task, id) => studio.setImageModel(task, id)} />
         {variant && (
           <>

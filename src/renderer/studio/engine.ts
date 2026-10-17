@@ -387,8 +387,8 @@ export class Studio {
       kind: 'tool', name: call.name, summary: call.name.replace(/_/g, ' '), status: 'running', detail: null
     })
     try {
-      const { reply, summary } = await executeTool(this, call.variantId, call.name, call.args)
-      this.patchChat(call.variantId, id, { status: reply.isError ? 'error' : 'done', summary, detail: reply.isError ? reply.text : null })
+      const { reply, summary, cost } = await executeTool(this, call.variantId, call.name, call.args)
+      this.patchChat(call.variantId, id, { status: reply.isError ? 'error' : 'done', summary, cost, detail: reply.isError ? reply.text : null })
       return reply
     } catch (err) {
       const text = (err as Error).message

@@ -12,6 +12,10 @@ export function formatStamp(iso: string | null | undefined): string {
   return `${pad(d.getDate())}, ${MONTHS[d.getMonth()]} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+export function formatMoney(usd: number): string {
+  return '$' + usd.toFixed(usd > 0 && usd < 1 ? 3 : 2)
+}
+
 export function formatClock(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
   const h = Math.floor(total / 3600)

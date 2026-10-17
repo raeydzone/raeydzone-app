@@ -171,7 +171,33 @@ select.field {
 
 .pillWide {
   width: 100%;
+  height: var(--s-6);
   justify-content: space-between;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--grad-field);
+  font-weight: 500;
+}
+
+.chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: var(--s-6);
+  padding: 0 var(--s-2);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.chip:hover,
+.chip[data-state='open'] {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .pillClaude {
@@ -200,6 +226,17 @@ select.field {
   animation: rise var(--t-mid) var(--ease);
 }
 
+.menuFit {
+  min-width: var(--radix-dropdown-menu-trigger-width);
+  width: var(--radix-dropdown-menu-trigger-width);
+}
+
+.menuGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--hairline) * 2);
+}
+
 .menuLabel {
   padding: var(--s-1) var(--s-2);
   font-size: var(--fs-xs);
@@ -224,6 +261,15 @@ select.field {
 
 .menuItem[data-highlighted] {
   background: var(--grad-accent-soft);
+}
+
+.menuItemDense {
+  padding: var(--s-1) var(--s-2);
+  font-size: var(--fs-sm);
+}
+
+.menuItemOn {
+  color: var(--accent-hot);
 }
 
 .menuText {

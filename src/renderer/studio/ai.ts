@@ -1,5 +1,5 @@
 import { closestAspect, imageModel } from '@shared/studio'
-import type { AssetInfo, ImageLayer, ImageTask, Layer } from '@shared/studio'
+import type { AssetInfo, ImageLayer, ImageRequest, ImageResult, ImageTask, Layer } from '@shared/studio'
 import { canvas, copyOf, ctx2d, decode, encode } from './assets'
 import { findLayer, makeImage } from './doc'
 import type { Studio } from './engine'
@@ -14,7 +14,8 @@ export interface Box {
   height: number
 }
 
-const image = (): typeof window.raeydzone.studio.image => window.raeydzone.studio.image
+const image = (studio: Studio, task: ImageTask, req: Omit<ImageRequest, 'task' | 'projectId'>): Promise<ImageResult> =>
+  window.raeydzone.studio.image({ ...req, task, projectId: studio.projectId })
 
 function imageLayer(studio: Studio, variantId: string, layerId: string): ImageLayer {
   const layer = findLayer(studio.doc(variantId), layerId)
@@ -93,7 +94,7 @@ export async function cutOut(
     (ox || oy ? ', including the flat grey border, which is only padding' : '') +
     '. Keep exactly the same framing, scale and outline as the input: no cropping, zooming, shifting or redrawing. Output only the matte.'
 
-  const res = await image()({ model: model.id, prompt, images: [await encode(padded)], aspect, detail: 'edit' })
+  const res = await image(studio, 'cutout', { model: model.id, prompt, images: [await encode(padded)], aspect, detail: 'edit' })
   const out = await decode(res.data)
   const matte = canvas(crop.width, crop.height)
   const mg = ctx2d(matte)
@@ -184,7 +185,7 @@ export async function generateAsset(
   }
   const aspect = req.aspect && model.aspects.includes(req.aspect) ? req.aspect : closestAspect(16, 9, model.aspects).label
   const transparent = !!req.transparent && model.transparent
-  const res = await image()({ model: model.id, prompt: req.prompt, images, aspect, transparent, detail: 'final' })
+  const res = await image(studio, 'generate', { model: model.id, prompt: req.prompt, images, aspect, transparent, detail: 'final' })
   const bitmap = await decode(res.data)
   const info = await studio.assets.addCanvas(copyOf(bitmap), req.prompt.slice(0, 48), 'generated')
   studio.addAsset(info)
@@ -248,7 +249,7 @@ export async function generativeFill(
     `Repaint only the area that is white in the mask: ${prompt}. ` +
     'Match the surrounding lighting, perspective, grain and style so it looks photographed and real, never AI-generated. ' +
     'Keep everything outside the white area unchanged and keep the same framing. No text, no borders.'
-  const res = await image()({
+  const res = await image(studio, 'fill', {
     model: model.id,
     prompt: instruction,
     images: [await encode(context), await encode(guide)],

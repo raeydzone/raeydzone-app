@@ -1,16 +1,45 @@
 import * as Slider from '@radix-ui/react-slider'
+import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
+import { IconChevron } from '../../components/Icons'
 import s from './studio.module.css'
 
+// The inspector remounts for every selected layer, so folded sections are remembered here
+// rather than in component state, or they would spring open on each click.
+const folded = new Set<string>()
+
 export function Section({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }): ReactNode {
+  const [open, setOpen] = useState(!folded.has(title))
+  const toggle = (): void => {
+    if (open) folded.add(title)
+    else folded.delete(title)
+    setOpen(!open)
+  }
   return (
     <div className={s.section}>
       <div className={s.sectionHead}>
-        <span>{title}</span>
-        {aside}
+        <button className={s.sectionToggle} onClick={toggle} aria-expanded={open}>
+          <motion.span className={s.sectionChevron} animate={{ rotate: open ? 0 : -90 }} transition={{ duration: 0.16 }}>
+            <IconChevron size={11} />
+          </motion.span>
+          {title}
+        </button>
+        {open && aside}
       </div>
-      {children}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            className={s.sectionBody}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: [0.22, 0.61, 0.36, 1] }}
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -103,6 +132,8 @@ function splitAlpha(value: string): { hex: string; alpha: number } {
   return { hex: '#ffffff', alpha: 1 }
 }
 
+const bare = (hex: string): string => hex.slice(1).toUpperCase()
+
 export function ColorField({
   label,
   value,
@@ -115,24 +146,47 @@ export function ColorField({
   alpha?: boolean
 }): ReactNode {
   const { hex, alpha: a } = splitAlpha(value)
+  const [draft, setDraft] = useState(bare(hex))
+  useEffect(() => setDraft(bare(hex)), [hex])
   const join = (h: string, al: number): string =>
     al >= 1 ? h : h + Math.round(al * 255).toString(16).padStart(2, '0')
+  const commit = (): void => {
+    const typed = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(draft.trim())
+    if (typed) onChange(join(splitAlpha('#' + typed[1]).hex, a))
+    else setDraft(bare(hex))
+  }
   return (
-    <label className={s.color}>
-      <span>{label}</span>
-      <input type="color" value={hex} onChange={(e) => onChange(join(e.target.value, a))} />
-      {alpha && (
+    <div className={s.colorField}>
+      <span className={s.fieldLabel}>{label}</span>
+      <div className={s.color}>
+        <label className={s.swatch} style={{ '--swatch': value } as CSSProperties} title="Pick a colour">
+          <input type="color" value={hex} onChange={(e) => onChange(join(e.target.value, a))} />
+        </label>
+        <span className={s.hexMark}>#</span>
         <input
-          className={s.colorAlpha}
-          type="number"
-          min={0}
-          max={100}
-          value={Math.round(a * 100)}
-          title="Opacity %"
-          onChange={(e) => onChange(join(hex, Math.max(0, Math.min(100, Number(e.target.value))) / 100))}
+          className={s.hex}
+          value={draft}
+          maxLength={7}
+          spellCheck={false}
+          aria-label={label + ' hex'}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         />
-      )}
-    </label>
+        {alpha && (
+          <label className={s.colorAlpha} title="Opacity">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={Math.round(a * 100)}
+              onChange={(e) => onChange(join(hex, Math.max(0, Math.min(100, Number(e.target.value))) / 100))}
+            />
+            %
+          </label>
+        )}
+      </div>
+    </div>
   )
 }
 

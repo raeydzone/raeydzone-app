@@ -2,13 +2,55 @@ import * as Slider from '@radix-ui/react-slider'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { formatMoney } from '@shared/format'
 import type { AssetInfo, ChatItem, ClaudeStatus } from '@shared/studio'
-import { IconClaude, IconClose, IconImage, IconStop } from '../../components/Icons'
+import {
+  IconArrowUp, IconBrush, IconCheck, IconChevron, IconClaude, IconClose, IconCopy, IconCursor, IconEye, IconFlag,
+  IconImage, IconLasso, IconLayers, IconLog, IconRect, IconRefresh, IconScissors, IconSparkle, IconStop, IconText,
+  IconTools, IconTrash, IconWand
+} from '../../components/Icons'
 import { useStore } from '../../state/store'
 import type { Studio, VariantState } from '../engine'
 import { ClaudePicker, VersionPicker } from './Pickers'
 import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
+
+type ToolItem = Extract<ChatItem, { kind: 'tool' }>
+type Block = { kind: 'steps'; id: string; items: ToolItem[] } | { kind: 'item'; id: string; item: ChatItem }
+
+const EASE = [0.22, 0.61, 0.36, 1] as const
+
+const TOOL_ICONS: Record<string, (p: { size?: number }) => ReactNode> = {
+  get_document: IconLog,
+  list_fonts: IconText,
+  view_canvas: IconEye,
+  view_asset: IconEye,
+  add_image: IconImage,
+  add_text: IconText,
+  add_shape: IconRect,
+  update_layer: IconCursor,
+  arrange_layer: IconLayers,
+  duplicate_layer: IconCopy,
+  delete_layer: IconTrash,
+  set_background: IconBrush,
+  cut_out: IconScissors,
+  edit_mask: IconLasso,
+  generate_image: IconSparkle,
+  generative_fill: IconWand,
+  undo: IconRefresh,
+  report_missing_feature: IconFlag
+}
+
+function blocksOf(chat: ChatItem[]): Block[] {
+  const out: Block[] = []
+  for (const item of chat) {
+    const last = out[out.length - 1]
+    if (item.kind !== 'tool') out.push({ kind: 'item', id: item.id, item })
+    else if (last?.kind === 'steps') last.items.push(item)
+    else out.push({ kind: 'steps', id: item.id, items: [item] })
+  }
+  return out
+}
 
 function Attachment({ studio, asset, onRemove }: { studio: Studio; asset: AssetInfo; onRemove?: () => void }): ReactNode {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -32,16 +74,75 @@ function Attachment({ studio, asset, onRemove }: { studio: Studio; asset: AssetI
   )
 }
 
+function Step({ item }: { item: ToolItem }): ReactNode {
+  const Icon = TOOL_ICONS[item.name] ?? IconTools
+  const flag = item.name === 'report_missing_feature'
+  return (
+    <div className={`${s.step} ${s['step_' + item.status]} ${flag ? s.stepFlag : ''}`} title={item.detail ?? undefined}>
+      <span className={s.stepIcon}>
+        <Icon size={12} />
+      </span>
+      <span className={s.stepText}>{item.summary}</span>
+      {!!item.cost && <span className={s.stepCost}>{formatMoney(item.cost)}</span>}
+      {item.status === 'error' && <span className={s.stepBad}>failed</span>}
+      {item.detail && <span className={s.stepDetail}>{item.detail}</span>}
+    </div>
+  )
+}
+
+function Steps({ items, latest }: { items: ToolItem[]; latest: boolean }): ReactNode {
+  const [toggled, setToggled] = useState<boolean | null>(null)
+  const running = items.find((i) => i.status === 'running')
+  const open = toggled ?? (latest || !!running)
+  const failed = items.filter((i) => i.status === 'error').length
+  const cost = items.reduce((sum, i) => sum + (i.cost ?? 0), 0)
+  return (
+    <div className={`${s.steps} ${running ? s.stepsLive : ''}`}>
+      <button className={s.stepsHead} onClick={() => setToggled(!open)} aria-expanded={open}>
+        <span className={s.stepsMark}>
+          {running ? (
+            <motion.span
+              className={s.spin}
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2.4, ease: 'linear', repeat: Infinity }}
+            >
+              <IconClaude size={13} />
+            </motion.span>
+          ) : (
+            <IconCheck size={12} />
+          )}
+        </span>
+        <span className={s.stepsTitle}>
+          {running ? 'Working' : 'Worked through'} · {items.length} {items.length === 1 ? 'step' : 'steps'}
+        </span>
+        {failed > 0 && <span className={s.stepBad}>{failed} failed</span>}
+        {cost > 0 && <span className={s.stepCost}>{formatMoney(cost)}</span>}
+        <motion.span className={s.stepsChevron} animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.16, ease: EASE }}>
+          <IconChevron size={12} />
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            className={s.stepsBody}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: EASE }}
+          >
+            <div className={s.stepList}>
+              {items.map((item) => (
+                <Step key={item.id} item={item} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 function Message({ studio, item }: { studio: Studio; item: ChatItem }): ReactNode {
-  if (item.kind === 'tool') {
-    return (
-      <div className={`${s.toolRow} ${s['tool_' + item.status]}`} title={item.detail ?? item.name}>
-        <span className={s.toolDot} />
-        <span className={s.toolText}>{item.summary}</span>
-        {item.detail && <span className={s.toolError}>{item.detail}</span>}
-      </div>
-    )
-  }
   if (item.kind === 'note') return <div className={`${s.note} ${item.bad ? s.noteBad : ''}`}>{item.text}</div>
   if (item.kind === 'user') {
     const assets = item.images.map((id) => studio.state.assets.find((a) => a.id === id)).filter(Boolean) as AssetInfo[]
@@ -56,10 +157,11 @@ function Message({ studio, item }: { studio: Studio; item: ChatItem }): ReactNod
       </div>
     )
   }
+  if (item.kind === 'tool') return null
   return (
     <div className={s.aiMsg}>
       <span className={s.aiAvatar}>
-        <IconClaude size={14} />
+        <IconClaude size={13} />
       </span>
       <div className={s.aiText}>{item.text}</div>
     </div>
@@ -71,6 +173,28 @@ const STATUS_TEXT: Record<VariantState['status'], string> = {
   working: 'Claude is designing…',
   stopped: 'Stopped',
   error: 'Stopped with an error'
+}
+
+function Thread({ studio, variant }: { studio: Studio; variant: VariantState }): ReactNode {
+  const blocks = blocksOf(variant.chat)
+  return (
+    <AnimatePresence initial={false}>
+      {blocks.map((b, i) => (
+        <motion.div
+          key={b.id}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.16, ease: EASE }}
+        >
+          {b.kind === 'steps' ? (
+            <Steps items={b.items} latest={i === blocks.length - 1} />
+          ) : (
+            <Message studio={studio} item={b.item} />
+          )}
+        </motion.div>
+      ))}
+    </AnimatePresence>
+  )
 }
 
 export function Chat({
@@ -99,11 +223,12 @@ export function Chat({
   const usage = studio.state.usage
   const blocked = claude && (!claude.found || !claude.loggedIn)
   const variants = studio.state.variants
+  const lastItem = variant?.chat[variant.chat.length - 1]
 
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  }, [variant?.chat.length, variant?.id, fresh])
+  }, [variant?.chat.length, lastItem?.kind === 'tool' && lastItem.status, variant?.id, fresh])
 
   const attach = async (fn: () => Promise<AssetInfo[]>): Promise<void> => {
     try {
@@ -142,7 +267,10 @@ export function Chat({
 
   const placeholder = fresh
     ? 'Describe the thumbnail — the idea, the text, the mood. Attach photos and screenshots.'
-    : `Message ${variant!.name} — steer it or ask for changes…`
+    : working
+      ? 'Steer Claude while it works…'
+      : `Message ${variant!.name} — ask for changes…`
+  const canSend = !!text.trim() && !sending && !blocked
 
   return (
     <div className={s.chat}>
@@ -156,23 +284,26 @@ export function Chat({
             onNew={() => setGenerating(true)}
           />
           <div className={`${s.chatStatus} ${working ? s.chatWorking : ''}`}>
-            {working && (
-              <motion.span
-                className={s.spin}
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2.4, ease: 'linear', repeat: Infinity }}
-              >
-                <IconClaude size={12} />
-              </motion.span>
-            )}
-            {fresh ? 'Claude builds every version live on the canvas' : STATUS_TEXT[variant!.status]}
+            {fresh ? 'Built live on the canvas' : STATUS_TEXT[variant!.status]}
           </div>
         </div>
-        <ClaudePicker
-          choice={fresh ? studio.state.claude : variant!.claude}
-          scope={fresh ? 'new versions' : variant!.name}
-          onChange={(patch) => studio.setClaude(fresh ? null : variant!.id, patch)}
-        />
+        {fresh && variant ? (
+          <button className={k.chip} onClick={() => setGenerating(false)}>
+            Back to {variant.name}
+          </button>
+        ) : usage?.fiveHour != null && (
+          <div className={s.usage} title="Claude subscription usage in the current 5-hour window">
+            <span>5h limit</span>
+            <span className={s.usageBar}>
+              <motion.span
+                className={s.usageFill}
+                animate={{ width: `${Math.min(100, Math.round(usage.fiveHour * 100))}%` }}
+                transition={{ duration: 0.2, ease: EASE }}
+              />
+            </span>
+            <span className={s.usageValue}>{Math.round(usage.fiveHour * 100)}%</span>
+          </div>
+        )}
       </div>
 
       <div ref={listRef} className={s.chatList}>
@@ -183,7 +314,7 @@ export function Chat({
             initial={{ opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
+            transition={{ duration: 0.16, ease: EASE }}
           >
             {fresh ? (
               <div className={s.chatIntro}>
@@ -200,18 +331,7 @@ export function Chat({
                 </p>
               </div>
             ) : (
-              <AnimatePresence initial={false}>
-                {variant!.chat.map((item) => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
-                  >
-                    <Message studio={studio} item={item} />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+              <Thread studio={studio} variant={variant!} />
             )}
           </motion.div>
         </AnimatePresence>
@@ -232,10 +352,9 @@ export function Chat({
             </div>
           )}
           <textarea
-            className={s.composerInput}
+            className={`${s.composerInput} ${fresh ? s.composerFresh : ''}`}
             value={text}
             placeholder={placeholder}
-            rows={fresh ? 4 : 2}
             onChange={(e) => setText(e.target.value)}
             onPaste={(e) => {
               if (!e.clipboardData.types.includes('Files')) return
@@ -276,34 +395,35 @@ export function Chat({
             <button className={k.iconBtn} title="Attach images" onClick={() => void pick()}>
               <IconImage size={15} />
             </button>
-            {usage?.fiveHour != null && (
-              <span className={s.usage} title="Claude subscription usage in the current 5-hour window">
-                {Math.round(usage.fiveHour * 100)}% of 5h limit
-              </span>
-            )}
+            <ClaudePicker
+              choice={fresh ? studio.state.claude : variant!.claude}
+              scope={fresh ? 'new versions' : variant!.name}
+              onChange={(patch) => studio.setClaude(fresh ? null : variant!.id, patch)}
+            />
             <span className={s.grow} />
-            {fresh && variant && (
-              <button className={`${k.btn} ${k.btnGhost}`} onClick={() => setGenerating(false)}>
-                Back to {variant.name}
+            {working && (
+              <button className={`${s.roundBtn} ${s.roundStop}`} title="Stop" onClick={() => studio.stop(variant!.id)}>
+                <IconStop size={12} />
               </button>
             )}
-            {working ? (
-              <>
-                <button className={`${k.btn} ${k.btnDanger}`} onClick={() => studio.stop(variant!.id)}>
-                  <IconStop size={12} />
-                  Stop
-                </button>
-                <button className={`${k.btn} ${k.btnPrimary}`} disabled={!text.trim() || sending} onClick={() => void submit()}>
-                  Steer
-                </button>
-              </>
+            {fresh ? (
+              <button className={`${k.btn} ${k.btnPrimary} ${s.sendWide}`} disabled={!canSend} onClick={() => void submit()}>
+                Generate
+                <IconArrowUp size={13} />
+              </button>
             ) : (
-              <button className={`${k.btn} ${k.btnPrimary}`} disabled={!text.trim() || sending || !!blocked} onClick={() => void submit()}>
-                {fresh ? `Generate ${count}` : 'Send'}
+              <button
+                className={`${s.roundBtn} ${s.roundSend}`}
+                disabled={!canSend}
+                title={working ? 'Steer (Enter)' : 'Send (Enter)'}
+                onClick={() => void submit()}
+              >
+                <IconArrowUp size={15} />
               </button>
             )}
           </div>
         </div>
+        <p className={s.composerHint}>Enter sends · Shift+Enter for a new line</p>
       </div>
     </div>
   )

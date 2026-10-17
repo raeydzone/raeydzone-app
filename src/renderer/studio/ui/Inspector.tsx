@@ -17,6 +17,8 @@ import s from './studio.module.css'
 
 type Patch = (patch: Record<string, unknown>, key?: string) => void
 
+const blendName = (mode: string): string => mode.charAt(0).toUpperCase() + mode.slice(1).replace('-', ' ')
+
 function Effect<K extends 'shadow' | 'glow' | 'stroke' | 'tint'>({
   layer,
   name,
@@ -58,8 +60,8 @@ function TextSection({ layer, patch, focus }: { layer: TextLayer; patch: Patch; 
         onChange={(e) => patch({ text: e.target.value }, 'text')}
       />
       <p className={s.hint}>Wrap words in *stars* to paint them in the highlight colour.</p>
+      <FontPicker value={layer.font} onChange={(font) => patch({ font })} />
       <div className={s.grid2}>
-        <FontPicker value={layer.font} onChange={(font) => patch({ font })} />
         {weights.length > 1 ? (
           <MenuSelect
             wide
@@ -73,21 +75,19 @@ function TextSection({ layer, patch, focus }: { layer: TextLayer; patch: Patch; 
             }]}
           />
         ) : (
-          <span className={s.hint}>One weight</span>
+          <span className={s.hint}>One weight only</span>
         )}
-      </div>
-      <div className={s.grid2}>
         <NumField label="Size" value={layer.size} onChange={(v) => patch({ size: v }, 'size')} />
-        <Segmented
-          value={layer.align}
-          onChange={(align) => patch({ align })}
-          options={[
-            { id: 'left', label: 'L', title: 'Align left' },
-            { id: 'center', label: 'C', title: 'Centre' },
-            { id: 'right', label: 'R', title: 'Align right' }
-          ]}
-        />
       </div>
+      <Segmented
+        value={layer.align}
+        onChange={(align) => patch({ align })}
+        options={[
+          { id: 'left', label: 'Left', title: 'Align left' },
+          { id: 'center', label: 'Centre', title: 'Centre' },
+          { id: 'right', label: 'Right', title: 'Align right' }
+        ]}
+      />
       <div className={s.grid2}>
         <ColorField label="Fill" value={layer.fill} onChange={(fill) => patch({ fill }, 'fill')} />
         <ColorField label="Highlight" value={layer.highlight} onChange={(highlight) => patch({ highlight }, 'highlight')} />
@@ -268,19 +268,24 @@ export function Inspector({
         <div className={s.grid2}>
           <NumField label="Rotate" value={layer.rotation} onChange={(rotation) => patch({ rotation }, 'rot')} />
           <div className={s.rowGap}>
-            <button className={`${k.btn} ${s.grow} ${layer.flipX ? k.btnOn : ''}`} onClick={() => patch({ flipX: !layer.flipX })}>Flip H</button>
-            <button className={`${k.btn} ${s.grow} ${layer.flipY ? k.btnOn : ''}`} onClick={() => patch({ flipY: !layer.flipY })}>Flip V</button>
+            <button className={`${s.miniBtn} ${layer.flipX ? s.miniOn : ''}`} title="Mirror horizontally" onClick={() => patch({ flipX: !layer.flipX })}>Flip H</button>
+            <button className={`${s.miniBtn} ${layer.flipY ? s.miniOn : ''}`} title="Mirror vertically" onClick={() => patch({ flipY: !layer.flipY })}>Flip V</button>
           </div>
         </div>
         <SliderField label="Opacity" value={Math.round(layer.opacity * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ opacity: v / 100 }, 'opacity')} />
         <MenuSelect
           wide
           align="start"
-          trigger={<span className={s.pillGrow}>Blend · {layer.blend}</span>}
+          trigger={
+            <span className={s.pillGrow}>
+              <span className={s.pillDim}>Blend</span> {blendName(layer.blend)}
+            </span>
+          }
           groups={[{
             title: 'Blend mode',
             value: layer.blend,
-            options: BLEND_MODES.map((b) => ({ id: b, label: b })),
+            grid: true,
+            options: BLEND_MODES.map((b) => ({ id: b, label: blendName(b) })),
             onChange: (blend) => patch({ blend })
           }]}
         />

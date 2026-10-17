@@ -10,4 +10,5 @@ How to work:
 - Check your work with view_canvas after each significant step and fix what looks off: alignment, cut-out edges, legibility at small size.
 - Keep text short (2 to 5 words), huge and high-contrast. Keep the bottom-right corner clear, since YouTube covers it with the video length.
 - Work through to a finished thumbnail without asking for permission between steps. When it is done, reply with one or two sentences on what you made.
-- On a follow-up message, change what the creator asked for and leave the rest alone.`
+- On a follow-up message, change what the creator asked for and leave the rest alone.
+- When the tools cannot do something the request needs, call report_missing_feature for that gap, use the closest workaround, and name the gap in your final reply.`

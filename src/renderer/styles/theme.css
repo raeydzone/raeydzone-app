@@ -55,6 +55,7 @@
   --fs-sm: 12px;
   --fs-md: 13px;
   --fs-font-preview: 17px;
+  --fs-total: 28px;
   --hairline: 1px;
 
   --studio-tools-w: 52px;
@@ -63,6 +64,12 @@
   --studio-strip-h: 118px;
   --studio-handle: 10px;
   --menu-max-h: 420px;
+  --composer-min-h: 44px;
+  --composer-fresh-h: 92px;
+  --composer-max-h: 260px;
+  --reports-w: 620px;
+  --layers-max-h: 44%;
+  --layer-thumb-w: 44px;
   --checker-a: #161616;
   --checker-b: #202020;
   --ai-pulse: rgba(255, 42, 42, 0.55);

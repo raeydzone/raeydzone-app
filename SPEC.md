@@ -156,8 +156,8 @@ per-run token; main forwards each tool call to the renderer, which executes it a
 document and replies. Any `ANTHROPIC_API_KEY` is removed from the child environment so usage
 never silently moves to API billing. Sessions idle for 15 minutes are ended and resumed by id
 on the next message. Model and **effort** (low → max — higher effort spends more of the plan)
-belong to each version, not to the app: the picker in the chat header changes the version being
-viewed, and while composing new versions it sets what they start with (Opus 5.5 at medium the
+belong to each version, not to the app: the model and effort pickers in the composer change the
+version being viewed, and while composing new versions they set what they start with (Opus 5.5 at medium the
 first time, then whatever was last chosen in that studio). A changed choice restarts an idle
 session on the same conversation.
 
@@ -181,6 +181,22 @@ task** from its header — generate, generative fill, cut-out — out of GPT Ima
 to the nearest aspect ratio the chosen model supports so mattes stay aligned. The key is one
 generic OpenRouter key, stored with Electron `safeStorage` and only ever sent to
 openrouter.ai.
+
+The chat shows Claude's tool calls as a collapsible work log per turn — one row per step with
+its icon, any image cost, and failures — that stays open while Claude works and folds away once
+it replies. The composer grows with what is typed, up to a cap, then scrolls.
+
+**AI spend** in the studio header is the all-time cost of image generation across every studio:
+each OpenRouter call's reported price is appended to `studio-spend.json` in the app's user-data
+folder, and the popover breaks it down by today, this month, this project, model and task, with the
+OpenRouter key's own lifetime usage and remaining credit beside it. Claude adds nothing there — it
+runs on the subscription.
+
+**Missing features** collects what Claude could not do. Claude has a `report_missing_feature`
+canvas tool and is told to file one per gap it hits, then carry on with a workaround. Reports land
+in `studio-feedback.json` in the user-data folder; the same title reported again counts up instead
+of duplicating. The dialog lists them with project, model and time, marks them built or deletes
+them, and copies the open ones as Markdown.
 
 Studio data lives in `<project>/thumbnail_studio/` (the video or stream folder): `studio.json` (versions, layers, chat)
 and `assets/` (attachments, generated images, masks). Unreferenced assets are pruned when the

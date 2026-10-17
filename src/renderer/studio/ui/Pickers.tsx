@@ -70,21 +70,29 @@ export function ClaudePicker({
   const model = CLAUDE_MODELS.find((m) => m.id === choice.model) ?? CLAUDE_MODELS[0]
   const effort = CLAUDE_EFFORTS.find((e) => e.id === choice.effort) ?? CLAUDE_EFFORTS[1]
   return (
-    <MenuSelect
-      claude
-      title={`Model and effort for ${scope} — higher effort uses more of your plan`}
-      trigger={
-        <>
-          <IconClaude size={15} />
-          <span>{model.label.replace('Claude ', '')}</span>
-          <span className={s.pillDim}>· {effort.label}</span>
-        </>
-      }
-      groups={[
-        { title: `Model · ${scope}`, value: model.id, options: CLAUDE_MODELS, onChange: (id) => onChange({ model: id }) },
-        { title: 'Effort', value: effort.id, options: CLAUDE_EFFORTS, onChange: (id) => onChange({ effort: id }) }
-      ]}
-    />
+    <>
+      <MenuSelect
+        chip
+        side="top"
+        align="start"
+        title={`Claude model for ${scope}`}
+        trigger={
+          <>
+            <IconClaude size={13} />
+            <span>{model.label.replace('Claude ', '')}</span>
+          </>
+        }
+        groups={[{ title: `Model · ${scope}`, value: model.id, options: CLAUDE_MODELS, onChange: (id) => onChange({ model: id }) }]}
+      />
+      <MenuSelect
+        chip
+        side="top"
+        align="start"
+        title="Effort — higher effort thinks longer and uses more of your plan"
+        trigger={<span>{effort.label}</span>}
+        groups={[{ title: 'Effort', value: effort.id, options: CLAUDE_EFFORTS, onChange: (id) => onChange({ effort: id }) }]}
+      />
+    </>
   )
 }
 

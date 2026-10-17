@@ -219,5 +219,15 @@ export const STUDIO_TOOLS: ToolDef[] = [
     name: 'undo',
     description: 'Reverts the last change to the canvas.',
     inputSchema: obj({})
+  },
+  {
+    name: 'report_missing_feature',
+    description: 'Files a note for the developers of this studio when the tools fall short of what the request needed: a missing tool, option or effect, or a tool that misbehaved. The reports are collected so the gap can be built for future requests. File one per gap as soon as you hit it, then carry on with the best workaround. Keep the title short and generic so repeats of the same gap group together, e.g. "Curved text along an arc". Not for creative choices or questions to the creator.',
+    inputSchema: obj({
+      kind: { type: 'string', enum: ['missing_feature', 'bug'], description: 'missing_feature when the capability does not exist, bug when a tool did not do what it promised.' },
+      title: str('Short, generic name of the gap.'),
+      detail: str('What the request needed, and exactly where the tools fell short.'),
+      workaround: str('What you did instead, if anything.')
+    }, ['kind', 'title', 'detail'])
   }
 ]

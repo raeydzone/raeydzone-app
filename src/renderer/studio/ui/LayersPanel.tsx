@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { AssetInfo, Layer } from '@shared/studio'
-import { IconEye, IconImage, IconLock, IconPlus, IconTrash } from '../../components/Icons'
+import type { AssetInfo, Layer, StudioDoc } from '@shared/studio'
+import {
+  IconArrowDown, IconArrowUp, IconCopy, IconEye, IconEyeOff, IconImage, IconLock, IconTrash
+} from '../../components/Icons'
 import { useStore } from '../../state/store'
 import { placeAsset } from '../ai'
 import type { Studio, VariantState } from '../engine'
+import { drawDoc } from '../render'
 import { Segmented } from './fields'
 import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
@@ -24,7 +27,23 @@ function AssetThumb({ studio, asset }: { studio: Studio; asset: AssetInfo }): Re
   return <canvas ref={ref} className={s.assetCanvas} width={160} height={90} />
 }
 
-const KIND_LABEL: Record<Layer['kind'], string> = { image: 'IMG', text: 'TXT', shape: 'SHP' }
+const KIND_LABEL: Record<Layer['kind'], string> = { image: 'Image', text: 'Text', shape: 'Shape' }
+
+function LayerThumb({ studio, doc, layer }: { studio: Studio; doc: StudioDoc; layer: Layer }): ReactNode {
+  const ref = useRef<HTMLCanvasElement>(null)
+  const tick = studio.state.tick
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      const c = ref.current
+      if (!c) return
+      const g = c.getContext('2d')!
+      g.setTransform(c.width / doc.width, 0, 0, c.height / doc.height, 0, 0)
+      drawDoc(g, doc, studio.assets, layer.id)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [studio, doc, layer, tick])
+  return <canvas ref={ref} className={s.layerThumb} width={80} height={45} />
+}
 
 function LayerRow({
   studio,
@@ -57,35 +76,28 @@ function LayerRow({
       }}
       onClick={() => studio.select(v, layer.id)}
     >
+      <LayerThumb studio={studio} doc={variant.doc} layer={layer} />
+      <div className={s.layerLabel}>
+        {renaming ? (
+          <input
+            className={s.layerRename}
+            autoFocus
+            defaultValue={layer.name}
+            onBlur={(e) => {
+              studio.patch(v, layer.id, { name: e.target.value || layer.name })
+              setRenaming(false)
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          />
+        ) : (
+          <span className={s.layerName} onDoubleClick={() => setRenaming(true)} title="Double-click to rename">
+            {layer.name}
+          </span>
+        )}
+        <span className={s.layerKind}>{KIND_LABEL[layer.kind]}</span>
+      </div>
       <button
-        className={s.layerIcon}
-        title={layer.visible ? 'Hide' : 'Show'}
-        onClick={(e) => {
-          e.stopPropagation()
-          studio.patch(v, layer.id, { visible: !layer.visible })
-        }}
-      >
-        <IconEye size={13} />
-      </button>
-      <span className={s.layerKind}>{KIND_LABEL[layer.kind]}</span>
-      {renaming ? (
-        <input
-          className={s.layerRename}
-          autoFocus
-          defaultValue={layer.name}
-          onBlur={(e) => {
-            studio.patch(v, layer.id, { name: e.target.value || layer.name })
-            setRenaming(false)
-          }}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-        />
-      ) : (
-        <span className={s.layerName} onDoubleClick={() => setRenaming(true)}>
-          {layer.name}
-        </span>
-      )}
-      <button
-        className={`${s.layerIcon} ${layer.locked ? s.layerLocked : ''}`}
+        className={`${s.layerIcon} ${layer.locked ? s.layerIconOn : ''}`}
         title={layer.locked ? 'Unlock' : 'Lock — clicks on the canvas pass through'}
         onClick={(e) => {
           e.stopPropagation()
@@ -93,6 +105,16 @@ function LayerRow({
         }}
       >
         <IconLock size={12} />
+      </button>
+      <button
+        className={`${s.layerIcon} ${layer.visible ? '' : s.layerIconOn}`}
+        title={layer.visible ? 'Hide' : 'Show'}
+        onClick={(e) => {
+          e.stopPropagation()
+          studio.patch(v, layer.id, { visible: !layer.visible })
+        }}
+      >
+        {layer.visible ? <IconEye size={13} /> : <IconEyeOff size={13} />}
       </button>
     </div>
   )
@@ -154,18 +176,22 @@ export function LayersPanel({
             ))}
           </div>
           <div className={s.panelFoot}>
-            <button className={s.footBtn} title="Move up" disabled={!selected} onClick={() => selected && studio.arrange(v, selected, 'up')}>↑</button>
-            <button className={s.footBtn} title="Move down" disabled={!selected} onClick={() => selected && studio.arrange(v, selected, 'down')}>↓</button>
+            <button className={s.footBtn} title="Move up" disabled={!selected} onClick={() => selected && studio.arrange(v, selected, 'up')}>
+              <IconArrowUp size={13} />
+            </button>
+            <button className={s.footBtn} title="Move down" disabled={!selected} onClick={() => selected && studio.arrange(v, selected, 'down')}>
+              <IconArrowDown size={13} />
+            </button>
             <button
               className={s.footBtn}
               title="Duplicate (Ctrl+D)"
               disabled={!selected}
               onClick={() => selected && studio.select(v, studio.duplicate(v, selected).id)}
             >
-              <IconPlus size={14} />
+              <IconCopy size={13} />
             </button>
             <button className={s.footBtn} title="Delete (Del)" disabled={!selected} onClick={() => selected && studio.remove(v, selected)}>
-              <IconTrash size={14} />
+              <IconTrash size={13} />
             </button>
           </div>
         </>

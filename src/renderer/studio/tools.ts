@@ -13,12 +13,12 @@ type Args = Record<string, unknown>
 interface Outcome {
   reply: ToolReply
   summary: string
+  cost?: number | null
 }
 
 const PLACEMENT = new Set(['asset_id', 'fit', 'below_layer_id', 'layer_id'])
 const label = (l: Layer): string => (l.kind === 'text' ? `"${l.text.replace(/\*/g, '').slice(0, 30)}"` : l.name)
 const json = (value: unknown): string => JSON.stringify(value)
-const money = (cost: number | null): string => (cost ? ` ($${cost.toFixed(3)})` : '')
 
 function props(args: Args): Args {
   return Object.fromEntries(Object.entries(args).filter(([k]) => !PLACEMENT.has(k)))
@@ -196,7 +196,8 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
       const cost = await cutOut(studio, v, id, subject, box(args.box))
       return {
         reply: { text: `Cut-out mask written on ${id}. Check the edges with view_canvas (try layer_id or a zoomed region) and fix them with edit_mask.` },
-        summary: `Cut out ${subject ?? 'the subject'}${money(cost)}`
+        summary: `Cut out ${subject ?? 'the subject'}`,
+        cost
       }
     }
 
@@ -219,17 +220,18 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
         aspect: typeof args.aspect_ratio === 'string' ? args.aspect_ratio : undefined,
         transparent: !!args.transparent
       })
+      let total = cost
       let text = `${model} generated asset ${info.id} (${info.w}x${info.h})` +
         (args.transparent ? (transparent ? ' with a transparent background.' : '. This model cannot make transparent backgrounds — use cut_out.') : '.')
       if (args.place) {
         const layer = placeAsset(studio, v, info, 'contain', true)
         text += ` Placed as layer ${layer.id}.`
         if (args.cut_out && !transparent) {
-          await cutOut(studio, v, layer.id)
+          total = (total ?? 0) + ((await cutOut(studio, v, layer.id)) ?? 0)
           text += ' Subject cut out.'
         }
       }
-      return { reply: { text }, summary: `Generated "${prompt.slice(0, 40)}" · ${model}${money(cost)}` }
+      return { reply: { text }, summary: `Generated "${prompt.slice(0, 40)}" · ${model}`, cost: total }
     }
 
     case 'generative_fill': {
@@ -239,7 +241,8 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
       const { layer, cost } = await generativeFill(studio, v, prompt, region, true)
       return {
         reply: { text: `Fill landed as layer ${layer.id}: ${json(describeLayer(layer))}` },
-        summary: `Generative fill "${prompt.slice(0, 40)}"${money(cost)}`
+        summary: `Generative fill "${prompt.slice(0, 40)}"`,
+        cost
       }
     }
 
@@ -248,6 +251,22 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
         reply: { text: studio.undo(v) ? 'Undone.' : 'Nothing to undo.' },
         summary: 'Undid the last change'
       }
+
+    case 'report_missing_feature': {
+      const title = str(args, 'title').trim()
+      const repeat = await window.raeydzone.studio.report({
+        kind: args.kind === 'bug' ? 'bug' : 'missing',
+        title,
+        detail: str(args, 'detail').trim(),
+        workaround: typeof args.workaround === 'string' && args.workaround.trim() ? args.workaround.trim() : null,
+        project: studio.project.name,
+        model: studio.state.variants.find((x) => x.id === v)?.claude.model ?? ''
+      })
+      return {
+        reply: { text: (repeat ? 'Logged — this gap was already reported, so its count went up.' : 'Logged for the developers.') + ' Carry on with the best workaround.' },
+        summary: `Flagged for the developers: ${title}`
+      }
+    }
 
     default:
       throw new Error('Unknown tool ' + name)

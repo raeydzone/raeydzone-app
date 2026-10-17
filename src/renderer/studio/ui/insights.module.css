@@ -1,0 +1,256 @@
+.pillLabel {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.pillValue {
+  font-family: var(--font-mono);
+}
+
+.flagPill {
+  color: var(--text-dim);
+}
+
+.badge {
+  display: grid;
+  place-items: center;
+  min-width: var(--s-4);
+  height: var(--s-4);
+  padding: 0 var(--s-1);
+  border-radius: var(--r-xl);
+  background: var(--grad-accent);
+  box-shadow: 0 0 var(--s-3) var(--accent-glow);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+}
+
+.spend {
+  width: var(--studio-chat-w);
+  display: grid;
+  gap: var(--s-3);
+  padding: var(--s-4);
+}
+
+.spendHead {
+  display: grid;
+  gap: var(--s-1);
+}
+
+.kicker {
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.total {
+  font-family: var(--font-mono);
+  font-size: var(--fs-total);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.sub {
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-2);
+}
+
+.stat {
+  display: grid;
+  gap: calc(var(--hairline) * 2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--bg-inset);
+  box-shadow: inset 0 0 0 var(--hairline) var(--edge-softer);
+}
+
+.statLabel {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.statValue {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+
+.block {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.modelRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  column-gap: var(--s-2);
+  row-gap: var(--s-1);
+  font-size: var(--fs-sm);
+}
+
+.modelName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.modelCount {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.modelCost {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+.bar {
+  grid-column: 1 / -1;
+  height: calc(var(--hairline) * 3);
+  border-radius: var(--r-xl);
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-deep), var(--accent-hot));
+}
+
+.tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  padding-top: var(--s-1);
+}
+
+.foot {
+  display: grid;
+  gap: var(--s-1);
+  padding-top: var(--s-3);
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.reports {
+  width: min(var(--reports-w), calc(100vw - var(--s-7)));
+  max-height: calc(100vh - var(--s-7) * 2);
+  display: flex;
+  flex-direction: column;
+}
+
+.reportsBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+}
+
+.reportList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  padding-right: var(--s-1);
+}
+
+.empty {
+  padding: var(--s-6) 0;
+  text-align: center;
+  font-size: var(--fs-md);
+  color: var(--text-faint);
+}
+
+.report {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+  border-radius: var(--r-lg);
+  background: var(--grad-raised);
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--edge-softer);
+}
+
+.reportDone {
+  opacity: 0.6;
+}
+
+.reportHead {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.kind {
+  padding: calc(var(--hairline) * 2) var(--s-2);
+  border-radius: var(--r-xl);
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 var(--hairline) var(--accent-edge);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--accent-hot);
+}
+
+.kindBug {
+  background: var(--bg-active);
+  box-shadow: inset 0 0 0 var(--hairline) var(--edge-soft);
+  color: var(--warn);
+}
+
+.reportTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-md);
+  font-weight: 620;
+  color: var(--text);
+}
+
+.count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--accent-hot);
+}
+
+.reportText {
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+
+.reportWork {
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.reportWork span {
+  margin-right: var(--s-1);
+  font-weight: 600;
+  color: var(--text-faint);
+}
+
+.reportMeta {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}

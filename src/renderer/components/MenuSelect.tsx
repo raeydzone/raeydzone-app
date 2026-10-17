@@ -14,6 +14,7 @@ export interface MenuGroup {
   value: string
   options: readonly MenuOption[]
   onChange: (id: string) => void
+  grid?: boolean
 }
 
 export function MenuSelect({
@@ -21,37 +22,54 @@ export function MenuSelect({
   trigger,
   title,
   align = 'end',
+  side = 'bottom',
   claude = false,
-  wide = false
+  wide = false,
+  chip = false
 }: {
   groups: MenuGroup[]
   trigger: ReactNode
   title?: string
   align?: 'start' | 'end'
+  side?: 'top' | 'bottom'
   claude?: boolean
   wide?: boolean
+  chip?: boolean
 }): ReactNode {
+  const look = chip ? k.chip : `${k.pill} ${claude ? k.pillClaude : ''} ${wide ? k.pillWide : ''}`
   return (
     <Menu.Root>
-      <Menu.Trigger className={`${k.pill} ${claude ? k.pillClaude : ''} ${wide ? k.pillWide : ''}`} title={title}>
+      <Menu.Trigger className={look} title={title}>
         {trigger}
-        <IconChevron size={12} />
+        <IconChevron size={chip ? 11 : 12} />
       </Menu.Trigger>
       <Menu.Portal>
-        <Menu.Content className={k.menu} align={align} sideOffset={6} collisionPadding={12}>
+        <Menu.Content
+          className={`${k.menu} ${wide ? k.menuFit : ''}`}
+          align={align}
+          side={side}
+          sideOffset={6}
+          collisionPadding={12}
+        >
           {groups.map((g, i) => (
             <div key={g.title}>
               {i > 0 && <Menu.Separator className={k.menuSep} />}
               <Menu.Label className={k.menuLabel}>{g.title}</Menu.Label>
-              {g.options.map((o) => (
-                <Menu.Item key={o.id} className={k.menuItem} onSelect={() => g.onChange(o.id)}>
-                  <span className={k.menuText}>
-                    {o.label}
-                    {o.note && <span className={k.menuNote}>{o.note}</span>}
-                  </span>
-                  {o.id === g.value && <IconCheck size={13} />}
-                </Menu.Item>
-              ))}
+              <div className={g.grid ? k.menuGrid : undefined}>
+                {g.options.map((o) => (
+                  <Menu.Item
+                    key={o.id}
+                    className={`${k.menuItem} ${g.grid ? k.menuItemDense : ''} ${o.id === g.value ? k.menuItemOn : ''}`}
+                    onSelect={() => g.onChange(o.id)}
+                  >
+                    <span className={k.menuText}>
+                      {o.label}
+                      {o.note && <span className={k.menuNote}>{o.note}</span>}
+                    </span>
+                    {o.id === g.value && !g.grid && <IconCheck size={13} />}
+                  </Menu.Item>
+                ))}
+              </div>
             </div>
           ))}
         </Menu.Content>

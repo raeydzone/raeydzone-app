@@ -104,7 +104,7 @@ export interface AssetInfo {
 export type ChatItem =
   | { id: string; kind: 'user'; text: string; images: string[]; at: string }
   | { id: string; kind: 'assistant'; text: string; at: string }
-  | { id: string; kind: 'tool'; name: string; summary: string; status: 'running' | 'done' | 'error'; detail: string | null; at: string }
+  | { id: string; kind: 'tool'; name: string; summary: string; status: 'running' | 'done' | 'error'; detail: string | null; cost?: number | null; at: string }
   | { id: string; kind: 'note'; text: string; bad: boolean; at: string }
 
 export type VariantStatus = 'idle' | 'working' | 'stopped' | 'error'
@@ -214,11 +214,43 @@ export interface OpenRouterStatus {
   ok: boolean
   label: string | null
   remaining: number | null
+  usage: number | null
   error: string | null
+}
+
+export interface SpendSummary {
+  total: number
+  today: number
+  month: number
+  project: number
+  images: number
+  unpriced: number
+  since: string | null
+  models: { id: string; label: string; cost: number; images: number }[]
+  tasks: Record<ImageTask, number>
+}
+
+export interface ReportInput {
+  kind: 'missing' | 'bug'
+  title: string
+  detail: string
+  workaround: string | null
+  project: string
+  model: string
+}
+
+export interface FeatureReport extends ReportInput {
+  id: string
+  firstAt: string
+  lastAt: string
+  count: number
+  done: boolean
 }
 
 export interface ImageRequest {
   model: string
+  task: ImageTask
+  projectId: string
   prompt: string
   images: Uint8Array[]
   aspect: string | null

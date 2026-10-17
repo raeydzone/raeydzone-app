@@ -4,8 +4,8 @@ import type {
   ScreenSource, StepId, Stream, Video
 } from '@shared/types'
 import type {
-  ClaudeStatus, ImageRequest, ImageResult, OpenRouterStatus, SendRequest, StudioEvent,
-  StudioFile, ToolCall, ToolReply
+  ClaudeStatus, FeatureReport, ImageRequest, ImageResult, OpenRouterStatus, ReportInput, SendRequest,
+  SpendSummary, StudioEvent, StudioFile, ToolCall, ToolReply
 } from '@shared/studio'
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -46,7 +46,14 @@ const studio = {
   toolDone: (callId: string, reply: ToolReply) => call<void>('studio:toolDone', callId, reply),
   onTool: (cb: (call: ToolCall) => void) => listen<[ToolCall]>('studio:tool', cb),
   onEvent: (cb: (variantId: string, event: StudioEvent) => void) =>
-    listen<[string, StudioEvent]>('studio:event', cb)
+    listen<[string, StudioEvent]>('studio:event', cb),
+  spend: (projectId: string | null) => call<SpendSummary>('studio:spend', projectId),
+  onSpendChanged: (cb: () => void) => listen<[]>('studio:spendChanged', cb),
+  reports: () => call<FeatureReport[]>('studio:reports'),
+  report: (input: ReportInput) => call<boolean>('studio:report', input),
+  setReportDone: (id: string, done: boolean) => call<FeatureReport[]>('studio:reportDone', id, done),
+  removeReport: (id: string) => call<FeatureReport[]>('studio:reportRemove', id),
+  onReports: (cb: (reports: FeatureReport[]) => void) => listen<[FeatureReport[]]>('studio:reportsChanged', cb)
 }
 
 const ai = {

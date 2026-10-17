@@ -6,7 +6,9 @@ import * as claude from './claude'
 import * as files from './files'
 import * as mcp from './mcp'
 import * as openrouter from './openrouter'
-import type { ImageRequest, SendRequest, ToolReply } from '@shared/studio'
+import * as reports from './reports'
+import * as spend from './spend'
+import type { ImageRequest, ReportInput, SendRequest, ToolReply } from '@shared/studio'
 
 const TOOL_TIMEOUT_MS = 5 * 60 * 1000
 const pending = new Map<string, (reply: ToolReply) => void>()
@@ -102,7 +104,26 @@ export function registerStudio(
     await claude.send(req, await mcp.endpoint(req.variantId))
   })
   quiet('studio:stop', (variantId: string) => claude.stop(variantId))
-  quiet('studio:image', (req: ImageRequest) => openrouter.generate(req))
+  quiet('studio:image', async (req: ImageRequest) => {
+    const res = await openrouter.generate(req)
+    await spend.record({ model: req.model, task: req.task, project: req.projectId, cost: res.cost })
+    send('studio:spendChanged')
+    return res
+  })
+  quiet('studio:spend', (projectId: string | null) => spend.summary(projectId))
+
+  const reported = (list: Awaited<ReturnType<typeof reports.list>>): typeof list => {
+    send('studio:reportsChanged', list)
+    return list
+  }
+  quiet('studio:reports', () => reports.list())
+  quiet('studio:report', async (input: ReportInput) => {
+    const { reports: list, repeat } = await reports.add(input)
+    reported(list)
+    return repeat
+  })
+  quiet('studio:reportDone', async (id: string, done: boolean) => reported(await reports.setDone(id, done)))
+  quiet('studio:reportRemove', async (id: string) => reported(await reports.remove(id)))
 
   quiet('ai:claudeStatus', () => claude.status())
   quiet('ai:claudeConnect', () => claude.connect())

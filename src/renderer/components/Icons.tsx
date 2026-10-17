@@ -181,3 +181,18 @@ export const IconChevron = ({ size = 12 }: Props): ReactNode =>
 
 export const IconRoute = ({ size = 16 }: Props): ReactNode =>
   base(size, <path d="M3 12h4.5l4-6.5H20M7.5 12l4 6.5H20M17 2.5l3 3-3 3M17 15.5l3 3-3 3" />)
+
+export const IconFlag = ({ size = 14 }: Props): ReactNode =>
+  base(size, <path d="M5 21V4.5M5 4.5h11l-2 4 2 4H5" />)
+
+export const IconEyeOff = ({ size = 13 }: Props): ReactNode =>
+  base(size, <><path d="M10.6 5.6A9.6 9.6 0 0 1 12 5.5c5 0 8.5 4.6 9.5 6.5a15 15 0 0 1-2.6 3.4M6.3 7.3A15 15 0 0 0 2.5 12c1 1.9 4.5 6.5 9.5 6.5a9 9 0 0 0 4.4-1.1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3.5 3.5l17 17" /></>)
+
+export const IconArrowUp = ({ size = 14 }: Props): ReactNode =>
+  base(size, <path d="M12 19V5M6 11l6-6 6 6" />)
+
+export const IconArrowDown = ({ size = 14 }: Props): ReactNode =>
+  base(size, <path d="M12 5v14M6 13l6 6 6-6" />)
+
+export const IconLayers = ({ size = 14 }: Props): ReactNode =>
+  base(size, <><path d="m12 3.5 9 4.5-9 4.5-9-4.5z" /><path d="m3 12.5 9 4.5 9-4.5" /></>)

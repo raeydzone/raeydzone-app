@@ -35,17 +35,38 @@ function headers(key: string): Record<string, string> {
   }
 }
 
+async function credits(key: string): Promise<number | null> {
+  try {
+    const res = await fetch(API + '/credits', { headers: headers(key), signal: AbortSignal.timeout(15_000) })
+    if (!res.ok) return null
+    const { data } = (await res.json()) as { data?: { total_credits?: number; total_usage?: number } }
+    return data?.total_credits != null && data.total_usage != null ? data.total_credits - data.total_usage : null
+  } catch {
+    return null
+  }
+}
+
 export async function status(): Promise<OpenRouterStatus> {
   const key = readKey()
-  const empty = { set: !!key, ok: false, label: null, remaining: null }
+  const empty = { set: !!key, ok: false, label: null, remaining: null, usage: null }
   if (!key) return { ...empty, error: null }
   try {
-    const res = await fetch(API + '/key', { headers: headers(key), signal: AbortSignal.timeout(15_000) })
+    const [res, balance] = await Promise.all([
+      fetch(API + '/key', { headers: headers(key), signal: AbortSignal.timeout(15_000) }),
+      credits(key)
+    ])
     if (!res.ok) return { ...empty, error: res.status === 401 ? 'Key rejected' : 'HTTP ' + res.status }
     const { data } = (await res.json()) as {
-      data: { label?: string; limit_remaining?: number | null }
+      data: { label?: string; limit_remaining?: number | null; usage?: number | null }
     }
-    return { set: true, ok: true, label: data.label ?? null, remaining: data.limit_remaining ?? null, error: null }
+    return {
+      set: true,
+      ok: true,
+      label: data.label ?? null,
+      remaining: data.limit_remaining ?? balance,
+      usage: data.usage ?? null,
+      error: null
+    }
   } catch (err) {
     return { ...empty, error: (err as Error).message }
   }
