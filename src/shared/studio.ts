@@ -177,6 +177,7 @@ export interface ImageModel {
   transparent: boolean
   quality: boolean
   resolution: boolean
+  fallback?: string
 }
 
 export const IMAGE_MODELS: ImageModel[] = [
@@ -184,8 +185,8 @@ export const IMAGE_MODELS: ImageModel[] = [
   { id: 'openai/gpt-image-2.5-flare', label: 'GPT Image 2.5 Flare', note: 'Fast GPT Image', maxRefs: 16, aspects: GPT_ASPECTS, transparent: true, quality: true, resolution: false },
   { id: 'x-ai/grok-imagine-image-quality', label: 'Grok Imagine Quality', note: 'Photoreal · up to 3 reference images', maxRefs: 3, aspects: GROK_ASPECTS, transparent: false, quality: false, resolution: true },
   { id: 'x-ai/grok-imagine-image-2.0', label: 'Grok Imagine 2.0', note: 'Up to 3 reference images', maxRefs: 3, aspects: GROK_ASPECTS, transparent: false, quality: false, resolution: true },
-  { id: 'google/gemini-nano-banana-2.1', label: 'Nano Banana 2.1', note: 'Precise edits · best value', maxRefs: 14, aspects: NANO_ASPECTS, transparent: false, quality: false, resolution: true },
-  { id: 'google/gemini-3-pro-image', label: 'Nano Banana Pro', note: 'Google’s strongest', maxRefs: 14, aspects: NANO_ASPECTS, transparent: false, quality: false, resolution: true },
+  { id: 'google/gemini-nano-banana-2.1', label: 'Nano Banana 2.1', note: 'Precise edits · best value', maxRefs: 14, aspects: NANO_ASPECTS, transparent: false, quality: false, resolution: true, fallback: 'google/gemini-3.1-flash-image' },
+  { id: 'google/gemini-3-pro-image', label: 'Nano Banana Pro', note: 'Google’s strongest', maxRefs: 14, aspects: NANO_ASPECTS, transparent: false, quality: false, resolution: true, fallback: 'google/gemini-3.1-flash-image' },
   { id: 'google/gemini-3.1-flash-image', label: 'Nano Banana 2', note: 'Fast', maxRefs: 14, aspects: NANO_ASPECTS, transparent: false, quality: false, resolution: true }
 ]
 
@@ -262,6 +263,7 @@ export interface ImageResult {
   data: Uint8Array
   mime: string
   cost: number | null
+  model: string
 }
 
 export interface ChatImage {

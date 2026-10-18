@@ -189,7 +189,7 @@ export async function generateAsset(
   const bitmap = await decode(res.data)
   const info = await studio.assets.addCanvas(copyOf(bitmap), req.prompt.slice(0, 48), 'generated')
   studio.addAsset(info)
-  return { info, cost: res.cost, transparent, model: model.label }
+  return { info, cost: res.cost, transparent, model: imageModel(res.model).label }
 }
 
 export function placeAsset(studio: Studio, variantId: string, info: AssetInfo, fit: 'cover' | 'contain' = 'contain', touched = false): Layer {

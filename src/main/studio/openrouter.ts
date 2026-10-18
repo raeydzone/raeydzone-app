@@ -1,7 +1,7 @@
 import { safeStorage } from 'electron'
 import { getSettings, saveSettings } from '../services/settings'
 import { imageModel } from '@shared/studio'
-import type { ImageRequest, ImageResult, OpenRouterStatus } from '@shared/studio'
+import type { ImageModel, ImageRequest, ImageResult, OpenRouterStatus } from '@shared/studio'
 
 const API = 'https://openrouter.ai/api/v1'
 
@@ -85,11 +85,31 @@ interface ImagesResponse {
   usage?: { cost?: number }
 }
 
+// OpenRouter relays the upstream provider's own 429 text, so Google's "exceeded your quota"
+// means OpenRouter's capacity at Google is exhausted, not the user's balance.
+const UPSTREAM_BUSY = /quota|rate.?limit|resource.?exhausted|overloaded|capacity|too many requests/i
+
+class UpstreamBusy extends Error {}
+
 export async function generate(req: ImageRequest): Promise<ImageResult> {
   const key = readKey()
   if (!key) throw new Error('Connect OpenRouter in Settings to use image generation.')
-  const model = imageModel(req.model)
+  const busy: string[] = []
+  for (let id: string | undefined = req.model; id && !busy.includes(imageModel(id).label); id = imageModel(id).fallback) {
+    try {
+      return await request(key, imageModel(id), req)
+    } catch (err) {
+      if (!(err instanceof UpstreamBusy)) throw err
+      busy.push(imageModel(id).label)
+    }
+  }
+  throw new Error(
+    `${busy.join(' and ')} ${busy.length > 1 ? 'are' : 'is'} rate-limited by Google on OpenRouter's side right now — ` +
+      'your OpenRouter balance is fine. Try again in a minute, or switch this task to a GPT Image or Grok model.'
+  )
+}
 
+async function request(key: string, model: ImageModel, req: ImageRequest): Promise<ImageResult> {
   const body: Record<string, unknown> = {
     model: model.id,
     prompt: req.prompt,
@@ -115,10 +135,12 @@ export async function generate(req: ImageRequest): Promise<ImageResult> {
   })
   const json = (await res.json().catch(() => ({}))) as ImagesResponse
   if (!res.ok || json.error) {
-    throw new Error(`${model.label}: ` + (json.error?.message ?? 'HTTP ' + res.status))
+    const message = json.error?.message ?? 'HTTP ' + res.status
+    if (res.status === 429 || UPSTREAM_BUSY.test(message)) throw new UpstreamBusy(message)
+    throw new Error(`${model.label}: ` + message)
   }
   const b64 = json.data?.[0]?.b64_json
   if (!b64) throw new Error(`${model.label} returned no image`)
   const data = new Uint8Array(Buffer.from(b64, 'base64'))
-  return { data, mime: sniffMime(data), cost: json.usage?.cost ?? null }
+  return { data, mime: sniffMime(data), cost: json.usage?.cost ?? null, model: model.id }
 }

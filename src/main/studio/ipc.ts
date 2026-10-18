@@ -106,7 +106,7 @@ export function registerStudio(
   quiet('studio:stop', (variantId: string) => claude.stop(variantId))
   quiet('studio:image', async (req: ImageRequest) => {
     const res = await openrouter.generate(req)
-    await spend.record({ model: req.model, task: req.task, project: req.projectId, cost: res.cost })
+    await spend.record({ model: res.model, task: req.task, project: req.projectId, cost: res.cost })
     send('studio:spendChanged')
     return res
   })
