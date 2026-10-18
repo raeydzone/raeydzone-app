@@ -7,6 +7,7 @@ import type { ClaudeStatus, StudioProject } from '@shared/studio'
 import { Prompt } from '../../components/Bits'
 import { useStore } from '../../state/store'
 import { cutOut, generateAsset, generativeFill, placeAsset } from '../ai'
+import { copyLayers, cutLayers, pasteLayers } from '../clipboard'
 import type { Box } from '../ai'
 import { encode } from '../assets'
 import { emptyDoc } from '../doc'
@@ -14,6 +15,7 @@ import { openStudio } from '../engine'
 import { loadDocAssets, renderDoc } from '../render'
 import { Chat } from './Chat'
 import { Inspector } from './Inspector'
+import { LayerMenu } from './LayerMenu'
 import { ImageModelsPicker } from './Pickers'
 import { LayersPanel } from './LayersPanel'
 import { ReportsButton } from './Reports'
@@ -96,22 +98,22 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
       if (!variant || typing()) return
       const v = variant.id
       const key = e.key.toLowerCase()
-      const sel = variant.selected
+      const ids = studio.selection(v)
+      const any = ids.length > 0
       if (e.ctrlKey && key === 'z') studio[e.shiftKey ? 'redo' : 'undo'](v)
       else if (e.ctrlKey && key === 'y') studio.redo(v)
-      else if (e.ctrlKey && key === 'd' && sel) studio.select(v, studio.duplicate(v, sel).id)
-      else if (e.ctrlKey && key === 'v') {
-        void runJob('Pasting…', async () => {
-          const info = await studio.pasteClipboard()
-          if (info) studio.select(v, placeAsset(studio, v, info).id)
-        })
-      } else if ((key === 'delete' || key === 'backspace') && sel) studio.remove(v, sel)
-      else if (key.startsWith('arrow') && sel) {
+      else if (e.ctrlKey && key === 'a') studio.pick(v, variant.doc.layers.filter((l) => !l.locked).map((l) => l.id))
+      else if (e.ctrlKey && key === 'd' && any) studio.duplicateMany(v, ids)
+      else if (e.ctrlKey && key === 'c' && any) void runJob('Copying…', () => copyLayers(studio, v, ids))
+      else if (e.ctrlKey && key === 'x' && any) void runJob('Cutting…', () => cutLayers(studio, v, ids))
+      else if (e.ctrlKey && key === 'v') void runJob('Pasting…', () => pasteLayers(studio, v))
+      else if ((key === 'delete' || key === 'backspace') && any) studio.removeMany(v, ids)
+      else if (key.startsWith('arrow') && any) {
         const step = e.shiftKey ? 10 : 1
-        const l = variant.doc.layers.find((x) => x.id === sel)!
         const dx = key === 'arrowleft' ? -step : key === 'arrowright' ? step : 0
         const dy = key === 'arrowup' ? -step : key === 'arrowdown' ? step : 0
-        studio.patch(v, sel, { x: l.x + dx, y: l.y + dy }, 'nudge')
+        const moved = variant.doc.layers.filter((l) => ids.includes(l.id)).map((l) => [l.id, [l.x + dx, l.y + dy]])
+        studio.place(v, Object.fromEntries(moved), 'nudge')
       } else if (key === 'escape') {
         if (tool !== 'move') setTool('move')
         else studio.select(v, null)
@@ -182,15 +184,19 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
           {variant ? (
             <>
               <ToolOptionsBar tool={tool} options={options} setOptions={setOptions} selected={selected} />
-              <Stage
-                studio={studio}
-                variant={variant}
-                tool={tool}
-                options={options}
-                setTool={setTool}
-                onBox={onBox}
-                onTextCreated={setFocusText}
-              />
+              <LayerMenu studio={studio} variant={variant}>
+                <div className={s.menuHost}>
+                  <Stage
+                    studio={studio}
+                    variant={variant}
+                    tool={tool}
+                    options={options}
+                    setTool={setTool}
+                    onBox={onBox}
+                    onTextCreated={setFocusText}
+                  />
+                </div>
+              </LayerMenu>
             </>
           ) : (
             <div className={s.emptyStage}>

@@ -77,6 +77,7 @@ export function registerStudio(
     files.importFiles(requireRoot(), projectId, paths)
   )
   quiet('studio:paste', (projectId: string) => files.pasteImage(requireRoot(), projectId))
+  quiet('studio:copyImage', (png: Uint8Array) => files.copyImage(png))
   quiet('studio:prune', (projectId: string, keep: string[]) =>
     files.prune(requireRoot(), projectId, keep)
   )

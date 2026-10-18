@@ -220,7 +220,8 @@ select.field {
   max-height: min(
     var(--menu-max-h),
     var(--radix-dropdown-menu-content-available-height, var(--menu-max-h)),
-    var(--radix-popover-content-available-height, var(--menu-max-h))
+    var(--radix-popover-content-available-height, var(--menu-max-h)),
+    var(--radix-context-menu-content-available-height, var(--menu-max-h))
   );
   overflow-y: auto;
   padding: var(--s-1);
@@ -266,6 +267,11 @@ select.field {
 
 .menuItem[data-highlighted] {
   background: var(--grad-accent-soft);
+}
+
+.menuItem[data-disabled] {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .menuItemDense {

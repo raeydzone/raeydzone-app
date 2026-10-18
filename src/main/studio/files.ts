@@ -1,5 +1,5 @@
-import { clipboard } from 'electron'
-import { randomUUID } from 'node:crypto'
+import { clipboard, nativeImage } from 'electron'
+import { createHash, randomUUID } from 'node:crypto'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import { studioDir } from '../services/library'
@@ -73,15 +73,25 @@ export async function importFiles(
   return out
 }
 
+let copiedImage: string | null = null
+const fingerprint = (image: Electron.NativeImage): string => createHash('sha1').update(image.toBitmap()).digest('hex')
+
+// Windows offers no private clipboard format through Electron, so a paste recognises our own
+// copy by the pixels it put there.
+export function copyImage(png: Uint8Array): void {
+  clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png)))
+  copiedImage = fingerprint(clipboard.readImage())
+}
+
 export async function pasteImage(
   root: string,
   projectId: string
-): Promise<{ file: string; name: string } | null> {
+): Promise<{ file: string; name: string; ours: boolean } | null> {
   const image = clipboard.readImage()
   if (image.isEmpty()) return null
   const file = randomUUID() + '.png'
   await fs.writeFile(path.join(await assetsDir(root, projectId), file), image.toPNG())
-  return { file, name: 'Pasted image' }
+  return { file, name: 'Pasted image', ours: fingerprint(image) === copiedImage }
 }
 
 export async function prune(root: string, projectId: string, keep: string[]): Promise<number> {

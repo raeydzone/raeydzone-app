@@ -238,7 +238,7 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
       const region = box(args.region)
       if (!region) throw new Error('region is required')
       const prompt = str(args, 'prompt')
-      const { layer, cost } = await generativeFill(studio, v, prompt, region, true)
+      const { layer, cost } = await generativeFill(studio, v, prompt, region, true, args.keep_contents === true)
       return {
         reply: { text: `Fill landed as layer ${layer.id}: ${json(describeLayer(layer))}` },
         summary: `Generative fill "${prompt.slice(0, 40)}"`,

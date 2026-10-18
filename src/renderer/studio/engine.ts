@@ -17,6 +17,7 @@ export interface VariantState extends Variant {
   past: StudioDoc[]
   future: StudioDoc[]
   selected: string | null
+  picked: string[]
   touched: { id: string; at: number } | null
 }
 
@@ -95,6 +96,7 @@ export class Studio {
         past: [],
         future: [],
         selected: null,
+        picked: [],
         touched: null
       }))
       const used = new Set(variants.flatMap((v) => v.doc.layers.flatMap((l) => (l.kind === 'image' ? [l.asset, l.mask] : []))))
@@ -168,7 +170,8 @@ export class Studio {
       past: opts.record === false || merge ? v.past : [...v.past.slice(-HISTORY + 1), v.doc],
       future: opts.record === false || merge ? v.future : [],
       touched: opts.touched ? { id: opts.touched, at } : v.touched,
-      selected: v.selected && next.layers.some((l) => l.id === v.selected) ? v.selected : null
+      selected: v.selected && next.layers.some((l) => l.id === v.selected) ? v.selected : null,
+      picked: v.picked.filter((id) => next.layers.some((l) => l.id === id))
     }))
   }
 
@@ -195,7 +198,48 @@ export class Studio {
   }
 
   select(variantId: string, layerId: string | null): void {
-    this.setVariant(variantId, (v) => ({ ...v, selected: layerId }), false)
+    this.pick(variantId, layerId ? [layerId] : [])
+  }
+
+  pick(variantId: string, ids: string[], primary: string | null = ids[ids.length - 1] ?? null): void {
+    this.setVariant(variantId, (v) => ({ ...v, selected: primary, picked: ids }), false)
+  }
+
+  toggle(variantId: string, layerId: string): void {
+    const v = this.variant(variantId)
+    const ids = this.selection(variantId)
+    if (!ids.includes(layerId)) return this.pick(variantId, [...ids, layerId], layerId)
+    const rest = ids.filter((id) => id !== layerId)
+    this.pick(variantId, rest, v.selected === layerId ? rest[rest.length - 1] ?? null : v.selected)
+  }
+
+  selection(variantId: string): string[] {
+    const v = this.variant(variantId)
+    const ids = new Set([...v.picked, ...(v.selected ? [v.selected] : [])])
+    return v.doc.layers.filter((l) => ids.has(l.id)).map((l) => l.id)
+  }
+
+  place(variantId: string, positions: Record<string, [number, number]>, coalesce?: string): void {
+    this.update(variantId, (d) => ({
+      ...d,
+      layers: d.layers.map((l) => (positions[l.id] ? { ...l, x: positions[l.id][0], y: positions[l.id][1] } : l))
+    }), { coalesce: coalesce ? Object.keys(positions).join() + ':' + coalesce : undefined })
+  }
+
+  removeMany(variantId: string, ids: string[]): void {
+    this.update(variantId, (d) => ({ ...d, layers: d.layers.filter((l) => !ids.includes(l.id)) }))
+  }
+
+  duplicateMany(variantId: string, ids: string[]): void {
+    let doc = this.doc(variantId)
+    const copies: string[] = []
+    for (const id of ids) {
+      const out = duplicateLayer(doc, id)
+      doc = out.doc
+      copies.push(out.layer.id)
+    }
+    this.commit(variantId, doc)
+    this.pick(variantId, copies)
   }
 
   setActive(id: string | null): void {
@@ -271,6 +315,7 @@ export class Studio {
       past: [],
       future: [],
       selected: null,
+      picked: [],
       touched: null
     }
     this.set({ variants: [...this.state.variants, v], activeId: v.id })

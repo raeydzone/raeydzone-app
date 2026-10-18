@@ -1140,16 +1140,54 @@
   place-items: center;
 }
 
+.menuHost {
+  display: contents;
+}
+
+.chatScroller {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .chatList {
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--s-4);
+}
+
+.jumpLatest {
+  position: absolute;
+  left: 50%;
+  bottom: var(--s-3);
+  display: grid;
+  place-items: center;
+  width: var(--s-6);
+  height: var(--s-6);
+  border-radius: 50%;
+  background: var(--grad-raised);
+  color: var(--text);
+  box-shadow: 0 0 0 var(--hairline) var(--accent-edge), var(--shadow-soft);
+  transition: color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.jumpLatest:hover {
+  color: var(--accent-hot);
+  box-shadow: var(--shadow-glow);
 }
 
 .chatThread {
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
+  min-width: 0;
+}
+
+.chatThread > * {
+  min-width: 0;
 }
 
 .chatThread > div {
@@ -1285,6 +1323,7 @@
 .stepList {
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: calc(var(--hairline) * 2);
   padding: 0 var(--s-3) var(--s-3);
 }
@@ -1375,6 +1414,8 @@
 
 .stepDetail {
   flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding-left: calc(var(--s-5) + var(--s-2));
   color: var(--warn);
   font-size: var(--fs-xs);
@@ -1382,6 +1423,7 @@
 }
 
 .note {
+  overflow-wrap: anywhere;
   padding: var(--s-2) var(--s-3);
   border-radius: var(--r-md);
   background: var(--grad-raised);

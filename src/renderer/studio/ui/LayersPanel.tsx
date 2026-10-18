@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import type { AssetInfo, Layer, StudioDoc } from '@shared/studio'
 import {
   IconArrowDown, IconArrowUp, IconCopy, IconEye, IconEyeOff, IconImage, IconLock, IconTrash
@@ -8,6 +8,7 @@ import { useStore } from '../../state/store'
 import { placeAsset } from '../ai'
 import type { Studio, VariantState } from '../engine'
 import { drawDoc } from '../render'
+import { LayerMenu } from './LayerMenu'
 import { Segmented } from './fields'
 import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
@@ -62,7 +63,15 @@ function LayerRow({
 }): ReactNode {
   const [renaming, setRenaming] = useState(false)
   const v = variant.id
-  const selected = variant.selected === layer.id
+  const selected = variant.picked.includes(layer.id) || variant.selected === layer.id
+  const click = (e: MouseEvent): void => {
+    if (e.ctrlKey || e.metaKey) return studio.toggle(v, layer.id)
+    const layers = variant.doc.layers
+    const anchor = layers.findIndex((l) => l.id === variant.selected)
+    if (!e.shiftKey || anchor < 0) return studio.select(v, layer.id)
+    const [a, b] = [anchor, index].sort((x, y) => x - y)
+    studio.pick(v, layers.slice(a, b + 1).map((l) => l.id), variant.selected)
+  }
   return (
     <div
       className={`${s.layerRow} ${selected ? s.layerOn : ''} ${layer.visible ? '' : s.layerHidden}`}
@@ -74,7 +83,8 @@ function LayerRow({
         if (dragging !== null && dragging !== index) studio.arrange(v, variant.doc.layers[dragging].id, index)
         setDragging(null)
       }}
-      onClick={() => studio.select(v, layer.id)}
+      onClick={click}
+      onContextMenu={() => !selected && studio.select(v, layer.id)}
     >
       <LayerThumb studio={studio} doc={variant.doc} layer={layer} />
       <div className={s.layerLabel}>
@@ -136,6 +146,7 @@ export function LayersPanel({
   const layers = variant.doc.layers
   const assets = studio.state.assets.filter((a) => a.source === 'upload' || a.source === 'generated')
   const selected = variant.selected
+  const ids = studio.selection(v)
 
   const importFiles = async (): Promise<void> => {
     try {
@@ -161,20 +172,22 @@ export function LayersPanel({
 
       {tab === 'layers' ? (
         <>
-          <div className={s.layerList}>
-            {layers.length === 0 && <p className={s.hint}>No layers yet.</p>}
-            {[...layers].reverse().map((layer) => (
-              <LayerRow
-                key={layer.id}
-                studio={studio}
-                variant={variant}
-                layer={layer}
-                index={layers.indexOf(layer)}
-                dragging={dragging}
-                setDragging={setDragging}
-              />
-            ))}
-          </div>
+          <LayerMenu studio={studio} variant={variant}>
+            <div className={s.layerList}>
+              {layers.length === 0 && <p className={s.hint}>No layers yet.</p>}
+              {[...layers].reverse().map((layer) => (
+                <LayerRow
+                  key={layer.id}
+                  studio={studio}
+                  variant={variant}
+                  layer={layer}
+                  index={layers.indexOf(layer)}
+                  dragging={dragging}
+                  setDragging={setDragging}
+                />
+              ))}
+            </div>
+          </LayerMenu>
           <div className={s.panelFoot}>
             <button className={s.footBtn} title="Move up" disabled={!selected} onClick={() => selected && studio.arrange(v, selected, 'up')}>
               <IconArrowUp size={13} />
@@ -185,12 +198,12 @@ export function LayersPanel({
             <button
               className={s.footBtn}
               title="Duplicate (Ctrl+D)"
-              disabled={!selected}
-              onClick={() => selected && studio.select(v, studio.duplicate(v, selected).id)}
+              disabled={!ids.length}
+              onClick={() => studio.duplicateMany(v, ids)}
             >
               <IconCopy size={13} />
             </button>
-            <button className={s.footBtn} title="Delete (Del)" disabled={!selected} onClick={() => selected && studio.remove(v, selected)}>
+            <button className={s.footBtn} title="Delete (Del)" disabled={!ids.length} onClick={() => studio.removeMany(v, ids)}>
               <IconTrash size={13} />
             </button>
           </div>

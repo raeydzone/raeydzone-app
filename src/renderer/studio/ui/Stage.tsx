@@ -20,7 +20,8 @@ export interface ToolOptions {
 }
 
 type Drag =
-  | { kind: 'move'; id: string; from: Pt; orig: Pt }
+  | { kind: 'move'; from: Pt; orig: Record<string, Pt> }
+  | { kind: 'marquee'; from: Pt; to: Pt; add: boolean }
   | { kind: 'resize'; id: string; hx: number; hy: number; orig: Layer }
   | { kind: 'rotate'; id: string; orig: Layer }
   | { kind: 'anchor'; id: string; index: number; pts: Pt[] }
@@ -44,6 +45,16 @@ function anchorsOf(l: ShapeLayer): Pt[] {
 
 function normBox(a: Pt, b: Pt): Box {
   return { x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(a[0] - b[0]), height: Math.abs(a[1] - b[1]) }
+}
+
+function overlaps(l: Layer, b: Box): boolean {
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
+    const [rx, ry] = rotate([(sx * l.width) / 2, (sy * l.height) / 2], rad(l.rotation))
+    return [l.x + l.width / 2 + rx, l.y + l.height / 2 + ry]
+  })
+  const xs = corners.map((c) => c[0])
+  const ys = corners.map((c) => c[1])
+  return Math.min(...xs) < b.x + b.width && Math.max(...xs) > b.x && Math.min(...ys) < b.y + b.height && Math.max(...ys) > b.y
 }
 
 function resized(o: Layer, hx: number, hy: number, p: Pt, free: boolean): Box {
@@ -204,8 +215,20 @@ export function Stage({
         const [lx, ly] = toLocal(selected, p[0], p[1])
         if (Math.abs(lx) <= selected.width / 2 && Math.abs(ly) <= selected.height / 2) target = selected
       }
-      studio.select(v, target?.id ?? null)
-      if (target && !target.locked) setDrag({ kind: 'move', id: target.id, from: p, orig: [target.x, target.y] })
+      const add = e.shiftKey || e.ctrlKey
+      if (!target) {
+        setDrag({ kind: 'marquee', from: p, to: p, add })
+        return
+      }
+      const ids = studio.selection(v)
+      if (add) studio.toggle(v, target.id)
+      else if (ids.includes(target.id)) studio.pick(v, ids, target.id)
+      else studio.select(v, target.id)
+      const group = studio.selection(v)
+      if (!target.locked && group.includes(target.id)) {
+        const orig = Object.fromEntries(doc.layers.filter((l) => group.includes(l.id) && !l.locked).map((l) => [l.id, [l.x, l.y] as Pt]))
+        setDrag({ kind: 'move', from: p, orig })
+      }
       return
     }
     if (tool === 'text') {
@@ -246,7 +269,8 @@ export function Stage({
         let dy = p[1] - drag.from[1]
         if (e.shiftKey && Math.abs(dx) > Math.abs(dy)) dy = 0
         else if (e.shiftKey) dx = 0
-        studio.patch(v, drag.id, { x: Math.round(drag.orig[0] + dx), y: Math.round(drag.orig[1] + dy) }, 'move')
+        const moved = Object.entries(drag.orig).map(([id, [x, y]]) => [id, [Math.round(x + dx), Math.round(y + dy)]])
+        studio.place(v, Object.fromEntries(moved), 'move')
         break
       }
       case 'resize': {
@@ -272,6 +296,7 @@ export function Stage({
         break
       }
       case 'box':
+      case 'marquee':
         setDrag({ ...drag, to: p })
         break
       case 'brush': {
@@ -287,6 +312,13 @@ export function Stage({
     if (!d) return
     if (d.kind === 'brush') {
       void runMask(d.id, options.maskShow ? 'show_brush' : 'hide_brush', d.pts, options.brush)
+      return
+    }
+    if (d.kind === 'marquee') {
+      const area = normBox(d.from, d.to)
+      const hit = area.width < 4 * unit && area.height < 4 * unit ? [] : doc.layers.filter((l) => l.visible && !l.locked && overlaps(l, area)).map((l) => l.id)
+      if (!d.add) studio.pick(v, hit)
+      else studio.pick(v, [...new Set([...studio.selection(v), ...hit])], variant.selected ?? hit[hit.length - 1] ?? null)
       return
     }
     if (d.kind !== 'box') return
@@ -327,7 +359,8 @@ export function Stage({
   const hs = 10 * unit
   const touched = variant.touched ? doc.layers.find((l) => l.id === variant.touched!.id) : null
   const hovered = hover && hover !== selected?.id ? doc.layers.find((l) => l.id === hover) : null
-  const box = drag?.kind === 'box' ? normBox(drag.from, drag.to) : null
+  const box = drag?.kind === 'box' || drag?.kind === 'marquee' ? normBox(drag.from, drag.to) : null
+  const others = doc.layers.filter((l) => l.id !== selected?.id && variant.picked.includes(l.id))
   const drawing = tool !== 'move'
 
   return (
@@ -350,6 +383,12 @@ export function Stage({
           onPointerDown={down}
           onPointerMove={move}
           onPointerUp={up}
+          onContextMenu={(e) => {
+            if (tool !== 'move') return
+            const p = at(e)
+            const target = hitLayer(doc, studio.assets, p[0], p[1])
+            if (target && !studio.selection(v).includes(target.id)) studio.select(v, target.id)
+          }}
           onPointerLeave={() => {
             setPointer(null)
             setHover(null)
@@ -369,6 +408,7 @@ export function Stage({
               </motion.g>
             )}
           </AnimatePresence>
+          {others.map((l) => <g key={l.id}>{outline(l, s.selBox)}</g>)}
           {selected && <SelectionFrame layer={selected} hs={hs} unit={unit} editing={tool === 'move'} />}
           {box && <rect className={tool === 'fill' || tool === 'cut' ? s.aiBox : s.dragBox} {...box} />}
           {poly.length > 0 && (

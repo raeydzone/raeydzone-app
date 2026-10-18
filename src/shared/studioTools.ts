@@ -209,10 +209,11 @@ export const STUDIO_TOOLS: ToolDef[] = [
   },
   {
     name: 'generative_fill',
-    description: 'Photoshop-style generative fill: the image model repaints a region of the current composite from a prompt, and the result lands as a new feathered image layer over that region (non-destructive). Use it to extend backgrounds, remove things, add fire, smoke, debris or light in place. Costs money per call.',
+    description: 'Photoshop-style generative fill: the image model repaints a region of the current composite from a prompt, and the result lands as a new feathered image layer over that region (non-destructive). Use it to extend backgrounds, remove things (facecams, HUD, text, overlays), add fire, smoke, debris or light in place. By default the region is blanked first, so the model invents fresh content and nothing old survives — one call with a box covering the whole object, frame and shadow included, is enough to remove it. The prompt describes what belongs there afterwards, not what to remove. Costs money per call.',
     inputSchema: obj({
-      prompt: str('What should appear in the region.'),
-      region: rect('Region to repaint, canvas pixels.')
+      prompt: str('What should appear in the region, e.g. "dark chain-link fence over a dim concrete wall".'),
+      region: rect('Region to repaint, canvas pixels. Cover the whole object including its frame or border.'),
+      keep_contents: bool('Let the model see and build on what is in the region now (smoke over the scene, light on an object). Leave off to replace it.')
     }, ['prompt', 'region'])
   },
   {

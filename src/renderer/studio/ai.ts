@@ -196,6 +196,23 @@ export function placeAsset(studio: Studio, variantId: string, info: AssetInfo, f
   return studio.addLayer(variantId, makeImage(studio.doc(variantId), info, fit), null, touched)
 }
 
+// The feather has to fall outside the region, or whatever sat on its border shows through.
+// Sides that meet the canvas edge run past it so the blur cannot fade them.
+function fillMask(r: Box, ctxBox: Box, edge: number): HTMLCanvasElement {
+  const p = 2 * edge
+  const big = canvas(ctxBox.width + 2 * p, ctxBox.height + 2 * p)
+  const x0 = r.x - edge <= ctxBox.x ? 0 : r.x - ctxBox.x - edge + p
+  const y0 = r.y - edge <= ctxBox.y ? 0 : r.y - ctxBox.y - edge + p
+  const x1 = r.x + r.width + edge >= ctxBox.x + ctxBox.width ? big.width : r.x + r.width - ctxBox.x + edge + p
+  const y1 = r.y + r.height + edge >= ctxBox.y + ctxBox.height ? big.height : r.y + r.height - ctxBox.y + edge + p
+  const bg = ctx2d(big)
+  bg.fillStyle = '#fff'
+  bg.fillRect(x0, y0, x1 - x0, y1 - y0)
+  const out = canvas(ctxBox.width, ctxBox.height)
+  ctx2d(out).drawImage(featherMask(big, edge), -p, -p)
+  return out
+}
+
 function fitAspect(r: Box, W: number, H: number, aspects: string[]): Box {
   const { ratio } = closestAspect(r.width, r.height, aspects)
   let { x, y, width, height } = r
@@ -211,14 +228,18 @@ export async function generativeFill(
   variantId: string,
   prompt: string,
   region: Box,
-  touched = false
+  touched = false,
+  keepContents = false
 ): Promise<{ layer: Layer; cost: number | null }> {
   const doc = studio.doc(variantId)
+  // Boxes get drawn tight around the thing to replace, which leaves its outline and shadow
+  // just outside; a little slack catches them.
+  const slack = Math.max(8, Math.round(0.03 * Math.max(region.width, region.height)))
   const r = {
-    x: Math.max(0, region.x),
-    y: Math.max(0, region.y),
-    width: Math.min(doc.width, region.x + region.width) - Math.max(0, region.x),
-    height: Math.min(doc.height, region.y + region.height) - Math.max(0, region.y)
+    x: Math.max(0, region.x - slack),
+    y: Math.max(0, region.y - slack),
+    width: Math.min(doc.width, region.x + region.width + slack) - Math.max(0, region.x - slack),
+    height: Math.min(doc.height, region.y + region.height + slack) - Math.max(0, region.y - slack)
   }
   if (r.width < 16 || r.height < 16) throw new Error('The fill region is too small or off the canvas.')
 
@@ -236,19 +257,28 @@ export async function generativeFill(
   const up = Math.max(1, 1024 / Math.max(ctxBox.width, ctxBox.height))
   const composite = renderDoc(doc, studio.assets)
   const context = canvas(ctxBox.width * up, ctxBox.height * up)
-  ctx2d(context).drawImage(composite, ctxBox.x, ctxBox.y, ctxBox.width, ctxBox.height, 0, 0, context.width, context.height)
+  const hole: [number, number, number, number] = [(r.x - ctxBox.x) * up, (r.y - ctxBox.y) * up, r.width * up, r.height * up]
+  const cg = ctx2d(context)
+  cg.drawImage(composite, ctxBox.x, ctxBox.y, ctxBox.width, ctxBox.height, 0, 0, context.width, context.height)
+  // A model shown the old pixels tends to keep them, so a replacement fill only sees a hole.
+  if (!keepContents) {
+    cg.fillStyle = '#808080'
+    cg.fillRect(...hole)
+  }
   const guide = canvas(context.width, context.height)
   const gg = ctx2d(guide)
   gg.fillStyle = '#000'
   gg.fillRect(0, 0, guide.width, guide.height)
   gg.fillStyle = '#fff'
-  gg.fillRect((r.x - ctxBox.x) * up, (r.y - ctxBox.y) * up, r.width * up, r.height * up)
+  gg.fillRect(...hole)
 
-  const instruction =
-    'The first image is part of a YouTube thumbnail; the second is a mask of the same size. ' +
-    `Repaint only the area that is white in the mask: ${prompt}. ` +
+  const instruction = (keepContents
+    ? 'The first image is part of a YouTube thumbnail; the second is a mask of the same size. ' +
+      `Repaint only the area that is white in the mask: ${prompt}. `
+    : 'The first image is part of a YouTube thumbnail with a flat grey rectangular hole in it; the second image is a mask marking that hole in white. ' +
+      `Fill the hole completely with: ${prompt}. Continue the surrounding scene through it seamlessly — no grey, no edge, no outline and nothing framed may remain. `) +
     'Match the surrounding lighting, perspective, grain and style so it looks photographed and real, never AI-generated. ' +
-    'Keep everything outside the white area unchanged and keep the same framing. No text, no borders.'
+    'Keep everything outside the white area unchanged and keep the same framing. No text, no borders, no frames, no overlays.'
   const res = await image(studio, 'fill', {
     model: model.id,
     prompt: instruction,
@@ -265,12 +295,8 @@ export async function generativeFill(
   const info = await studio.assets.addCanvas(filled, 'Fill · ' + prompt.slice(0, 32), 'fill')
   studio.addAsset(info)
 
-  const area = canvas(ctxBox.width, ctxBox.height)
-  const ag = ctx2d(area)
-  ag.fillStyle = '#fff'
   const edge = Math.min(48, Math.max(6, 0.12 * Math.min(r.width, r.height)))
-  ag.fillRect(r.x - ctxBox.x + edge / 2, r.y - ctxBox.y + edge / 2, r.width - edge, r.height - edge)
-  const maskInfo = await studio.assets.addCanvas(featherMask(area, edge), 'Fill mask', 'mask')
+  const maskInfo = await studio.assets.addCanvas(fillMask(r, ctxBox, edge), 'Fill mask', 'mask')
   studio.addAsset(maskInfo)
 
   const base = makeImage(studio.doc(variantId), info)

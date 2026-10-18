@@ -35,7 +35,8 @@ const studio = {
     call<Uint8Array>('studio:readAsset', projectId, file),
   importFiles: (projectId: string, paths: string[]) =>
     call<Imported[]>('studio:import', projectId, paths),
-  paste: (projectId: string) => call<Imported | null>('studio:paste', projectId),
+  paste: (projectId: string) => call<(Imported & { ours: boolean }) | null>('studio:paste', projectId),
+  copyImage: (png: Uint8Array) => call<void>('studio:copyImage', png),
   prune: (projectId: string, keep: string[]) => call<number>('studio:prune', projectId, keep),
   pickImages: () => call<string[]>('studio:pickImages'),
   apply: (projectId: string, data: Uint8Array, ext: 'png' | 'jpg') =>

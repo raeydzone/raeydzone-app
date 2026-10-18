@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { formatMoney } from '@shared/format'
 import type { AssetInfo, ChatItem, ClaudeStatus } from '@shared/studio'
 import {
-  IconArrowUp, IconBrush, IconCheck, IconChevron, IconClaude, IconClose, IconCopy, IconCursor, IconEye, IconFlag,
+  IconArrowDown, IconArrowUp, IconBrush, IconCheck, IconChevron, IconClaude, IconClose, IconCopy, IconCursor, IconEye, IconFlag,
   IconImage, IconLasso, IconLayers, IconLog, IconRect, IconRefresh, IconScissors, IconSparkle, IconStop, IconText,
   IconTools, IconTrash, IconWand
 } from '../../components/Icons'
@@ -225,10 +225,49 @@ export function Chat({
   const variants = studio.state.variants
   const lastItem = variant?.chat[variant.chat.length - 1]
 
-  useEffect(() => {
+  const threadRef = useRef<HTMLDivElement>(null)
+  const pinnedRef = useRef(true)
+  const jumpingRef = useRef(false)
+  const [pinned, setPinned] = useState(true)
+  const pin = (next: boolean): void => {
+    pinnedRef.current = next
+    setPinned(next)
+  }
+  const follow = (): void => {
     const el = listRef.current
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  }, [variant?.chat.length, lastItem?.kind === 'tool' && lastItem.status, variant?.id, fresh])
+    if (el && pinnedRef.current && !jumpingRef.current) el.scrollTop = el.scrollHeight
+  }
+  const jump = (): void => {
+    const el = listRef.current
+    if (!el) return
+    jumpingRef.current = true
+    pin(true)
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }
+  const onScroll = (): void => {
+    const el = listRef.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+    if (atBottom) jumpingRef.current = false
+    if (!jumpingRef.current && atBottom !== pinnedRef.current) pin(atBottom)
+  }
+
+  useEffect(() => {
+    pin(true)
+    jumpingRef.current = false
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [variant?.id, fresh])
+
+  useEffect(follow, [variant?.chat.length, lastItem?.kind === 'tool' && lastItem.status])
+
+  useEffect(() => {
+    const el = threadRef.current
+    if (!el) return
+    const ro = new ResizeObserver(follow)
+    ro.observe(el)
+    return () => ro.disconnect()
+  })
 
   const attach = async (fn: () => Promise<AssetInfo[]>): Promise<void> => {
     try {
@@ -306,34 +345,61 @@ export function Chat({
         )}
       </div>
 
-      <div ref={listRef} className={s.chatList}>
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={fresh ? 'fresh' : variant!.id}
-            className={s.chatThread}
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.16, ease: EASE }}
-          >
-            {fresh ? (
-              <div className={s.chatIntro}>
-                <div className={s.introMark}>
-                  <IconClaude size={30} />
+      <div className={s.chatScroller}>
+        <div
+          ref={listRef}
+          className={s.chatList}
+          onScroll={onScroll}
+          onWheel={(e) => {
+            if (e.deltaY < 0) jumpingRef.current = false
+          }}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              ref={threadRef}
+              key={fresh ? 'fresh' : variant!.id}
+              className={s.chatThread}
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.16, ease: EASE }}
+            >
+              {fresh ? (
+                <div className={s.chatIntro}>
+                  <div className={s.introMark}>
+                    <IconClaude size={30} />
+                  </div>
+                  <p>
+                    Write what the thumbnail should be. Claude builds it layer by layer on the canvas — you watch every
+                    step, can move things yourself at any time, and steer it with messages.
+                  </p>
+                  <p className={s.hint}>
+                    Each version runs as its own Claude session from your subscription.
+                    {variants.length > 0 ? ' Your existing versions stay in the strip below the canvas.' : ''}
+                  </p>
                 </div>
-                <p>
-                  Write what the thumbnail should be. Claude builds it layer by layer on the canvas — you watch every
-                  step, can move things yourself at any time, and steer it with messages.
-                </p>
-                <p className={s.hint}>
-                  Each version runs as its own Claude session from your subscription.
-                  {variants.length > 0 ? ' Your existing versions stay in the strip below the canvas.' : ''}
-                </p>
-              </div>
-            ) : (
-              <Thread studio={studio} variant={variant!} />
-            )}
-          </motion.div>
+              ) : (
+                <Thread studio={studio} variant={variant!} />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+        <AnimatePresence>
+          {!pinned && (
+            <motion.button
+              className={s.jumpLatest}
+              style={{ x: '-50%' }}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.16, ease: EASE }}
+              onClick={jump}
+              title="Jump to latest"
+              aria-label="Jump to latest"
+            >
+              <IconArrowDown size={14} />
+            </motion.button>
+          )}
         </AnimatePresence>
       </div>
 
