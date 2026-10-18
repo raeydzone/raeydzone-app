@@ -109,6 +109,13 @@ export interface UpdateState {
   error: string | null
 }
 
+export type Encoder = 'gpu' | 'cpu'
+
+export interface EncoderState {
+  chosen: Encoder
+  running: Encoder
+}
+
 export interface AppState {
   ready: boolean
   rootPath: string | null
@@ -126,6 +133,7 @@ export interface AppState {
   removableRoot: boolean
   update: UpdateState
   appVersion: string
+  encoder: EncoderState
 }
 
 export interface RootProposal {

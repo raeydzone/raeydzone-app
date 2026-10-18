@@ -162,11 +162,16 @@ select.field {
   transition: background var(--t-fast) var(--ease), box-shadow var(--t-mid) var(--ease);
 }
 
-.pill:hover,
+.pill:hover:not(:disabled),
 .pill[data-state='open'] {
   background: var(--grad-raised-hover);
   box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--accent-edge),
     0 0 var(--s-4) var(--accent-wash);
+}
+
+.pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .pillWide {

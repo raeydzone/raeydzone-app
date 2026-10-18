@@ -112,12 +112,16 @@ export function showRegionFrame(region: Region | null, owner: BrowserWindow | nu
 export type Tool = 'sound' | 'screen' | 'shot'
 
 const TOOL_WINDOWS: Record<Tool, { width: number; height: number }> = {
-  sound: { width: 440, height: 580 },
-  screen: { width: 470, height: 660 },
-  shot: { width: 470, height: 640 }
+  sound: { width: 480, height: 520 },
+  screen: { width: 500, height: 545 },
+  shot: { width: 500, height: 470 }
 }
 
+const MIN_TOOL_HEIGHT = 360
+
 const openTools = new Map<Tool, BrowserWindow>()
+
+export const toolWindows = (): BrowserWindow[] => [...openTools.values()]
 
 function keepToolOnTop(win: BrowserWindow): void {
   if (shuttingDown || ![...openTools.values()].includes(win) || win.isDestroyed() ||
@@ -146,8 +150,8 @@ export function openToolWindow(tool: Tool, owner?: BrowserWindow): void {
     height,
     x: Math.round(workArea.x + (workArea.width - width) / 2),
     y: Math.round(workArea.y + (workArea.height - height) / 2),
-    minWidth: Math.min(380, width),
-    minHeight: Math.min(460, height),
+    minWidth: Math.min(420, width),
+    minHeight: Math.min(MIN_TOOL_HEIGHT, height),
     parent: owner,
     show: false,
     frame: false,
@@ -188,6 +192,18 @@ export function openToolWindow(tool: Tool, owner?: BrowserWindow): void {
     if (openTools.get(tool) === win) openTools.delete(tool)
   })
   loadRenderer(win, 'tools-' + tool)
+}
+
+// Sized to the content, so an idle tool stays compact and a finished take never sits below the fold.
+export function fitToolWindow(win: BrowserWindow | null, contentHeight: number): void {
+  if (!win || win.isDestroyed() || !toolWindows().includes(win) || win.isMaximized()) return
+  if (!Number.isFinite(contentHeight)) return
+  const area = screen.getDisplayMatching(win.getBounds()).workArea
+  const [width] = win.getContentSize()
+  win.setContentSize(width, Math.round(Math.min(area.height, Math.max(MIN_TOOL_HEIGHT, contentHeight))))
+  const bounds = win.getBounds()
+  const overflow = bounds.y + bounds.height - (area.y + area.height)
+  if (overflow > 0) win.setPosition(bounds.x, Math.max(area.y, bounds.y - overflow))
 }
 
 type Rect = { x: number; y: number; width: number; height: number }

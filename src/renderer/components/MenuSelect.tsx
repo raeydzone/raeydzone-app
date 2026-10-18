@@ -25,7 +25,8 @@ export function MenuSelect({
   side = 'bottom',
   claude = false,
   wide = false,
-  chip = false
+  chip = false,
+  disabled = false
 }: {
   groups: MenuGroup[]
   trigger: ReactNode
@@ -35,11 +36,12 @@ export function MenuSelect({
   claude?: boolean
   wide?: boolean
   chip?: boolean
+  disabled?: boolean
 }): ReactNode {
   const look = chip ? k.chip : `${k.pill} ${claude ? k.pillClaude : ''} ${wide ? k.pillWide : ''}`
   return (
     <Menu.Root>
-      <Menu.Trigger className={look} title={title}>
+      <Menu.Trigger className={look} title={title} disabled={disabled}>
         {trigger}
         <IconChevron size={chip ? 11 : 12} />
       </Menu.Trigger>

@@ -273,9 +273,19 @@ surface once on next launch rather than being lost.
 
 ## 3b. Tools
 
-A tab of small utilities. **Each tool pops out into its own always-on-top window**, so the
-sound recorder, the screen recorder and the screenshot tool can sit in different places —
-or on different monitors — while Premiere is in front.
+A tab of small utilities, laid out as a **grid of tiles**. Tools are not used inline:
+clicking a tile **opens the tool in its own always-on-top window**, so the sound recorder,
+the screen recorder and the screenshot tool can sit in different places — or on different
+monitors — while Premiere is in front. Each window leads with the tool's name as a large
+title, and sizes itself to its content: compact while idle, taller once a take is waiting
+to be saved.
+
+**Video encoder.** One app-wide choice, **GPU** (default) or **CPU only**, set from the
+Tools tab or inside the screen recorder. GPU uses the graphics card's hardware encoder;
+CPU only switches it off so a game or OBS keeps the card to itself. Chromium reads this
+once at launch, so a change is saved immediately but applies after a restart, which the
+picker offers on the spot. Sound takes (raw WAV) and screenshots (PNG/JPG) never pass
+through a video encoder, so the choice only touches recordings that do.
 
 **Audio recorder.** Captures Windows loopback — whatever the desktop is currently playing
 — so a sound can be grabbed without hunting down a download. The source defaults to the
@@ -288,7 +298,7 @@ not reliably import the latter. A finished take can be previewed, named, and sav
 straight into a chosen project's `assets/`.
 
 **Screen recorder.** Captures a screen, a single window, or a box drawn over the desktop,
-with desktop audio on the same track. **Draw box…** opens a transparent overlay on
+with desktop audio on the same track. **Draw box** opens a transparent overlay on
 every connected monitor; dragging picks the area, Esc cancels, and choosing a box also
 selects that monitor as the source. Region capture composites through a canvas,
 scaling by the monitor's real-pixels-to-DIP ratio so display scaling does not shift the
@@ -304,7 +314,7 @@ captured audio as a voice call and returns a processed mono downmix, which on de
 is audible as a hollow, pumping copy of the original.
 
 The container is chosen at runtime — MP4 when Chromium can mux it, WebM otherwise — and
-the footer names which one you are about to get. Clips preview inline, then save into a
+the footer names which one you are about to get, and which encoder. Clips preview inline, then save into a
 project's `assets/` like sound takes do.
 
 Once a box is set, thin red **corner markers** identify it on the desktop until the box
@@ -315,7 +325,7 @@ from screen capture, and its markers are drawn just *outside* the recorded recta
 so even if that exclusion fails they are not inside the crop.
 
 **Screenshot.** The same framing as the screen recorder, for a single still: a screen, a
-window, or a box drawn over the desktop. **Draw box…** opens the same overlay, worded for
+window, or a box drawn over the desktop. **Draw box** opens the same overlay, worded for
 capture, and choosing a box selects that monitor as the source. The crop scales by the
 monitor's real-pixels-to-DIP ratio exactly as the recorder's does, so the saved image is at
 the monitor's native resolution, not its scaled one.

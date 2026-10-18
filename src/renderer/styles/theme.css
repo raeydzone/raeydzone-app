@@ -56,6 +56,18 @@
   --fs-md: 13px;
   --fs-font-preview: 17px;
   --fs-total: 28px;
+  --fs-lg: 15px;
+  --fs-tile: 18px;
+  --fs-tool-title: 26px;
+  --fw-title: 680;
+  --tool-icon: 44px;
+  --tile-icon: 40px;
+  --tile-min-w: 250px;
+  --tile-min-h: 188px;
+  --wave-h: 104px;
+  --shot-max-h: 300px;
+  --rec-dot: 8px;
+  --lift: -3px;
   --hairline: 1px;
 
   --studio-tools-w: 52px;

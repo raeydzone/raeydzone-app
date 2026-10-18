@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Video } from '@shared/types'
 import { formatBytes } from '@shared/format'
-import { IconMic, IconPlay, IconStop, IconTrash } from './Icons'
+import { IconPlay, IconStop, IconTrash } from '../components/Icons'
 import { useStore } from '../state/store'
 import { LOOPBACK_ID, listAudioSources, startRecording } from '../lib/recorder'
 import type { AudioSource, RecorderHandle } from '../lib/recorder'
-import p from '../pages/pages.module.css'
-import ui from '../styles/ui.module.css'
+import { Choice, Field, Range, RecDot, SaveForm, TakeCard, clock } from './kit'
+import k from '../styles/soft.module.css'
+import t from './tools.module.css'
 
 const BARS = 150
 
@@ -16,11 +17,7 @@ interface Take {
   url: string
   seconds: number
   peaks: number[]
-}
-
-const clock = (seconds: number): string => {
-  const total = Math.max(0, Math.floor(seconds))
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+  name: string
 }
 
 function drawWave(
@@ -81,7 +78,7 @@ function TakePlayer({ src, seconds }: { src: string; seconds: number }): ReactNo
   const pct = seconds > 0 ? Math.min(100, (time / seconds) * 100) : 0
 
   return (
-    <div className={p.player}>
+    <div className={t.player}>
       <audio
         ref={audio}
         src={src}
@@ -90,13 +87,13 @@ function TakePlayer({ src, seconds }: { src: string; seconds: number }): ReactNo
         onEnded={() => setPlaying(false)}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
       />
-      <button className={p.playButton} onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
+      <button className={t.playButton} onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
         {playing ? <IconStop size={13} /> : <IconPlay size={13} />}
       </button>
-      <div className={p.seek} onClick={scrub}>
-        <div className={p.seekFill} style={{ width: `${pct}%` }} />
+      <div className={t.seek} onClick={scrub}>
+        <div className={t.seekFill} style={{ width: `${pct}%` }} />
       </div>
-      <span className={p.playerTime}>
+      <span className={t.playerTime}>
         {clock(time)} / {clock(seconds)}
       </span>
     </div>
@@ -113,8 +110,6 @@ export default function SoundRecorder({ projects }: { projects: Video[] }): Reac
   const [recording, setRecording] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [take, setTake] = useState<Take | null>(null)
-  const [name, setName] = useState('')
-  const [project, setProject] = useState('')
 
   const handle = useRef<RecorderHandle | null>(null)
   const canvas = useRef<HTMLCanvasElement | null>(null)
@@ -122,14 +117,9 @@ export default function SoundRecorder({ projects }: { projects: Video[] }): Reac
   const frame = useRef(0)
   const startedAt = useRef(0)
 
-
   useEffect(() => {
     void listAudioSources().then(setSources)
   }, [])
-
-  useEffect(() => {
-    if (!project && projects.length) setProject(projects[0].id)
-  }, [projects, project])
 
   const draw = useCallback(() => {
     const node = canvas.current
@@ -149,6 +139,13 @@ export default function SoundRecorder({ projects }: { projects: Video[] }): Reac
     frame.current = requestAnimationFrame(draw)
   }, [])
 
+  const discard = (): void => {
+    if (take) URL.revokeObjectURL(take.url)
+    setTake(null)
+    peaks.current = []
+    if (canvas.current) drawWave(canvas.current, [], false)
+  }
+
   const begin = async (): Promise<void> => {
     if (take) discard()
     try {
@@ -156,6 +153,7 @@ export default function SoundRecorder({ projects }: { projects: Video[] }): Reac
       handle.current = rec
       peaks.current = []
       startedAt.current = Date.now()
+      setElapsed(0)
       setRecording(true)
       frame.current = requestAnimationFrame(draw)
     } catch (err) {
@@ -177,15 +175,8 @@ export default function SoundRecorder({ projects }: { projects: Video[] }): Reac
       return
     }
     const url = URL.createObjectURL(new Blob([data], { type: 'audio/wav' }))
-    setTake({ data, url, seconds, peaks: [...peaks.current] })
-    setName('recording_' + new Date().toISOString().slice(11, 19).replace(/:/g, ''))
-  }
-
-  const discard = (): void => {
-    if (take) URL.revokeObjectURL(take.url)
-    setTake(null)
-    peaks.current = []
-    if (canvas.current) drawWave(canvas.current, [], false)
+    const name = 'recording_' + new Date().toTimeString().slice(0, 8).replace(/:/g, '')
+    setTake({ data, url, seconds, peaks: [...peaks.current], name })
   }
 
   useEffect(() => {
@@ -201,11 +192,9 @@ export default function SoundRecorder({ projects }: { projects: Video[] }): Reac
     []
   )
 
-  const save = async (): Promise<void> => {
-    if (!take || !project) return
-    const saved = await run(() =>
-      api.saveRecording(project, name || 'recording', take.data, 'wav')
-    )
+  const save = async (project: string, name: string): Promise<void> => {
+    if (!take) return
+    const saved = await run(() => api.saveRecording(project, name, take.data, 'wav'))
     if (saved) {
       notify(`Saved ${saved} to assets`)
       discard()
@@ -214,134 +203,74 @@ export default function SoundRecorder({ projects }: { projects: Video[] }): Reac
 
   return (
     <>
-      <section className={p.tool}>
-        <header className={p.toolHead}>
-          <span className={p.toolIcon}>
-            <IconMic size={15} />
-          </span>
-          <div>
-            <h2 className={p.toolName}>Sound recorder</h2>
-            <p className={p.toolDesc}>Capture whatever Windows is playing right now.</p>
-          </div>
-        </header>
+      <section className={t.panel}>
+        <Field label="Source">
+          <Choice
+            label="Record from"
+            value={sourceId}
+            disabled={recording}
+            options={sources.map((src) => ({ id: src.id, label: src.label }))}
+            onChange={setSourceId}
+          />
+        </Field>
 
-        <div className={p.toolControls}>
-          <label className={p.toolField}>
-            <span className={p.fieldLabel}>Source</span>
-            <select
-              className={ui.input}
-              value={sourceId}
-              disabled={recording}
-              onChange={(e) => setSourceId(e.target.value)}
-            >
-              {sources.map((src) => (
-                <option key={src.id} value={src.id}>
-                  {src.label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <Field label="Level" value={gain + '%'}>
+          <Range
+            label="Level"
+            value={gain}
+            min={0}
+            max={200}
+            step={5}
+            onChange={(next) => {
+              setGain(next)
+              handle.current?.setGain(next / 100)
+            }}
+          />
+        </Field>
 
-          <label className={p.toolField}>
-            <span className={p.fieldLabel}>
-              Level <b className={p.fieldValue}>{gain}%</b>
-            </span>
-            <input
-              type="range"
-              className={p.slider}
-              min={0}
-              max={200}
-              step={5}
-              value={gain}
-              onChange={(e) => {
-                const next = Number(e.target.value)
-                setGain(next)
-                handle.current?.setGain(next / 100)
-              }}
-            />
-          </label>
+        <div className={`${t.waveBox} ${recording ? t.waveLive : ''}`}>
+          <canvas ref={canvas} className={t.wave} />
+          {!recording && !take && <span className={t.waveHint}>The waveform draws here while you record</span>}
         </div>
 
-        <div className={`${p.waveBox} ${recording ? p.waveLive : ''}`}>
-          <canvas ref={canvas} className={p.wave} />
-          {!recording && !take && <span className={p.waveHint}>Waveform appears here</span>}
-        </div>
-
-        <footer className={p.toolFoot}>
-          <span className={`${p.recClock} ${recording ? p.recClockLive : ''}`}>
+        <div className={t.deck}>
+          <span className={`${t.status} ${t.clock} ${recording ? t.clockLive : ''}`}>
+            {recording && <RecDot live />}
             {clock(recording ? elapsed / 1000 : (take?.seconds ?? 0))}
           </span>
           {recording ? (
-            <button className={`${ui.btn} ${ui.btnDanger}`} onClick={() => void finish()}>
-              <IconStop size={14} />
+            <button className={`${k.btn} ${k.btnDanger} ${t.action}`} onClick={() => void finish()}>
+              <IconStop size={15} />
               Stop
             </button>
           ) : (
-            <button className={`${ui.btn} ${ui.btnPrimary}`} onClick={() => void begin()}>
-              <IconMic size={14} />
+            <button className={`${k.btn} ${k.btnPrimary} ${t.action}`} onClick={() => void begin()}>
+              <RecDot />
               Record
             </button>
           )}
-        </footer>
+        </div>
       </section>
 
       {take && (
-        <section className={p.tool}>
-          <header className={p.toolHead}>
-            <div style={{ flex: 1 }}>
-              <h2 className={p.toolName}>Take</h2>
-              <p className={p.toolDesc}>
-                {clock(take.seconds)} · {formatBytes(take.data.byteLength)} · WAV
-              </p>
-            </div>
-            <button className={`${ui.btn} ${ui.btnGhost}`} onClick={discard}>
+        <TakeCard
+          title="Take"
+          meta={`${clock(take.seconds)} · ${formatBytes(take.data.byteLength)} · WAV`}
+          actions={
+            <button className={`${k.btn} ${k.btnGhost}`} onClick={discard}>
               <IconTrash size={14} />
               Discard
             </button>
-          </header>
-
+          }
+        >
           <TakePlayer src={take.url} seconds={take.seconds} />
-
-          <div className={p.toolControls}>
-            <label className={p.toolField}>
-              <span className={p.fieldLabel}>Name</span>
-              <input
-                className={ui.input}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="recording"
-              />
-            </label>
-
-            <label className={p.toolField}>
-              <span className={p.fieldLabel}>Save into</span>
-              <select
-                className={ui.input}
-                value={project}
-                onChange={(e) => setProject(e.target.value)}
-              >
-                {projects.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <button
-            className={`${ui.btn} ${ui.btnPrimary} ${p.saveButton}`}
-            disabled={!project}
-            onClick={() => void save()}
-          >
-            Save to assets
-          </button>
-          {projects.length === 0 && (
-            <p className={p.toolDesc} style={{ marginTop: 'var(--s-2)' }}>
-              Create a video project first — recordings save into its assets folder.
-            </p>
-          )}
-        </section>
+          <SaveForm
+            key={take.url}
+            projects={projects}
+            suggested={take.name}
+            onSave={save}
+          />
+        </TakeCard>
       )}
     </>
   )

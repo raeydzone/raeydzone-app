@@ -7,6 +7,7 @@ import * as db from './services/db'
 import * as lib from './services/library'
 import * as timer from './services/timer'
 import * as updater from './services/updater'
+import { runningEncoder } from './services/encoder'
 import { hasTemplate } from './services/premiere'
 import { log } from './services/log'
 import {
@@ -16,10 +17,10 @@ import { freeBytes, isRemovable } from './util/paths'
 import { DRAG_ICON_DATA_URL } from './util/dragIcon'
 import { registerStudio } from './studio/ipc'
 import {
-  finishRegion, openToolWindow, selectRegion, showRegionFrame
+  finishRegion, fitToolWindow, openToolWindow, selectRegion, showRegionFrame, toolWindows
 } from './windows'
 import type { Tool } from './windows'
-import type { AppState, DropTarget, Region, StepId } from '@shared/types'
+import type { AppState, DropTarget, Encoder, Region, StepId } from '@shared/types'
 
 type RegionRect = { x: number; y: number; width: number; height: number }
 
@@ -71,13 +72,17 @@ export async function buildState(): Promise<AppState> {
     freeBytes: r ? await freeBytes(r) : null,
     removableRoot: r ? await isRemovable(r) : false,
     update: updater.status(),
-    appVersion: app.getVersion()
+    appVersion: app.getVersion(),
+    encoder: { chosen: settings.videoEncoder, running: runningEncoder() }
   }
 }
 
 export async function broadcast(): Promise<void> {
   if (!win || win.isDestroyed()) return
-  win.webContents.send('state:changed', await buildState())
+  const state = await buildState()
+  for (const target of [win, ...toolWindows()]) {
+    if (!target.isDestroyed()) target.webContents.send('state:changed', state)
+  }
 }
 
 function handle(channel: string, fn: (...args: never[]) => unknown): void {
@@ -273,6 +278,13 @@ export function register(): void {
   handle('timer:stop', () => timer.stop())
   handle('timer:move', (from: string, to: string, ms: number) => timer.moveTime(from, to, ms))
 
+  handle('tools:encoder', (choice: Encoder) =>
+    saveSettings({ videoEncoder: choice === 'cpu' ? 'cpu' : 'gpu' })
+  )
+  handle('app:relaunch', () => {
+    app.relaunch()
+    app.quit()
+  })
   handle('tools:popout', (tool: Tool) => openToolWindow(tool, win ?? undefined))
   handle('tools:save', (videoId: string, name: string, data: Uint8Array, ext: string) =>
     lib.saveRecording(requireRoot(), videoId, name, data, ext)
@@ -302,6 +314,10 @@ export function register(): void {
   )
 
   // Native drag-out: lets a file be dragged from the app straight into Premiere.
+  ipcMain.on('tools:fit', (event, height: number) =>
+    fitToolWindow(BrowserWindow.fromWebContents(event.sender), Number(height))
+  )
+
   ipcMain.on('files:drag', (event, paths: string[]) => {
     const valid = paths.filter((p) => {
       try {

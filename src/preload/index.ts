@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
-  AppState, ArchivePreview, DropResult, DropTarget, ProjectFile, Region, RootProposal,
+  AppState, ArchivePreview, DropResult, DropTarget, Encoder, ProjectFile, Region, RootProposal,
   ScreenSource, StepId, Stream, Video
 } from '@shared/types'
 import type {
@@ -124,6 +124,9 @@ const api = {
   moveTime: (from: string, to: string, ms: number) => call<void>('timer:move', from, to, ms),
 
   popoutTool: (tool: 'sound' | 'screen' | 'shot') => call<void>('tools:popout', tool),
+  setEncoder: (choice: Encoder) => call<void>('tools:encoder', choice),
+  fitTool: (height: number) => ipcRenderer.send('tools:fit', height),
+  relaunch: () => call<void>('app:relaunch'),
   saveRecording: (projectId: string, name: string, data: Uint8Array, ext: string) =>
     call<string>('tools:save', projectId, name, data, ext),
 

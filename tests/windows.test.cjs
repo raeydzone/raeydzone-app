@@ -63,6 +63,10 @@ function setup() {
     restore() { this.minimized = false; this.emit('restore') }
     getBounds() { return this.bounds }
     setBounds(bounds) { Object.assign(this.bounds, bounds); this.setBoundsCount++ }
+    isMaximized() { return false }
+    getContentSize() { return [this.bounds.width, this.bounds.height] }
+    setContentSize(width, height) { Object.assign(this.bounds, { width, height }) }
+    setPosition(x, y) { Object.assign(this.bounds, { x, y }) }
     destroy() {
       this.destroyed = true
       this.webContents.destroyed = true
@@ -122,6 +126,24 @@ test('focusing the main app and crossing displays raises the popup without movin
   assert.equal(owner.listenerCount('focus'), 0)
   assert.equal(screen.listenerCount('display-metrics-changed'), 0)
   assert.equal(screen.listenerCount('display-removed'), 0)
+})
+
+test('tool popup fits its content height inside the work area and ignores other windows', () => {
+  const { api, instances, Window, displays } = setup()
+  const owner = new Window()
+  api.openToolWindow('shot', owner)
+  const popup = instances[1]
+  api.fitToolWindow(popup, 610)
+  assert.equal(popup.bounds.height, 610)
+  api.fitToolWindow(popup, 120)
+  assert.equal(popup.bounds.height, 360)
+  popup.bounds.y = 600
+  api.fitToolWindow(popup, 5000)
+  const area = displays[0].workArea
+  assert.equal(popup.bounds.height, area.height)
+  assert.equal(popup.bounds.y, area.y)
+  api.fitToolWindow(owner, 400)
+  assert.equal(owner.bounds.height, 820)
 })
 
 test('box on another monitor returns that monitor and clamps its local DIP coordinates', async () => {
@@ -199,7 +221,8 @@ test('screen sources prefer the requesting window monitor and preserve IDs for o
   }
   const dependencies = { electron }
   for (const id of ['./services/db', './services/library', './services/timer', './services/updater',
-    './services/premiere', './services/log', './services/settings', './util/paths', './util/dragIcon', './windows']) {
+    './services/premiere', './services/log', './services/settings', './services/encoder', './util/paths',
+    './util/dragIcon', './windows']) {
     dependencies[id] = {}
   }
   dependencies['./studio/ipc'] = { registerStudio() {} }
@@ -312,6 +335,7 @@ test('main-window destruction and before-quit both clean up auxiliary windows', 
       './services/timer': { shutdown() {} },
       './services/updater': { init() {} },
       './services/settings': { loadSettings: async () => ({}) },
+      './services/encoder': { applyEncoderSwitch() {} },
       './ipc': { root() {}, attach() {}, register() {} },
       './studio/ipc': { shutdownStudio() {} },
       './util/paths': {}

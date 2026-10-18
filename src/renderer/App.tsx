@@ -12,6 +12,7 @@ import Setup from './pages/Setup'
 import Streams from './pages/Streams'
 import TimerPage from './pages/TimerPage'
 import ToolsPage from './pages/ToolsPage'
+import ToolWindow from './tools/ToolWindow'
 import Videos from './pages/Videos'
 import { useStore } from './state/store'
 import app from './App.module.css'
@@ -48,11 +49,7 @@ export default function App(): ReactNode {
       <div className={app.shell}>
         <TitleBar />
         <main className={app.main}>
-          {state.ready ? (
-            <ToolsPage tool={tool} />
-          ) : (
-            <p className={app.poppedNote}>Set a root folder in the main window first.</p>
-          )}
+          <ToolWindow tool={tool} />
         </main>
         <Toasts />
       </div>

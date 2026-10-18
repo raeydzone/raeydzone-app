@@ -5,6 +5,7 @@ import * as lib from './services/library'
 import * as timer from './services/timer'
 import * as updater from './services/updater'
 import { loadSettings } from './services/settings'
+import { applyEncoderSwitch } from './services/encoder'
 import {
   attach, broadcast, register, root, startArchiveSchedule, startReminders, watchRoot
 } from './ipc'
@@ -13,6 +14,7 @@ import { shutdownStudio } from './studio/ipc'
 import { closeAuxiliaryWindows, loadRenderer, preloadOptions, iconPath } from './windows'
 
 registerScheme()
+applyEncoderSwitch()
 app.setAppUserModelId('zone.raeyd.app')
 
 let win: BrowserWindow | null = null
