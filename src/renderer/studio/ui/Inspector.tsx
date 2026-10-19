@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { BLEND_MODES } from '@shared/studio'
-import type { Layer, ShapeLayer, TextLayer } from '@shared/studio'
+import type { Gradient, Layer, ShapeLayer, TextLayer } from '@shared/studio'
 import { Toggle } from '../../components/Bits'
 import { useStore } from '../../state/store'
 import { cutOut, editMask } from '../ai'
@@ -16,6 +16,8 @@ import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
 
 type Patch = (patch: Record<string, unknown>, key?: string) => void
+
+const TEXT_GRADIENT = { type: 'linear', from: '#ff6a5a', to: '#a30000', angle: 90 }
 
 const blendName = (mode: string): string => mode.charAt(0).toUpperCase() + mode.slice(1).replace('-', ' ')
 
@@ -88,10 +90,13 @@ function TextSection({ layer, patch, focus }: { layer: TextLayer; patch: Patch; 
           { id: 'right', label: 'Right', title: 'Align right' }
         ]}
       />
-      <div className={s.grid2}>
-        <ColorField label="Fill" value={layer.fill} onChange={(fill) => patch({ fill }, 'fill')} />
-        <ColorField label="Highlight" value={layer.highlight} onChange={(highlight) => patch({ highlight }, 'highlight')} />
-      </div>
+      <GradientFields
+        value={layer.gradient ?? null}
+        patch={patch}
+        onDefault={TEXT_GRADIENT}
+        fallback={<ColorField label="Fill" value={layer.fill} onChange={(fill) => patch({ fill }, 'fill')} />}
+      />
+      <ColorField label="Highlight" value={layer.highlight} onChange={(highlight) => patch({ highlight }, 'highlight')} />
       <div className={s.rowGap}>
         <Toggle checked={layer.uppercase} onChange={(uppercase) => patch({ uppercase })} label="Caps" />
         <Toggle checked={layer.italic} onChange={(italic) => patch({ italic })} label="Italic" />
@@ -102,8 +107,39 @@ function TextSection({ layer, patch, focus }: { layer: TextLayer; patch: Patch; 
   )
 }
 
+// Text keeps its solid fill underneath, so switching the gradient off restores it.
+function GradientFields({ value, fallback, patch, onDefault }: {
+  value: Gradient | null
+  fallback: ReactNode
+  patch: Patch
+  onDefault: Record<string, unknown>
+}): ReactNode {
+  return (
+    <>
+      {value ? (
+        <>
+          <div className={s.grid2}>
+            <ColorField label="From" alpha value={value.from} onChange={(from) => patch({ gradient: { from } }, 'gfrom')} />
+            <ColorField label="To" alpha value={value.to} onChange={(to) => patch({ gradient: { to } }, 'gto')} />
+          </div>
+          <Segmented
+            value={value.type}
+            onChange={(type) => patch({ gradient: { type } })}
+            options={[{ id: 'radial', label: 'Radial' }, { id: 'linear', label: 'Linear' }]}
+          />
+          {value.type === 'linear' && (
+            <SliderField label="Angle" value={value.angle} min={0} max={360} unit="°" onChange={(angle) => patch({ gradient: { angle } }, 'gangle')} />
+          )}
+        </>
+      ) : (
+        fallback
+      )}
+      <Toggle checked={!!value} onChange={(on) => patch({ gradient: on ? onDefault : null })} label="Gradient" />
+    </>
+  )
+}
+
 function ShapeSection({ layer, patch }: { layer: ShapeLayer; patch: Patch }): ReactNode {
-  const g = layer.gradient
   return (
     <Section title="Shape">
       <Segmented
@@ -115,25 +151,12 @@ function ShapeSection({ layer, patch }: { layer: ShapeLayer; patch: Patch }): Re
           ...(layer.points.length >= 3 ? [{ id: 'polygon' as const, label: 'Polygon' }] : [])
         ]}
       />
-      {g ? (
-        <>
-          <div className={s.grid2}>
-            <ColorField label="From" alpha value={g.from} onChange={(from) => patch({ gradient: { from } }, 'gfrom')} />
-            <ColorField label="To" alpha value={g.to} onChange={(to) => patch({ gradient: { to } }, 'gto')} />
-          </div>
-          <Segmented
-            value={g.type}
-            onChange={(type) => patch({ gradient: { type } })}
-            options={[{ id: 'radial', label: 'Radial' }, { id: 'linear', label: 'Linear' }]}
-          />
-          {g.type === 'linear' && (
-            <SliderField label="Angle" value={g.angle} min={0} max={360} unit="°" onChange={(angle) => patch({ gradient: { angle } }, 'gangle')} />
-          )}
-        </>
-      ) : (
-        <ColorField label="Fill" alpha value={layer.fill} onChange={(fill) => patch({ fill }, 'fill')} />
-      )}
-      <Toggle checked={!!g} onChange={(on) => patch({ gradient: on ? {} : null })} label="Gradient" />
+      <GradientFields
+        value={layer.gradient}
+        patch={patch}
+        onDefault={{}}
+        fallback={<ColorField label="Fill" alpha value={layer.fill} onChange={(fill) => patch({ fill }, 'fill')} />}
+      />
       {layer.shape === 'rect' && (
         <SliderField label="Corner radius" value={layer.radius} min={0} max={200} unit="px" onChange={(radius) => patch({ radius }, 'radius')} />
       )}

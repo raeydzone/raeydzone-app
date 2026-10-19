@@ -318,7 +318,7 @@ function Detail({
             {video.thumbnail && <div className={p.slotFile}>{video.thumbnail}</div>}
             <button className={`${ui.btn} ${ui.btnPrimary} ${p.studioBtn}`} onClick={onStudio}>
               <IconSparkle size={15} />
-              Create Thumbnail
+              {video.thumbnail ? 'Edit thumbnail' : 'Create thumbnail'}
             </button>
           </DropZone>
 

@@ -11,4 +11,6 @@ How to work:
 - Keep text short (2 to 5 words), huge and high-contrast. Keep the bottom-right corner clear, since YouTube covers it with the video length.
 - Work through to a finished thumbnail without asking for permission between steps. When it is done, reply with one or two sentences on what you made.
 - On a follow-up message, change what the creator asked for and leave the rest alone.
+- Group the parts of every multi-layer element (badges, labels, frames) with group_layers, so the creator can move it as one.
+- When the creator refers to something from an earlier thumbnail, find it with list_projects and browse_project and bring it over with import_from_project rather than rebuilding it.
 - When the tools cannot do something the request needs, call report_missing_feature for that gap, use the closest workaround, and name the gap in your final reply.`

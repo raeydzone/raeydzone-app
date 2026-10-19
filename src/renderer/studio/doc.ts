@@ -1,6 +1,6 @@
 import { BLEND_MODES, CANVAS_H, CANVAS_W } from '@shared/studio'
 import type {
-  Adjust, AssetInfo, BlendMode, Glow, Gradient, ImageLayer, Layer, Outline, Shadow,
+  Adjust, AssetInfo, BlendMode, Glow, Gradient, ImageLayer, Layer, LayerGroup, Outline, Shadow,
   ShapeLayer, StudioDoc, TextLayer, Tint
 } from '@shared/studio'
 import { findFont } from './fonts'
@@ -20,8 +20,18 @@ export const emptyDoc = (): StudioDoc => ({
   width: CANVAS_W,
   height: CANVAS_H,
   background: '#0a0a0a',
-  layers: []
+  layers: [],
+  groups: []
 })
+
+// Docs saved before groups existed carry neither field.
+export function normalizeDoc(doc: StudioDoc): StudioDoc {
+  return tidyGroups({
+    ...doc,
+    groups: doc.groups ?? [],
+    layers: doc.layers.map((l) => (l.group === undefined ? { ...l, group: null } : l))
+  })
+}
 
 export function newId(doc: StudioDoc): string {
   const taken = new Set(doc.layers.map((l) => l.id))
@@ -46,6 +56,7 @@ function base(doc: StudioDoc, name: string) {
     blend: 'normal' as BlendMode,
     visible: true,
     locked: false,
+    group: null,
     shadow: null,
     glow: null,
     stroke: null,
@@ -84,6 +95,7 @@ export function makeText(doc: StudioDoc, text = 'YOUR TEXT'): TextLayer {
     italic: false,
     uppercase: false,
     fill: '#ffffff',
+    gradient: null,
     highlight: '#ff2a2a',
     align: 'center',
     letterSpacing: 0,
@@ -152,7 +164,7 @@ const COMMON = new Set([
 ])
 const BY_KIND: Record<Layer['kind'], Set<string>> = {
   image: new Set(),
-  text: new Set(['text', 'font', 'size', 'weight', 'italic', 'uppercase', 'fill', 'highlight', 'align', 'letterSpacing', 'lineHeight']),
+  text: new Set(['text', 'font', 'size', 'weight', 'italic', 'uppercase', 'fill', 'gradient', 'highlight', 'align', 'letterSpacing', 'lineHeight']),
   shape: new Set(['shape', 'fill', 'gradient', 'radius', 'feather', 'points'])
 }
 
@@ -332,11 +344,152 @@ export function duplicateLayer(doc: StudioDoc, id: string): { doc: StudioDoc; la
   return { doc: { ...doc, layers }, layer }
 }
 
+export const newGroupId = (doc: StudioDoc): string => {
+  let id = ''
+  do id = 'G' + Math.random().toString(36).slice(2, 7)
+  while (doc.groups.some((g) => g.id === id))
+  return id
+}
+
+export function tidyGroups(doc: StudioDoc): StudioDoc {
+  const used = new Set(doc.layers.map((l) => l.group))
+  const known = new Set(doc.groups.map((g) => g.id))
+  const stray = doc.layers.some((l) => l.group && !known.has(l.group))
+  const empty = doc.groups.some((g) => !used.has(g.id))
+  if (!stray && !empty) return doc
+  return {
+    ...doc,
+    groups: doc.groups.filter((g) => used.has(g.id)),
+    layers: stray ? doc.layers.map((l) => (l.group && !known.has(l.group) ? { ...l, group: null } : l)) : doc.layers
+  }
+}
+
+export const findGroup = (doc: StudioDoc, id: string): LayerGroup => {
+  const group = doc.groups.find((g) => g.id === id)
+  if (!group) throw new Error(`No group with id ${id}. Call get_document for current group ids.`)
+  return group
+}
+
+export const groupMembers = (doc: StudioDoc, id: string): Layer[] => doc.layers.filter((l) => l.group === id)
+
+// Members are pulled together where the topmost one sat, so a group always reads as one
+// block in the layers panel.
+export function groupLayers(doc: StudioDoc, ids: string[], name: string): { doc: StudioDoc; group: LayerGroup } {
+  const members = doc.layers.filter((l) => ids.includes(l.id))
+  if (members.length < 2) throw new Error('A group needs at least two layers')
+  const group = { id: newGroupId(doc), name: name.trim() || 'Group' }
+  const top = doc.layers.indexOf(members[members.length - 1])
+  const rest = doc.layers.filter((l) => !ids.includes(l.id))
+  const at = doc.layers.slice(0, top).filter((l) => !ids.includes(l.id)).length
+  rest.splice(at, 0, ...members.map((l) => ({ ...l, group: group.id })))
+  return { doc: tidyGroups({ ...doc, layers: rest, groups: [...doc.groups, group] }), group }
+}
+
+export function ungroup(doc: StudioDoc, id: string): StudioDoc {
+  findGroup(doc, id)
+  return tidyGroups({ ...doc, layers: doc.layers.map((l) => (l.group === id ? { ...l, group: null } : l)) })
+}
+
+export function arrangeGroup(doc: StudioDoc, id: string, to: 'top' | 'bottom' | 'up' | 'down'): StudioDoc {
+  const members = groupMembers(doc, id)
+  const rest = doc.layers.filter((l) => l.group !== id)
+  const now = doc.layers.slice(0, doc.layers.indexOf(members[0])).filter((l) => l.group !== id).length
+  const at = to === 'top' ? rest.length : to === 'bottom' ? 0 : to === 'up' ? Math.min(rest.length, now + 1) : Math.max(0, now - 1)
+  rest.splice(at, 0, ...members)
+  return { ...doc, layers: rest }
+}
+
+export interface Bounds { x: number; y: number; width: number; height: number }
+
+export function boundsOf(layers: Layer[]): Bounds {
+  const corners = layers.flatMap((l) => {
+    const a = (l.rotation * Math.PI) / 180
+    const cx = l.x + l.width / 2
+    const cy = l.y + l.height / 2
+    return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
+      const hx = (sx * l.width) / 2
+      const hy = (sy * l.height) / 2
+      return [cx + hx * Math.cos(a) - hy * Math.sin(a), cy + hx * Math.sin(a) + hy * Math.cos(a)]
+    })
+  })
+  const xs = corners.map((c) => c[0])
+  const ys = corners.map((c) => c[1])
+  const x = Math.min(...xs)
+  const y = Math.min(...ys)
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
+}
+
+// Scales a set of layers as one object about a fixed point: positions, boxes, type size and
+// the effects whose size is measured in pixels.
+export function scaleLayer(l: Layer, k: number, ox: number, oy: number): Layer {
+  const x = ox + (l.x - ox) * k
+  const y = oy + (l.y - oy) * k
+  const px = (n: number): number => Math.max(0, n * k)
+  const scaled = {
+    ...l,
+    x,
+    y,
+    width: Math.max(1, l.width * k),
+    height: Math.max(1, l.height * k),
+    stroke: l.stroke && { ...l.stroke, width: px(l.stroke.width) },
+    glow: l.glow && { ...l.glow, size: px(l.glow.size) },
+    shadow: l.shadow && { ...l.shadow, blur: px(l.shadow.blur), x: l.shadow.x * k, y: l.shadow.y * k }
+  } as Layer
+  if (scaled.kind === 'text') return { ...scaled, size: Math.max(6, scaled.size * k) }
+  if (scaled.kind === 'shape') return { ...scaled, radius: px(scaled.radius), feather: px(scaled.feather) }
+  return scaled
+}
+
+// Copies keep their own groups: a fully copied group becomes a new group, a lone member
+// stays in the group it came from.
+export function duplicateLayers(doc: StudioDoc, ids: string[], shift = 0): { doc: StudioDoc; ids: string[] } {
+  let next = doc
+  const copies: string[] = []
+  const regroup = new Map<string, string>()
+  for (const g of doc.groups) {
+    const members = groupMembers(doc, g.id)
+    if (!members.every((l) => ids.includes(l.id))) continue
+    const copy = { id: newGroupId(next), name: g.name + ' copy' }
+    next = { ...next, groups: [...next.groups, copy] }
+    regroup.set(g.id, copy.id)
+  }
+  const sources = doc.layers.filter((l) => ids.includes(l.id))
+  const top = doc.layers.indexOf(sources[sources.length - 1])
+  const layers = [...next.layers]
+  for (const src of sources) {
+    const layer = {
+      ...src,
+      id: newId({ ...next, layers }),
+      name: src.name + ' copy',
+      x: src.x + shift,
+      y: src.y + shift,
+      group: src.group ? regroup.get(src.group) ?? src.group : null
+    } as Layer
+    layers.splice(top + 1 + copies.length, 0, layer)
+    copies.push(layer.id)
+  }
+  return { doc: { ...next, layers }, ids: copies }
+}
+
 export function polygonPoints(layer: ShapeLayer): [number, number][] {
   return layer.points.map(([px, py]) => [
     Math.round((layer.x + px * layer.width) * 10) / 10,
     Math.round((layer.y + py * layer.height) * 10) / 10
   ])
+}
+
+export function describeGroups(doc: StudioDoc): Record<string, unknown>[] {
+  const round = (n: number): number => Math.round(n * 10) / 10
+  return doc.groups.map((g) => {
+    const members = groupMembers(doc, g.id)
+    const b = boundsOf(members)
+    return {
+      id: g.id,
+      name: g.name,
+      layer_ids_top_to_bottom: [...members].reverse().map((l) => l.id),
+      box: { x: round(b.x), y: round(b.y), width: round(b.width), height: round(b.height) }
+    }
+  })
 }
 
 export function describeLayer(layer: Layer): Record<string, unknown> {

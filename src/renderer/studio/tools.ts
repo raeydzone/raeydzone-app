@@ -1,11 +1,16 @@
-import type { Layer, StudioDoc, ToolReply } from '@shared/studio'
+import type { Layer, StudioDoc, ToolReply, Variant } from '@shared/studio'
 import { canvas, ctx2d, copyOf, encode, toBase64 } from './assets'
 import { cutOut, editMask, generateAsset, generativeFill, placeAsset } from './ai'
 import type { Box } from './ai'
-import { asColor, describeLayer, findLayer, makeShape, makeText, patchLayer } from './doc'
+import {
+  arrangeGroup, asColor, boundsOf, describeGroups, describeLayer, findGroup, findLayer, groupMembers, makeShape,
+  makeText, patchLayer, refitText, scaleLayer
+} from './doc'
 import type { Studio } from './engine'
 import type { Pt } from './mask'
 import { fontFamilies } from './fonts'
+import { bringAssets, importLayers, openSource } from './library'
+import type { Source } from './library'
 import { loadDocAssets, renderDoc } from './render'
 
 type Args = Record<string, unknown>
@@ -86,6 +91,130 @@ async function viewCanvas(studio: Studio, variantId: string, args: Args): Promis
   return { reply: await picture(out, `Render of ${what}.`), summary: only ? 'Looked at one layer' : 'Looked at the canvas' }
 }
 
+const list = (args: Args, key: string): string[] => (Array.isArray(args[key]) ? (args[key] as unknown[]).map(String) : [])
+const round = (n: number): number => Math.round(n * 10) / 10
+
+function versionOf(src: Source, args: Args): Variant {
+  const id = typeof args.version_id === 'string' ? args.version_id : src.file.activeId
+  const found = src.file.variants.find((x) => x.id === id) ?? (typeof args.version_id === 'string' ? null : src.file.variants[0])
+  if (!found) throw new Error('No such version. Call list_projects for version ids.')
+  return found
+}
+
+function groupReply(studio: Studio, v: string, id: string, text: string): ToolReply {
+  const group = describeGroups(studio.doc(v)).find((g) => g.id === id)
+  return { text: `${text} ${json(group ?? { id, removed: true })}` }
+}
+
+async function listProjects(studio: Studio, v: string, args: Args): Promise<Outcome> {
+  const needle = typeof args.search === 'string' ? args.search.trim().toLowerCase() : ''
+  const projects = (await window.raeydzone.studio.projects()).filter((p) => !needle || p.name.toLowerCase().includes(needle))
+  const rows: unknown[] = []
+  for (const p of projects.slice(0, 15)) {
+    const src = await openSource(studio, p.id).catch(() => null)
+    if (!src) continue
+    rows.push({
+      project_id: p.id,
+      kind: p.kind,
+      name: p.name,
+      current: p.id === studio.projectId || undefined,
+      edited: p.updatedAt,
+      versions: src.file.variants.filter((x) => x.id !== v).map((x) => ({
+        version_id: x.id,
+        name: x.name,
+        layers: x.doc.layers.length,
+        groups: x.doc.groups.map((g) => g.name),
+        last_open: x.id === src.file.activeId || undefined
+      }))
+    })
+  }
+  return {
+    reply: { text: rows.length ? json(rows) : needle ? `No project matches "${needle}".` : 'There are no other thumbnail studios yet.' },
+    summary: needle ? `Looked for projects like "${needle}"` : 'Listed earlier thumbnails'
+  }
+}
+
+async function browseProject(studio: Studio, args: Args): Promise<Outcome> {
+  const src = await openSource(studio, str(args, 'project_id'))
+  const version = versionOf(src, args)
+  const doc = version.doc
+  await loadDocAssets(src.assets, doc)
+  const out = renderDoc(doc, src.assets)
+  if (args.outlines) drawOutlines(out, doc)
+  const layers = [...doc.layers].reverse().map((l) => ({
+    id: l.id,
+    name: l.name,
+    kind: l.kind,
+    group: l.group,
+    ...(l.kind === 'text' ? { text: l.text } : {}),
+    box: { x: round(l.x), y: round(l.y), width: round(l.width), height: round(l.height) }
+  }))
+  const assets = src.file.assets
+    .filter((a) => a.source === 'upload' || a.source === 'generated')
+    .map(({ id, label, w, h }) => ({ id, label, width: w, height: h }))
+  const text = json({ version: { id: version.id, name: version.name }, layers_top_to_bottom: layers, groups: describeGroups(doc), assets })
+  return { reply: await picture(out, text), summary: `Looked at ${version.name} of another thumbnail` }
+}
+
+async function importFromProject(studio: Studio, v: string, args: Args): Promise<Outcome> {
+  const src = await openSource(studio, str(args, 'project_id'))
+  const doc = versionOf(src, args).doc
+  const groupIds = list(args, 'group_ids').map((id) => findGroup(doc, id).id)
+  const wanted = new Set([
+    ...list(args, 'layer_ids').map((id) => findLayer(doc, id).id),
+    ...doc.layers.filter((l) => l.group && groupIds.includes(l.group)).map((l) => l.id)
+  ])
+  const layers = doc.layers
+    .filter((l) => wanted.has(l.id))
+    .map((l) => (l.group && !groupIds.includes(l.group) ? ({ ...l, group: null } as Layer) : l))
+  const assetIds = list(args, 'asset_ids')
+  if (!layers.length && !assetIds.length) throw new Error('Pass layer_ids, group_ids or asset_ids to import.')
+  const all = [...src.assets.infos.values()]
+  const added = layers.length
+    ? await importLayers(studio, v, src.projectId, layers, doc.groups.filter((g) => groupIds.includes(g.id)), all)
+    : []
+  const assets = await bringAssets(studio, src.projectId, assetIds.map((id) => src.assets.info(id)))
+  const now = studio.doc(v)
+  const groups = describeGroups(now).filter((g) => now.layers.some((l) => added.includes(l.id) && l.group === g.id))
+  return {
+    reply: {
+      text: json({
+        layers: added.map((id) => describeLayer(findLayer(now, id))),
+        groups,
+        assets: [...assets.values()]
+      })
+    },
+    summary: `Imported ${added.length ? added.length + ' layers' : ''}${added.length && assets.size ? ' and ' : ''}${assets.size ? assets.size + ' assets' : ''} from another thumbnail`
+  }
+}
+
+function updateGroup(studio: Studio, v: string, args: Args): Outcome {
+  const id = str(args, 'group_id')
+  const group = findGroup(studio.doc(v), id)
+  if (typeof args.name === 'string' && args.name.trim()) studio.renameGroup(v, id, args.name.trim())
+  let members = groupMembers(studio.doc(v), id)
+  const k = args.scale === undefined ? 1 : Number(args.scale)
+  if (!Number.isFinite(k) || k <= 0) throw new Error('scale must be a positive number')
+  if (k !== 1) {
+    const b = boundsOf(members)
+    members = members.map((l) => refitText(scaleLayer(l, k, b.x + b.width / 2, b.y + b.height / 2)))
+  }
+  const b = boundsOf(members)
+  const dx = typeof args.x === 'number' ? args.x - b.x : Number(args.dx) || 0
+  const dy = typeof args.y === 'number' ? args.y - b.y : Number(args.dy) || 0
+  members = members.map((l) => ({
+    ...l,
+    x: l.x + dx,
+    y: l.y + dy,
+    ...(typeof args.visible === 'boolean' ? { visible: args.visible } : {}),
+    ...(typeof args.locked === 'boolean' ? { locked: args.locked } : {})
+  }) as Layer)
+  studio.replaceMany(v, members)
+  const to = String(args.arrange)
+  if (['top', 'bottom', 'up', 'down'].includes(to)) studio.update(v, (d) => arrangeGroup(d, id, to as 'top'))
+  return { reply: groupReply(studio, v, id, 'Updated group'), summary: `Changed group ${group.name}` }
+}
+
 function patchSummary(l: Layer, ignored: string[]): ToolReply {
   const note = ignored.length ? ` Ignored (not valid for a ${l.kind} layer): ${ignored.join(', ')}.` : ''
   return { text: `Updated ${l.id}: ${json(describeLayer(l))}${note}` }
@@ -103,6 +232,7 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
           text: json({
             canvas: { width: doc.width, height: doc.height, background: doc.background },
             layers_top_to_bottom: [...doc.layers].reverse().map(describeLayer),
+            groups: describeGroups(doc),
             assets
           })
         },
@@ -185,6 +315,50 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
       return { reply: { text: `Deleted ${layer.id}.` }, summary: `Deleted ${label(layer)}` }
     }
 
+    case 'group_layers': {
+      const doc = studio.doc(v)
+      const ids = list(args, 'layer_ids').map((id) => findLayer(doc, id).id)
+      const id = studio.group(v, ids, str(args, 'name'), true)
+      return { reply: groupReply(studio, v, id, `Grouped as ${id}:`), summary: `Grouped ${ids.length} layers as ${String(args.name)}` }
+    }
+
+    case 'update_group':
+      return updateGroup(studio, v, args)
+
+    case 'duplicate_group': {
+      const members = groupMembers(studio.doc(v), findGroup(studio.doc(v), str(args, 'group_id')).id)
+      const copies = studio.duplicateMany(v, members.map((l) => l.id))
+      const dx = Number(args.dx) || 0
+      const dy = Number(args.dy) || 0
+      if (dx || dy) {
+        const now = studio.doc(v).layers.filter((l) => copies.includes(l.id))
+        studio.place(v, Object.fromEntries(now.map((l) => [l.id, [l.x + dx, l.y + dy]])))
+      }
+      const copy = findLayer(studio.doc(v), copies[0]).group ?? ''
+      return { reply: groupReply(studio, v, copy, `Duplicated as ${copy}:`), summary: 'Duplicated a group' }
+    }
+
+    case 'ungroup': {
+      const group = findGroup(studio.doc(v), str(args, 'group_id'))
+      studio.ungroup(v, group.id)
+      return { reply: { text: `Ungrouped ${group.id}.` }, summary: `Ungrouped ${group.name}` }
+    }
+
+    case 'delete_group': {
+      const group = findGroup(studio.doc(v), str(args, 'group_id'))
+      studio.removeMany(v, groupMembers(studio.doc(v), group.id).map((l) => l.id))
+      return { reply: { text: `Deleted group ${group.id} and its layers.` }, summary: `Deleted group ${group.name}` }
+    }
+
+    case 'list_projects':
+      return listProjects(studio, v, args)
+
+    case 'browse_project':
+      return browseProject(studio, args)
+
+    case 'import_from_project':
+      return importFromProject(studio, v, args)
+
     case 'set_background': {
       studio.setBackground(v, asColor(args.color, 'color'))
       return { reply: { text: 'Background set to ' + args.color }, summary: 'Set the background colour' }
@@ -211,11 +385,10 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
 
     case 'generate_image': {
       const prompt = str(args, 'prompt')
-      const list = (key: string): string[] => (Array.isArray(args[key]) ? (args[key] as unknown[]).map(String) : [])
       const { info, cost, transparent, model } = await generateAsset(studio, v, {
         prompt,
-        refs: list('reference_asset_ids'),
-        layers: list('reference_layer_ids'),
+        refs: list(args, 'reference_asset_ids'),
+        layers: list(args, 'reference_layer_ids'),
         canvas: !!args.reference_canvas,
         aspect: typeof args.aspect_ratio === 'string' ? args.aspect_ratio : undefined,
         transparent: !!args.transparent

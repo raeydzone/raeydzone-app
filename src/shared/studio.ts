@@ -44,6 +44,7 @@ interface LayerBase {
   blend: BlendMode
   visible: boolean
   locked: boolean
+  group: string | null
   shadow: Shadow | null
   glow: Glow | null
   stroke: Outline | null
@@ -66,6 +67,7 @@ export interface TextLayer extends LayerBase {
   italic: boolean
   uppercase: boolean
   fill: string
+  gradient: Gradient | null
   highlight: string
   align: 'left' | 'center' | 'right'
   letterSpacing: number
@@ -85,11 +87,17 @@ export interface ShapeLayer extends LayerBase {
 export type Layer = ImageLayer | TextLayer | ShapeLayer
 export type LayerKind = Layer['kind']
 
+export interface LayerGroup {
+  id: string
+  name: string
+}
+
 export interface StudioDoc {
   width: number
   height: number
   background: string
   layers: Layer[]
+  groups: LayerGroup[]
 }
 
 export interface AssetInfo {
@@ -113,6 +121,10 @@ export interface StudioProject {
   kind: 'video' | 'stream'
   id: string
   name: string
+}
+
+export interface StudioListing extends StudioProject {
+  updatedAt: string
 }
 
 export interface ClaudeChoice {
@@ -146,6 +158,7 @@ export interface StudioFile {
   activeId: string | null
   claude?: ClaudeChoice
   imageModels?: Partial<ImageModels>
+  thumbHash?: string
 }
 
 export const CLAUDE_MODELS = [
@@ -223,11 +236,11 @@ export interface SpendSummary {
   total: number
   today: number
   month: number
-  project: number
   images: number
   unpriced: number
   since: string | null
   models: { id: string; label: string; cost: number; images: number }[]
+  months: { key: string; cost: number; images: number }[]
   tasks: Record<ImageTask, number>
 }
 

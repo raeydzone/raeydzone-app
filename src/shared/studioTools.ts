@@ -23,6 +23,7 @@ const nullable = (schema: Schema, description: string): Schema => ({
   description
 })
 const point = { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 }
+const ids = (description: string): Schema => ({ type: 'array', items: { type: 'string' }, description })
 const points = (description: string): Schema => ({ type: 'array', items: point, minItems: 3, description })
 const rect = (description: string): Schema => ({
   ...obj(
@@ -70,6 +71,16 @@ const common: Record<string, Schema> = {
   })
 }
 
+const gradient = (description: string): Schema => nullable(
+  obj({
+    type: { type: 'string', enum: ['linear', 'radial'] },
+    from: color('Start colour (centre for radial).'),
+    to: color('End colour (edge for radial). Use a transparent colour like #00000000 to fade out.'),
+    angle: num('Linear direction in degrees, 90 is top to bottom.')
+  }, ['type', 'from', 'to']),
+  description
+)
+
 const textProps: Record<string, Schema> = {
   text: str('The text. Use \\n for line breaks. Wrap words in *asterisks* to paint them in the highlight colour, e.g. "IT\'S THE *ENDBOSS!*".'),
   font: str(`Font family — any installed font (see list_fonts). Bundled thumbnail fonts: ${BUNDLED_FONTS.join(', ')}.`),
@@ -78,6 +89,7 @@ const textProps: Record<string, Schema> = {
   italic: bool('Italic.'),
   uppercase: bool('Render in capitals.'),
   fill: color('Main text colour.'),
+  gradient: gradient('Gradient across the letters, overrides fill; *highlighted* words keep the highlight colour. Linear at angle 90 runs top to bottom of the text box. null for a solid fill.'),
   highlight: color('Colour for *highlighted* words.'),
   align: { type: 'string', enum: ['left', 'center', 'right'] },
   letterSpacing: num('Extra spacing between letters px.'),
@@ -87,15 +99,7 @@ const textProps: Record<string, Schema> = {
 const shapeProps: Record<string, Schema> = {
   shape: { type: 'string', enum: ['rect', 'ellipse', 'polygon'] },
   fill: color('Fill colour.'),
-  gradient: nullable(
-    obj({
-      type: { type: 'string', enum: ['linear', 'radial'] },
-      from: color('Start colour (centre for radial).'),
-      to: color('End colour (edge for radial). Use a transparent colour like #00000000 to fade out.'),
-      angle: num('Linear direction in degrees, 90 is top to bottom.')
-    }, ['type', 'from', 'to']),
-    'Gradient fill, overrides fill. null for a solid fill.'
-  ),
+  gradient: gradient('Gradient fill, overrides fill. null for a solid fill.'),
   radius: num('Corner radius px for rect.'),
   feather: num('Softens the edge by this many px — high values turn a shape into a soft light or shadow blob.'),
   points: points('Polygon anchor points in canvas pixels, [[x, y], ...]. Setting them recomputes the box.')
@@ -104,7 +108,7 @@ const shapeProps: Record<string, Schema> = {
 export const STUDIO_TOOLS: ToolDef[] = [
   {
     name: 'get_document',
-    description: 'Returns the canvas size, background, every layer top to bottom with all of its properties, and the image assets you can place (attachments, generated images). Call this first and whenever you are unsure of the current state — the human can edit the canvas at any time.',
+    description: 'Returns the canvas size, background, every layer top to bottom with all of its properties (group holds the id of the group it belongs to), the layer groups with their members and boxes, and the image assets you can place (attachments, generated images). Call this first and whenever you are unsure of the current state — the human can edit the canvas at any time.',
     inputSchema: obj({})
   },
   {
@@ -168,6 +172,70 @@ export const STUDIO_TOOLS: ToolDef[] = [
     name: 'delete_layer',
     description: 'Removes a layer.',
     inputSchema: obj({ layer_id: str('Layer id.') }, ['layer_id'])
+  },
+  {
+    name: 'group_layers',
+    description: 'Groups layers into one named unit, e.g. a badge built from a shape, a dot and a text layer. The members are stacked together where the topmost one was. Clicking any member on the canvas selects the whole group, and update_group, duplicate_group and delete_group act on all of it. Returns the group id.',
+    inputSchema: obj({
+      layer_ids: { ...ids('Two or more layer ids.'), minItems: 2 },
+      name: str('Group name shown in the layers panel, e.g. "LIVE badge".')
+    }, ['layer_ids', 'name'])
+  },
+  {
+    name: 'update_group',
+    description: 'Changes a whole group at once: rename it, move it (dx/dy, or x/y for the top-left of the group box), scale it about its centre (type size, outlines, glows and shadows scale along), show or hide it, lock it, or move it through the stack as one block. Members stay editable on their own with update_layer.',
+    inputSchema: obj({
+      group_id: str('Group id.'),
+      name: str('New group name.'),
+      dx: num('Move right by this many px.'),
+      dy: num('Move down by this many px.'),
+      x: num('Place the left edge of the group box here.'),
+      y: num('Place the top edge of the group box here.'),
+      scale: num('Uniform scale factor, e.g. 1.25 for a quarter bigger.'),
+      visible: bool('Show or hide every member.'),
+      locked: bool('Lock or unlock every member.'),
+      arrange: { type: 'string', enum: ['top', 'bottom', 'up', 'down'], description: 'Move the group in the stack; up/down step past one neighbouring layer.' }
+    }, ['group_id'])
+  },
+  {
+    name: 'duplicate_group',
+    description: 'Copies a group with all of its layers as a new group directly above it and returns the new ids.',
+    inputSchema: obj({ group_id: str('Group id.'), dx: num('Offset the copy right px.'), dy: num('Offset the copy down px.') }, ['group_id'])
+  },
+  {
+    name: 'ungroup',
+    description: 'Dissolves a group. Its layers stay exactly where they are.',
+    inputSchema: obj({ group_id: str('Group id.') }, ['group_id'])
+  },
+  {
+    name: 'delete_group',
+    description: 'Deletes a group together with all of its layers.',
+    inputSchema: obj({ group_id: str('Group id.') }, ['group_id'])
+  },
+  {
+    name: 'list_projects',
+    description: 'Lists the creator\'s thumbnail studios (videos and streams, most recently edited first) with their versions, so you can reuse something from an earlier thumbnail: a badge, logo, frame, text style or cut-out the creator already has. The current project is included and marked current, for its other versions.',
+    inputSchema: obj({ search: str('Optional case-insensitive filter on the project name.') })
+  },
+  {
+    name: 'browse_project',
+    description: 'Shows one version of a thumbnail from list_projects: a render of it, its layers top to bottom with ids, names, groups and boxes, its groups, and its assets. Set outlines to label the layer boxes on the render. Use the ids with import_from_project.',
+    inputSchema: obj({
+      project_id: str('Project id from list_projects.'),
+      version_id: str('Version id from list_projects. Defaults to the version that was open last.'),
+      outlines: bool('Draw labelled layer boxes over the render.')
+    }, ['project_id'])
+  },
+  {
+    name: 'import_from_project',
+    description: 'Copies layers, whole groups and assets from another thumbnail into this one. Layers keep their position, effects and masks and land on top of the stack; group_ids bring every member along as a new group. asset_ids only add images to this project\'s assets for add_image. Returns the new ids.',
+    inputSchema: obj({
+      project_id: str('Project id from list_projects.'),
+      version_id: str('Version id. Defaults to the version that was open last.'),
+      layer_ids: ids('Layers to copy.'),
+      group_ids: ids('Groups to copy with all their layers.'),
+      asset_ids: ids('Assets to copy into this project.')
+    }, ['project_id'])
   },
   {
     name: 'set_background',

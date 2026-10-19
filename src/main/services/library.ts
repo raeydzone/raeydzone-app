@@ -10,6 +10,7 @@ import {
   sanitizeFolderName, uniqueFile, uniqueFolder
 } from '../util/paths'
 import type { MoveOutcome } from '../util/paths'
+import type { StudioListing } from '@shared/studio'
 import { STEP_IDS } from '@shared/types'
 import { formatBytes } from '@shared/format'
 import type {
@@ -833,6 +834,29 @@ export async function studioDir(root: string, projectId: string): Promise<string
   const dir = path.join((await ownerOf(root, projectId)).dir, 'thumbnail_studio')
   assertInside(root, dir)
   return dir
+}
+
+export async function studioProjects(root: string): Promise<StudioListing[]> {
+  const { videos, streams } = db.state()
+  const all = [
+    ...videos.map((v) => ({ kind: 'video' as const, id: v.id, name: v.name, dir: videoPath(root, v) })),
+    ...streams.map((s) => ({ kind: 'stream' as const, id: s.id, name: s.name, dir: streamPath(root, s) }))
+  ]
+  const found = await Promise.all(
+    all.map(async ({ dir, ...p }) => {
+      const stat = await fs.stat(path.join(dir, 'thumbnail_studio', 'studio.json')).catch(() => null)
+      return stat ? { ...p, updatedAt: stat.mtime.toISOString() } : null
+    })
+  )
+  return found.filter((p): p is StudioListing => !!p).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+}
+
+export async function thumbnailFile(root: string, projectId: string): Promise<string | null> {
+  const { entity, dir } = await ownerOf(root, projectId)
+  if (!entity.thumbnail) return null
+  const file = path.join(dir, entity.thumbnail)
+  assertInside(root, file)
+  return file
 }
 
 export async function writeThumbnail(

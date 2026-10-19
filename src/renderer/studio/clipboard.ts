@@ -1,11 +1,11 @@
-import type { Layer } from '@shared/studio'
+import type { AssetInfo, Layer, LayerGroup } from '@shared/studio'
 import { placeAsset } from './ai'
 import { canvas, ctx2d, encode } from './assets'
-import { newId } from './doc'
 import type { Studio } from './engine'
+import { importLayers } from './library'
 import { drawLayer, loadDocAssets, raster } from './render'
 
-let copied: { projectId: string; layers: Layer[] } | null = null
+let copied: { projectId: string; layers: Layer[]; groups: LayerGroup[]; assets: AssetInfo[] } | null = null
 
 type Bounds = { x0: number; y0: number; x1: number; y1: number }
 
@@ -34,7 +34,8 @@ export async function copyLayers(studio: Studio, variantId: string, ids: string[
   g.translate(-x0, -y0)
   for (const l of layers) drawLayer(g, layers.length > 1 ? l : ({ ...l, blend: 'normal' } as Layer), studio.assets)
   await window.raeydzone.studio.copyImage(await encode(out))
-  copied = { projectId: studio.projectId, layers }
+  const whole = doc.groups.filter((g) => doc.layers.every((l) => l.group !== g.id || ids.includes(l.id)))
+  copied = { projectId: studio.projectId, layers, groups: whole, assets: [...studio.assets.infos.values()] }
 }
 
 export async function cutLayers(studio: Studio, variantId: string, ids: string[]): Promise<void> {
@@ -45,18 +46,10 @@ export async function cutLayers(studio: Studio, variantId: string, ids: string[]
 export async function pasteLayers(studio: Studio, variantId: string): Promise<boolean> {
   const pasted = await window.raeydzone.studio.paste(studio.projectId)
   if (!pasted) return false
-  if (pasted.ours && copied?.projectId === studio.projectId) {
-    let doc = studio.doc(variantId)
+  if (pasted.ours && copied) {
     const first = copied.layers[0]
-    const shift = doc.layers.some((l) => l.x === first.x && l.y === first.y) ? 24 : 0
-    const ids: string[] = []
-    for (const src of copied.layers) {
-      const layer = { ...src, id: newId(doc), x: src.x + shift, y: src.y + shift } as Layer
-      doc = { ...doc, layers: [...doc.layers, layer] }
-      ids.push(layer.id)
-    }
-    studio.commit(variantId, doc)
-    studio.pick(variantId, ids)
+    const shift = studio.doc(variantId).layers.some((l) => l.x === first.x && l.y === first.y) ? 24 : 0
+    await importLayers(studio, variantId, copied.projectId, copied.layers, copied.groups, copied.assets, shift)
     return true
   }
   const info = await studio.assets.addFile(pasted.file, pasted.name, 'upload')

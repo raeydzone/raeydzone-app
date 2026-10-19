@@ -5,7 +5,8 @@ import type { Layer, ShapeLayer } from '@shared/studio'
 import { useStore } from '../../state/store'
 import { editMask, placeAsset } from '../ai'
 import type { Box } from '../ai'
-import { makeShape, makeText, patchLayer } from '../doc'
+import { boundsOf, makeShape, makeText, patchLayer, refitText, scaleLayer } from '../doc'
+import type { Bounds } from '../doc'
 import type { Studio, VariantState } from '../engine'
 import type { Pt } from '../mask'
 import { drawDoc, hitLayer, toLocal } from '../render'
@@ -24,6 +25,7 @@ type Drag =
   | { kind: 'marquee'; from: Pt; to: Pt; add: boolean }
   | { kind: 'resize'; id: string; hx: number; hy: number; orig: Layer }
   | { kind: 'rotate'; id: string; orig: Layer }
+  | { kind: 'scale'; hx: number; hy: number; box: Bounds; orig: Layer[] }
   | { kind: 'anchor'; id: string; index: number; pts: Pt[] }
   | { kind: 'box'; from: Pt; to: Pt }
   | { kind: 'brush'; id: string; pts: Pt[] }
@@ -108,6 +110,8 @@ export function Stage({
   const unit = 1 / scale
   const selected = doc.layers.find((l) => l.id === variant.selected) ?? null
   const v = variant.id
+  const chosen = doc.layers.filter((l) => l.id === variant.selected || variant.picked.includes(l.id))
+  const multi = chosen.length > 1 ? chosen.filter((l) => !l.locked) : []
 
   useLayoutEffect(() => {
     const el = wrapRef.current
@@ -200,6 +204,11 @@ export function Stage({
     const handle = (e.target as Element).getAttribute('data-handle')
 
     if (tool === 'move') {
+      if (handle?.startsWith('m') && multi.length) {
+        const [hx, hy] = handle.slice(1).split(',').map(Number)
+        setDrag({ kind: 'scale', hx, hy, box: boundsOf(multi), orig: multi })
+        return
+      }
       if (handle && selected) {
         if (handle === 'rotate') setDrag({ kind: 'rotate', id: selected.id, orig: selected })
         else if (handle.startsWith('a') && selected.kind === 'shape') {
@@ -223,7 +232,7 @@ export function Stage({
       const ids = studio.selection(v)
       if (add) studio.toggle(v, target.id)
       else if (ids.includes(target.id)) studio.pick(v, ids, target.id)
-      else studio.select(v, target.id)
+      else studio.pick(v, studio.withGroups(v, [target.id]), target.id)
       const group = studio.selection(v)
       if (!target.locked && group.includes(target.id)) {
         const orig = Object.fromEntries(doc.layers.filter((l) => group.includes(l.id) && !l.locked).map((l) => [l.id, [l.x, l.y] as Pt]))
@@ -282,6 +291,14 @@ export function Stage({
         } else studio.patch(v, drag.id, { ...box }, 'resize')
         break
       }
+      case 'scale': {
+        const { box: b, hx, hy } = drag
+        const ax = hx < 0 ? b.x + b.width : b.x
+        const ay = hy < 0 ? b.y + b.height : b.y
+        const k = Math.max(0.05, Math.abs(p[0] - ax) / Math.max(1, b.width), Math.abs(p[1] - ay) / Math.max(1, b.height))
+        studio.replaceMany(v, drag.orig.map((l) => refitText(scaleLayer(l, k, ax, ay))), 'scale')
+        break
+      }
       case 'rotate': {
         const o = drag.orig
         let deg = (Math.atan2(p[1] - (o.y + o.height / 2), p[0] - (o.x + o.width / 2)) * 180) / Math.PI + 90
@@ -316,7 +333,8 @@ export function Stage({
     }
     if (d.kind === 'marquee') {
       const area = normBox(d.from, d.to)
-      const hit = area.width < 4 * unit && area.height < 4 * unit ? [] : doc.layers.filter((l) => l.visible && !l.locked && overlaps(l, area)).map((l) => l.id)
+      const touched = area.width < 4 * unit && area.height < 4 * unit ? [] : doc.layers.filter((l) => l.visible && !l.locked && overlaps(l, area)).map((l) => l.id)
+      const hit = studio.withGroups(v, touched)
       if (!d.add) studio.pick(v, hit)
       else studio.pick(v, [...new Set([...studio.selection(v), ...hit])], variant.selected ?? hit[hit.length - 1] ?? null)
       return
@@ -409,7 +427,8 @@ export function Stage({
             )}
           </AnimatePresence>
           {others.map((l) => <g key={l.id}>{outline(l, s.selBox)}</g>)}
-          {selected && <SelectionFrame layer={selected} hs={hs} unit={unit} editing={tool === 'move'} />}
+          {selected && <SelectionFrame layer={selected} hs={hs} unit={unit} editing={tool === 'move' && !multi.length} />}
+          {tool === 'move' && multi.length > 0 && <MultiFrame box={boundsOf(multi)} hs={hs} />}
           {box && <rect className={tool === 'fill' || tool === 'cut' ? s.aiBox : s.dragBox} {...box} />}
           {poly.length > 0 && (
             <>
@@ -431,6 +450,26 @@ export function Stage({
         {busy && <div className={s.stageBusy}>Updating mask…</div>}
       </div>
     </div>
+  )
+}
+
+function MultiFrame({ box, hs }: { box: Bounds; hs: number }): ReactNode {
+  return (
+    <g>
+      <rect className={s.groupBox} {...box} />
+      {[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([hx, hy]) => (
+        <rect
+          key={hx + ',' + hy}
+          className={s.handle}
+          data-handle={`m${hx},${hy}`}
+          x={box.x + (hx > 0 ? box.width : 0) - hs / 2}
+          y={box.y + (hy > 0 ? box.height : 0) - hs / 2}
+          width={hs}
+          height={hs}
+          style={{ cursor: hx === hy ? 'nwse-resize' : 'nesw-resize' }}
+        />
+      ))}
+    </g>
   )
 }
 

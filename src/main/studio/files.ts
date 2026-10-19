@@ -2,7 +2,7 @@ import { clipboard, nativeImage } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import { studioDir } from '../services/library'
+import { studioDir, thumbnailFile } from '../services/library'
 import { IMAGE_EXTS, assertInside } from '../util/paths'
 import type { StudioFile } from '@shared/studio'
 
@@ -71,6 +71,45 @@ export async function importFiles(
     out.push({ file, name: path.basename(src) })
   }
   return out
+}
+
+// Reused layers are copied, never linked, so an import survives the source project being
+// archived or deleted.
+export async function copyAssets(root: string, from: string, to: string, names: string[]): Promise<string[]> {
+  const source = await assetsDir(root, from)
+  const target = await assetsDir(root, to)
+  const out: string[] = []
+  for (const name of names) {
+    const src = assetPath(source, name)
+    const file = randomUUID() + path.extname(name).toLowerCase()
+    const dst = assetPath(target, file)
+    assertInside(root, src)
+    assertInside(root, dst)
+    await fs.copyFile(src, dst)
+    out.push(file)
+  }
+  return out
+}
+
+export const digest = (data: Uint8Array): string => createHash('sha1').update(data).digest('hex')
+
+// The studio remembers the hash of the thumbnail it last saw, so a thumbnail set from
+// outside comes in as a fresh asset once and is never re-imported on every open.
+export async function adoptThumbnail(
+  root: string,
+  projectId: string,
+  known: string | null,
+  copy: boolean
+): Promise<{ hash: string; file: string | null }> {
+  const source = await thumbnailFile(root, projectId)
+  if (!source) return { hash: '', file: null }
+  const data = await fs.readFile(source).catch(() => null)
+  if (!data) return { hash: '', file: null }
+  const hash = digest(data)
+  if (hash === known || !copy) return { hash, file: null }
+  const file = randomUUID() + path.extname(source).toLowerCase()
+  await fs.writeFile(assetPath(await assetsDir(root, projectId), file), data)
+  return { hash, file }
 }
 
 let copiedImage: string | null = null

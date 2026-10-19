@@ -66,7 +66,13 @@ export function measureText(l: TextProps): { width: number; height: number } {
   }
 }
 
-export function drawText(ctx: CanvasRenderingContext2D, l: TextLayer, offsetX: number, offsetY: number): void {
+export function drawText(
+  ctx: CanvasRenderingContext2D,
+  l: TextLayer,
+  offsetX: number,
+  offsetY: number,
+  paint: string | CanvasGradient = l.fill
+): void {
   const lines = layout(ctx, l)
   const lh = l.size * l.lineHeight
   const pad = l.size * 0.02
@@ -77,7 +83,7 @@ export function drawText(ctx: CanvasRenderingContext2D, l: TextLayer, offsetX: n
     else if (l.align === 'right') x += room - line.width
     const baseline = offsetY + i * lh + lh / 2 + (line.ascent - line.descent) / 2
     for (const run of line.runs) {
-      ctx.fillStyle = run.highlight ? l.highlight : l.fill
+      ctx.fillStyle = run.highlight ? l.highlight : paint
       ctx.fillText(run.text, x, baseline)
       x += run.width
     }

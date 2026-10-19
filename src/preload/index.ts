@@ -5,7 +5,7 @@ import type {
 } from '@shared/types'
 import type {
   ClaudeStatus, FeatureReport, ImageRequest, ImageResult, OpenRouterStatus, ReportInput, SendRequest,
-  SpendSummary, StudioEvent, StudioFile, ToolCall, ToolReply
+  SpendSummary, StudioEvent, StudioFile, StudioListing, ToolCall, ToolReply
 } from '@shared/studio'
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -40,7 +40,11 @@ const studio = {
   prune: (projectId: string, keep: string[]) => call<number>('studio:prune', projectId, keep),
   pickImages: () => call<string[]>('studio:pickImages'),
   apply: (projectId: string, data: Uint8Array, ext: 'png' | 'jpg') =>
-    call<string>('studio:apply', projectId, data, ext),
+    call<{ file: string; hash: string }>('studio:apply', projectId, data, ext),
+  projects: () => call<StudioListing[]>('studio:projects'),
+  copyAssets: (from: string, to: string, names: string[]) => call<string[]>('studio:copyAssets', from, to, names),
+  adoptThumbnail: (projectId: string, known: string | null, copy: boolean) =>
+    call<{ hash: string; file: string | null }>('studio:adoptThumbnail', projectId, known, copy),
   send: (req: SendRequest) => call<void>('studio:send', req),
   stop: (variantId: string) => call<void>('studio:stop', variantId),
   image: (req: ImageRequest) => call<ImageResult>('studio:image', req),

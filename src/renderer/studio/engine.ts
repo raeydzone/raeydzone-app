@@ -5,8 +5,8 @@ import type {
 } from '@shared/studio'
 import { AssetStore, copyOf, encode } from './assets'
 import {
-  arrangeLayer, duplicateLayer, emptyDoc, findLayer, insertLayer, patchLayer, refitText,
-  removeLayer, replaceLayer
+  arrangeLayer, duplicateLayer, duplicateLayers, emptyDoc, findLayer, groupLayers, insertLayer, makeImage,
+  normalizeDoc, patchLayer, refitText, removeLayer, replaceLayer, tidyGroups, ungroup
 } from './doc'
 import type { PatchResult } from './doc'
 import { loadFonts } from './fonts'
@@ -31,6 +31,7 @@ export interface StudioState {
   tick: number
   claude: ClaudeChoice
   imageModels: ImageModels
+  thumbHash: string | null
 }
 
 interface CommitOptions {
@@ -54,12 +55,15 @@ type ChatDraft =
 export class Studio {
   state: StudioState = {
     ready: false, error: null, assets: [], variants: [], activeId: null, usage: null, tick: 0,
-    claude: { ...DEFAULT_CLAUDE }, imageModels: { ...DEFAULT_IMAGE_MODELS }
+    claude: { ...DEFAULT_CLAUDE }, imageModels: { ...DEFAULT_IMAGE_MODELS }, thumbHash: null
   }
   assets: AssetStore
   private listeners = new Set<() => void>()
   private saveTimer: ReturnType<typeof setTimeout> | null = null
   private lastRecord: { variantId: string; key: string; at: number } | null = null
+  private loaded: Promise<void> = Promise.resolve()
+  private syncing: Promise<void> | null = null
+  private legacy = false
   project: StudioProject
 
   constructor(public projectId: string, project: StudioProject) {
@@ -84,14 +88,19 @@ export class Studio {
     this.set({ variants: this.state.variants.map((v) => (v.id === id ? fn(v) : v)) }, persist)
   }
 
-  async load(): Promise<void> {
+  load(): Promise<void> {
+    this.loaded = this.read()
+    return this.loaded
+  }
+
+  private async read(): Promise<void> {
     try {
       const [file] = await Promise.all([api().load(this.projectId), loadFonts()])
       const claude = { ...DEFAULT_CLAUDE, ...file?.claude }
       const variants = (file?.variants ?? []).map((v) => ({
         ...v,
         claude: { ...claude, ...v.claude },
-        doc: { ...v.doc, layers: v.doc.layers.map(refitText) },
+        doc: normalizeDoc({ ...v.doc, layers: v.doc.layers.map(refitText) }),
         status: 'idle' as VariantStatus,
         past: [],
         future: [],
@@ -102,9 +111,11 @@ export class Studio {
       const used = new Set(variants.flatMap((v) => v.doc.layers.flatMap((l) => (l.kind === 'image' ? [l.asset, l.mask] : []))))
       const assets = (file?.assets ?? []).filter((a) => a.source === 'upload' || a.source === 'generated' || used.has(a.id))
       this.assets.register(assets)
+      this.legacy = !!file && file.thumbHash === undefined && variants.length > 0
       this.set(
         {
           ready: true,
+          thumbHash: file?.thumbHash ?? null,
           claude,
           imageModels: { ...DEFAULT_IMAGE_MODELS, ...file?.imageModels },
           assets,
@@ -117,6 +128,33 @@ export class Studio {
     } catch (err) {
       this.set({ error: (err as Error).message }, false)
     }
+  }
+
+  // A thumbnail set outside the studio becomes its own one-layer version, so "Edit" opens
+  // on what the creator actually uploaded rather than on an older studio design.
+  syncThumbnail(): Promise<void> {
+    this.syncing ??= this.adopt().finally(() => (this.syncing = null))
+    return this.syncing
+  }
+
+  private async adopt(): Promise<void> {
+    await this.loaded
+    if (!this.state.ready) return
+    const known = this.state.thumbHash
+    const { hash, file } = await api().adoptThumbnail(this.projectId, known, !this.legacy)
+    this.legacy = false
+    if (file) {
+      const info = await this.assets.addFile(file, 'Thumbnail', 'upload')
+      this.addAsset(info)
+      const doc = emptyDoc()
+      const v = this.addVariant({ ...doc, layers: [{ ...makeImage(doc, info, 'cover'), name: 'Thumbnail' }] })
+      this.setVariant(v.id, (x) => ({ ...x, name: 'Uploaded thumbnail' }))
+    }
+    if (hash && hash !== known) this.set({ thumbHash: hash })
+  }
+
+  markApplied(hash: string): void {
+    this.set({ thumbHash: hash })
   }
 
   private referencedFiles(): string[] {
@@ -137,6 +175,7 @@ export class Studio {
       activeId: this.state.activeId,
       claude: this.state.claude,
       imageModels: this.state.imageModels,
+      thumbHash: this.state.thumbHash ?? undefined,
       variants: this.state.variants.map(({ id, name, createdAt, doc, chat, sessionId, claude }) => ({
         id, name, createdAt, doc, chat: chat.slice(-400), sessionId, claude
       }))
@@ -158,7 +197,8 @@ export class Studio {
     return this.variant(variantId).doc
   }
 
-  commit(variantId: string, next: StudioDoc, opts: CommitOptions = {}): void {
+  commit(variantId: string, doc: StudioDoc, opts: CommitOptions = {}): void {
+    const next = tidyGroups(doc)
     const at = Date.now()
     const last = this.lastRecord
     const merge =
@@ -226,20 +266,44 @@ export class Studio {
     }), { coalesce: coalesce ? Object.keys(positions).join() + ':' + coalesce : undefined })
   }
 
+  replaceMany(variantId: string, layers: Layer[], coalesce?: string): void {
+    const byId = new Map(layers.map((l) => [l.id, l]))
+    this.update(variantId, (d) => ({ ...d, layers: d.layers.map((l) => byId.get(l.id) ?? l) }), {
+      coalesce: coalesce ? [...byId.keys()].join() + ':' + coalesce : undefined
+    })
+  }
+
   removeMany(variantId: string, ids: string[]): void {
     this.update(variantId, (d) => ({ ...d, layers: d.layers.filter((l) => !ids.includes(l.id)) }))
   }
 
-  duplicateMany(variantId: string, ids: string[]): void {
-    let doc = this.doc(variantId)
-    const copies: string[] = []
-    for (const id of ids) {
-      const out = duplicateLayer(doc, id)
-      doc = out.doc
-      copies.push(out.layer.id)
-    }
-    this.commit(variantId, doc)
-    this.pick(variantId, copies)
+  duplicateMany(variantId: string, ids: string[]): string[] {
+    const out = duplicateLayers(this.doc(variantId), ids)
+    this.commit(variantId, out.doc)
+    this.pick(variantId, out.ids)
+    return out.ids
+  }
+
+  group(variantId: string, ids: string[], name = 'Group', touched = false): string {
+    const out = groupLayers(this.doc(variantId), ids, name)
+    this.commit(variantId, out.doc, { touched: touched ? ids[0] : null })
+    return out.group.id
+  }
+
+  renameGroup(variantId: string, groupId: string, name: string): void {
+    this.update(variantId, (d) => ({ ...d, groups: d.groups.map((g) => (g.id === groupId ? { ...g, name } : g)) }))
+  }
+
+  ungroup(variantId: string, groupId: string): void {
+    this.update(variantId, (d) => ungroup(d, groupId))
+  }
+
+  // Picking any member of a group picks the whole group, the way a designer expects a
+  // badge built from several layers to behave.
+  withGroups(variantId: string, ids: string[]): string[] {
+    const layers = this.doc(variantId).layers
+    const groups = new Set(layers.filter((l) => ids.includes(l.id) && l.group).map((l) => l.group))
+    return layers.filter((l) => ids.includes(l.id) || (l.group && groups.has(l.group) && !l.locked)).map((l) => l.id)
   }
 
   setActive(id: string | null): void {

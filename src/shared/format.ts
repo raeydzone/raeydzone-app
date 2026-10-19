@@ -47,3 +47,8 @@ export function dayLabel(key: string): string {
   const [y, m, d] = key.split('-').map(Number)
   return `${pad(d)}, ${MONTHS[m - 1]} ${y}`
 }
+
+export function monthLabel(key: string): string {
+  const [y, m] = key.split('-').map(Number)
+  return `${MONTHS[m - 1]} ${y}`
+}

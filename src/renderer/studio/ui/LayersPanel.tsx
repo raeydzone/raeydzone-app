@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
-import type { AssetInfo, Layer, StudioDoc } from '@shared/studio'
+import type { AssetInfo, Layer, LayerGroup, StudioDoc } from '@shared/studio'
 import {
-  IconArrowDown, IconArrowUp, IconCopy, IconEye, IconEyeOff, IconImage, IconLock, IconTrash
+  IconArrowDown, IconArrowUp, IconChevron, IconCopy, IconEye, IconEyeOff, IconFolder, IconImage, IconLock, IconTrash
 } from '../../components/Icons'
 import { useStore } from '../../state/store'
 import { placeAsset } from '../ai'
@@ -46,6 +46,80 @@ function LayerThumb({ studio, doc, layer }: { studio: Studio; doc: StudioDoc; la
   return <canvas ref={ref} className={s.layerThumb} width={80} height={45} />
 }
 
+function GroupRow({
+  studio,
+  variant,
+  group,
+  open,
+  onToggle
+}: {
+  studio: Studio
+  variant: VariantState
+  group: LayerGroup
+  open: boolean
+  onToggle: () => void
+}): ReactNode {
+  const [renaming, setRenaming] = useState(false)
+  const v = variant.id
+  const members = variant.doc.layers.filter((l) => l.group === group.id)
+  const ids = studio.selection(v)
+  const selected = members.every((l) => ids.includes(l.id))
+  const visible = members.some((l) => l.visible)
+  const locked = members.every((l) => l.locked)
+  const setAll = (patch: Partial<Layer>): void => studio.replaceMany(v, members.map((l) => ({ ...l, ...patch }) as Layer))
+  const stop = (fn: () => void) => (e: MouseEvent): void => {
+    e.stopPropagation()
+    fn()
+  }
+  return (
+    <div
+      className={`${s.layerRow} ${s.groupRow} ${selected ? s.layerOn : ''} ${visible ? '' : s.layerHidden}`}
+      onClick={() => studio.pick(v, members.map((l) => l.id))}
+      onContextMenu={() => !selected && studio.pick(v, members.map((l) => l.id))}
+    >
+      <button className={`${s.groupChevron} ${open ? s.groupOpen : ''}`} title={open ? 'Collapse' : 'Expand'} onClick={stop(onToggle)}>
+        <IconChevron size={12} />
+      </button>
+      <span className={s.groupIcon}>
+        <IconFolder size={14} />
+      </span>
+      <div className={s.layerLabel}>
+        {renaming ? (
+          <input
+            className={s.layerRename}
+            autoFocus
+            defaultValue={group.name}
+            onBlur={(e) => {
+              studio.renameGroup(v, group.id, e.target.value.trim() || group.name)
+              setRenaming(false)
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          />
+        ) : (
+          <span className={s.layerName} onDoubleClick={() => setRenaming(true)} title="Double-click to rename">
+            {group.name}
+          </span>
+        )}
+        <span className={s.layerKind}>Group · {members.length} layers</span>
+      </div>
+      <button
+        className={`${s.layerIcon} ${locked ? s.layerIconOn : ''}`}
+        title={locked ? 'Unlock group' : 'Lock group'}
+        onClick={stop(() => setAll({ locked: !locked }))}
+      >
+        <IconLock size={12} />
+      </button>
+      <button
+        className={`${s.layerIcon} ${visible ? '' : s.layerIconOn}`}
+        title={visible ? 'Hide group' : 'Show group'}
+        onClick={stop(() => setAll({ visible: !visible }))}
+      >
+        {visible ? <IconEye size={13} /> : <IconEyeOff size={13} />}
+      </button>
+    </div>
+  )
+}
+
 function LayerRow({
   studio,
   variant,
@@ -74,7 +148,7 @@ function LayerRow({
   }
   return (
     <div
-      className={`${s.layerRow} ${selected ? s.layerOn : ''} ${layer.visible ? '' : s.layerHidden}`}
+      className={`${s.layerRow} ${layer.group ? s.layerNested : ''} ${selected ? s.layerOn : ''} ${layer.visible ? '' : s.layerHidden}`}
       draggable={!renaming}
       onDragStart={() => setDragging(index)}
       onDragEnd={() => setDragging(null)}
@@ -142,6 +216,7 @@ export function LayersPanel({
   const { notify } = useStore()
   const [tab, setTab] = useState<'layers' | 'assets'>('layers')
   const [dragging, setDragging] = useState<number | null>(null)
+  const [closed, setClosed] = useState<Set<string>>(new Set())
   const v = variant.id
   const layers = variant.doc.layers
   const assets = studio.state.assets.filter((a) => a.source === 'upload' || a.source === 'generated')
@@ -175,17 +250,38 @@ export function LayersPanel({
           <LayerMenu studio={studio} variant={variant}>
             <div className={s.layerList}>
               {layers.length === 0 && <p className={s.hint}>No layers yet.</p>}
-              {[...layers].reverse().map((layer) => (
-                <LayerRow
-                  key={layer.id}
-                  studio={studio}
-                  variant={variant}
-                  layer={layer}
-                  index={layers.indexOf(layer)}
-                  dragging={dragging}
-                  setDragging={setDragging}
-                />
-              ))}
+              {[...layers].reverse().flatMap((layer, i, top) => {
+                const group = layer.group ? variant.doc.groups.find((g) => g.id === layer.group) : undefined
+                const head = group && top[i - 1]?.group !== group.id && (
+                  <GroupRow
+                    key={'g' + group.id + i}
+                    studio={studio}
+                    variant={variant}
+                    group={group}
+                    open={!closed.has(group.id)}
+                    onToggle={() =>
+                      setClosed((prev) => {
+                        const next = new Set(prev)
+                        if (!next.delete(group.id)) next.add(group.id)
+                        return next
+                      })
+                    }
+                  />
+                )
+                if (group && closed.has(group.id)) return head ? [head] : []
+                const row = (
+                  <LayerRow
+                    key={layer.id}
+                    studio={studio}
+                    variant={variant}
+                    layer={layer}
+                    index={layers.indexOf(layer)}
+                    dragging={dragging}
+                    setDragging={setDragging}
+                  />
+                )
+                return head ? [head, row] : [row]
+              })}
             </div>
           </LayerMenu>
           <div className={s.panelFoot}>

@@ -81,8 +81,12 @@ export function ReportsButton(): ReactNode {
   }
 
   const copy = async (): Promise<void> => {
-    await navigator.clipboard.writeText(`# RaeydZone studio — missing features\n\n${markdown(open)}\n`)
-    notify(`Copied ${open.length} ${open.length === 1 ? 'report' : 'reports'}`)
+    try {
+      await navigator.clipboard.writeText(`# RaeydZone studio — missing features\n\n${markdown(open)}\n`)
+      notify(`Copied ${open.length} ${open.length === 1 ? 'report' : 'reports'}`)
+    } catch (err) {
+      notify('Could not copy: ' + (err as Error).message, 'bad')
+    }
   }
 
   return (

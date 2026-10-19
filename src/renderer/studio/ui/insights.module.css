@@ -32,6 +32,12 @@
   padding: var(--s-4);
 }
 
+.overview {
+  display: grid;
+  gap: var(--s-4);
+  padding: var(--s-4) 0;
+}
+
 .spendHead {
   display: grid;
   gap: var(--s-1);

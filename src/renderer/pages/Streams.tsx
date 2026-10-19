@@ -109,7 +109,7 @@ export default function Streams(): ReactNode {
 
           <button className={`${ui.btn} ${p.studioBtn}`} onClick={() => setStudioId(stream.id)}>
             <IconSparkle size={15} />
-            Create thumbnail
+            {stream.thumbnail ? 'Edit thumbnail' : 'Create thumbnail'}
           </button>
 
           <div className={p.streamActions}>

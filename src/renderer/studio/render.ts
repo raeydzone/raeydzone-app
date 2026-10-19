@@ -1,4 +1,4 @@
-import type { Adjust, Layer, ShapeLayer, StudioDoc } from '@shared/studio'
+import type { Adjust, Gradient, Layer, ShapeLayer, StudioDoc } from '@shared/studio'
 import { canvas, ctx2d } from './assets'
 import type { AssetStore } from './assets'
 import { drawText } from './text'
@@ -26,7 +26,7 @@ function cached(key: string, build: () => Raster | null): Raster | null {
 }
 
 function contentKey(l: Layer): string {
-  const { x, y, opacity, blend, visible, name, locked, rotation, ...rest } = l
+  const { x, y, opacity, blend, visible, name, locked, rotation, group, ...rest } = l
   return JSON.stringify(rest) + (l.shadow ? '@' + rotation : '')
 }
 
@@ -60,9 +60,8 @@ function shapePath(g: CanvasRenderingContext2D, l: ShapeLayer, w: number, h: num
   } else g.roundRect(0, 0, w, h, Math.min(l.radius, w / 2, h / 2))
 }
 
-function shapeFill(g: CanvasRenderingContext2D, l: ShapeLayer, w: number, h: number): string | CanvasGradient {
-  const gr = l.gradient
-  if (!gr) return l.fill
+function paintOf(g: CanvasRenderingContext2D, fill: string, gr: Gradient | null | undefined, w: number, h: number): string | CanvasGradient {
+  if (!gr) return fill
   let grad: CanvasGradient
   if (gr.type === 'radial') {
     grad = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.hypot(w, h) / 2)
@@ -95,10 +94,10 @@ function drawContent(l: Layer, assets: AssetStore, w: number, h: number, pad: nu
       g.drawImage(mask, 0, 0, w, h)
     }
   } else if (l.kind === 'text') {
-    drawText(g, l, 0, 0)
+    drawText(g, l, 0, 0, paintOf(g, l.fill, l.gradient, w, h))
   } else {
     if (l.feather > 0) g.filter = `blur(${l.feather / 2}px)`
-    g.fillStyle = shapeFill(g, l, w, h)
+    g.fillStyle = paintOf(g, l.fill, l.gradient, w, h)
     shapePath(g, l, w, h)
     g.fill()
   }

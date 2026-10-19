@@ -224,6 +224,13 @@
   filter: drop-shadow(0 0 var(--s-1) var(--accent-glow));
 }
 
+.groupBox {
+  fill: none;
+  stroke: var(--accent-hot);
+  stroke-width: var(--hairline);
+  stroke-dasharray: var(--s-2) var(--s-1);
+}
+
 .hoverBox {
   fill: none;
   stroke: var(--text-dim);
@@ -526,6 +533,43 @@
 
 .layerHidden .layerLabel {
   opacity: 0.45;
+}
+
+.layerNested {
+  margin-left: var(--s-4);
+}
+
+.groupRow .layerName {
+  font-weight: 600;
+}
+
+.groupChevron,
+.groupIcon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: var(--s-5);
+  height: var(--s-5);
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+}
+
+.groupChevron {
+  transform: rotate(-90deg);
+  transition: transform var(--t-fast) var(--ease), color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+
+.groupChevron:hover {
+  color: var(--text);
+  background: var(--bg-active);
+}
+
+.groupOpen {
+  transform: rotate(0deg);
+}
+
+.groupIcon {
+  color: var(--accent-hot);
 }
 
 .layerThumb {

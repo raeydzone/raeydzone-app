@@ -49,9 +49,10 @@ app.whenReady().then(async () => {
   serveFrom(root)
 
   // Device labels stay blank until media permission is granted, which makes the source
-  // picker useless; this app only ever records at the user's explicit request.
+  // picker useless; this app only ever records at the user's explicit request. Clipboard
+  // writes are denied by default too, which silently breaks every copy button.
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(permission === 'media')
+    callback(permission === 'media' || permission === 'clipboard-sanitized-write')
   })
 
   // Windows loopback: capture what the desktop is playing, not a microphone.

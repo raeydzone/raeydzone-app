@@ -5,6 +5,7 @@ import { formatBytes, formatDuration } from '@shared/format'
 import { Toggle } from '../components/Bits'
 import { IconFolder, IconPremiere } from '../components/Icons'
 import { useAppState, useStore } from '../state/store'
+import { SpendOverview } from '../studio/ui/Spend'
 import { ClaudeAccount, OpenRouterKey } from './AiSettings'
 import k from '../styles/soft.module.css'
 import p from './pages.module.css'
@@ -15,6 +16,7 @@ const SECTIONS = [
   { id: 'projects', title: 'Projects', sub: 'Premiere and cleaning up finished videos.' },
   { id: 'goal', title: 'Daily goal', sub: 'How hard the timer pushes you.' },
   { id: 'ai', title: 'AI connections', sub: 'Accounts only — models are picked where they are used, in the Thumbnail Studio.' },
+  { id: 'spend', title: 'AI spend', sub: 'What image generation has cost across every thumbnail, by month and overall.' },
   { id: 'app', title: 'App', sub: 'Version and updates.' }
 ] as const
 
@@ -227,6 +229,10 @@ export default function SettingsPage(): ReactNode {
       <Section id="ai">
         <ClaudeAccount />
         <OpenRouterKey />
+      </Section>
+
+      <Section id="spend">
+        <SpendOverview />
       </Section>
 
       <Section id="app">

@@ -76,6 +76,13 @@ export function registerStudio(
   quiet('studio:import', (projectId: string, paths: string[]) =>
     files.importFiles(requireRoot(), projectId, paths)
   )
+  quiet('studio:projects', () => lib.studioProjects(requireRoot()))
+  quiet('studio:copyAssets', (from: string, to: string, names: string[]) =>
+    files.copyAssets(requireRoot(), from, to, names)
+  )
+  quiet('studio:adoptThumbnail', (projectId: string, known: string | null, copy: boolean) =>
+    files.adoptThumbnail(requireRoot(), projectId, known, copy)
+  )
   quiet('studio:paste', (projectId: string) => files.pasteImage(requireRoot(), projectId))
   quiet('studio:copyImage', (png: Uint8Array) => files.copyImage(png))
   quiet('studio:prune', (projectId: string, keep: string[]) =>
@@ -93,9 +100,9 @@ export function registerStudio(
 
   ipcMain.handle('studio:apply', async (_e, projectId: string, data: Uint8Array, ext: 'png' | 'jpg') => {
     try {
-      const value = await lib.writeThumbnail(requireRoot(), projectId, data, ext === 'jpg' ? 'jpg' : 'png')
+      const file = await lib.writeThumbnail(requireRoot(), projectId, data, ext === 'jpg' ? 'jpg' : 'png')
       await broadcast()
-      return { ok: true, value }
+      return { ok: true, value: { file, hash: files.digest(data) } }
     } catch (err) {
       return { ok: false, error: (err as Error).message }
     }

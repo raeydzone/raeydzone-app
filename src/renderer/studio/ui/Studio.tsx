@@ -58,7 +58,10 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
     void window.raeydzone.ai.claudeStatus().then(setClaude).catch(() => {})
   }, [])
 
-  useEffect(() => () => void studio.flush(), [studio])
+  useEffect(() => {
+    void studio.syncThumbnail().catch((err: Error) => notify(err.message, 'bad'))
+    return () => void studio.flush()
+  }, [studio, notify])
 
   useEffect(() => {
     if (!focusText) return
@@ -104,6 +107,9 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
       else if (e.ctrlKey && key === 'y') studio.redo(v)
       else if (e.ctrlKey && key === 'a') studio.pick(v, variant.doc.layers.filter((l) => !l.locked).map((l) => l.id))
       else if (e.ctrlKey && key === 'd' && any) studio.duplicateMany(v, ids)
+      else if (e.ctrlKey && key === 'g' && e.shiftKey) {
+        for (const g of new Set(variant.doc.layers.filter((l) => ids.includes(l.id) && l.group).map((l) => l.group!))) studio.ungroup(v, g)
+      } else if (e.ctrlKey && key === 'g' && ids.length > 1) studio.group(v, ids)
       else if (e.ctrlKey && key === 'c' && any) void runJob('Copying…', () => copyLayers(studio, v, ids))
       else if (e.ctrlKey && key === 'x' && any) void runJob('Cutting…', () => cutLayers(studio, v, ids))
       else if (e.ctrlKey && key === 'v') void runJob('Pasting…', () => pasteLayers(studio, v))
@@ -136,7 +142,7 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
         data = await encode(out, 'image/jpeg', 0.93)
         ext = 'jpg'
       }
-      await window.raeydzone.studio.apply(project.id, data, ext)
+      studio.markApplied((await window.raeydzone.studio.apply(project.id, data, ext)).hash)
       notify(`${variant.name} is now the thumbnail of “${project.name}”`)
     })
   }

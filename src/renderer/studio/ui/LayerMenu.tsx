@@ -10,6 +10,7 @@ export function LayerMenu({ studio, variant, children }: { studio: Studio; varia
   const v = variant.id
   const ids = studio.selection(v)
   const none = !ids.length
+  const groups = [...new Set(variant.doc.layers.filter((l) => ids.includes(l.id) && l.group).map((l) => l.group!))]
   const run = (fn: () => Promise<unknown> | unknown): void => {
     void (async () => fn())().catch((err: Error) => notify(err.message, 'bad'))
   }
@@ -30,6 +31,9 @@ export function LayerMenu({ studio, variant, children }: { studio: Studio; varia
           {item('Paste', 'Ctrl+V', async () => {
             if (!(await pasteLayers(studio, v))) notify('The clipboard holds no image', 'bad')
           }, false)}
+          <Menu.Separator className={k.menuSep} />
+          {item('Group', 'Ctrl+G', () => studio.group(v, ids), ids.length < 2)}
+          {item('Ungroup', 'Ctrl+Shift+G', () => groups.forEach((g) => studio.ungroup(v, g)), !groups.length)}
           <Menu.Separator className={k.menuSep} />
           {item('Duplicate', 'Ctrl+D', () => studio.duplicateMany(v, ids))}
           {item('Delete', 'Del', () => studio.removeMany(v, ids))}
