@@ -109,8 +109,11 @@ export async function check(): Promise<void> {
   }
 }
 
+// Silent: the download already happened in the background, so the installer must not come
+// back as a full setup wizard. /S reuses the existing install location and relaunches us.
 export function install(): void {
   if (current.status !== 'ready') return
   write('info', ['installing', current.version])
-  autoUpdater.quitAndInstall(false, true)
+  set({ status: 'installing' })
+  autoUpdater.quitAndInstall(true, true)
 }

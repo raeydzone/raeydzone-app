@@ -6,6 +6,10 @@ directories:
 files:
   - out/**
   - package.json
+# Windows takes FileDescription from the description, and that is the name Task Manager
+# and the details tab show. The long package.json line belongs in the repo, not there.
+extraMetadata:
+  description: RaeydZone
 artifactName: ${productName}-Setup-${version}.${ext}
 win:
   target: [nsis]

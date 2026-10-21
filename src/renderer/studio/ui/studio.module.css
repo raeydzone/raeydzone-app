@@ -1147,12 +1147,6 @@
   color: var(--claude);
 }
 
-.elapsed {
-  margin-left: var(--s-2);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
 .usage {
   display: grid;
   grid-template-columns: auto auto;

@@ -15,7 +15,6 @@ import { executeTool } from './tools'
 
 export interface VariantState extends Variant {
   status: VariantStatus
-  turnAt: number | null
   past: StudioDoc[]
   future: StudioDoc[]
   selected: string | null
@@ -104,7 +103,6 @@ export class Studio {
         claude: { ...claude, ...v.claude },
         doc: normalizeDoc({ ...v.doc, layers: v.doc.layers.map(refitText) }),
         status: 'idle' as VariantStatus,
-        turnAt: null,
         past: [],
         future: [],
         selected: null,
@@ -379,7 +377,6 @@ export class Studio {
       sessionId: null,
       claude: { ...claude },
       status: 'idle',
-      turnAt: null,
       past: [],
       future: [],
       selected: null,
@@ -445,7 +442,7 @@ export class Studio {
 
   private async dispatch(variantId: string, text: string, attachments: AssetInfo[], images: ChatImage[]): Promise<void> {
     const v = this.variant(variantId)
-    this.setVariant(variantId, (x) => ({ ...x, status: 'working', turnAt: Date.now() }), false)
+    this.setVariant(variantId, (x) => ({ ...x, status: 'working' }), false)
     try {
       await api().send({
         projectId: this.projectId,
@@ -456,7 +453,7 @@ export class Studio {
         claude: v.claude
       })
     } catch (err) {
-      this.setVariant(variantId, (x) => ({ ...x, status: 'error', turnAt: null }), false)
+      this.setVariant(variantId, (x) => ({ ...x, status: 'error' }), false)
       this.pushChat(variantId, { kind: 'note', text: (err as Error).message, bad: true })
     }
   }
@@ -489,11 +486,7 @@ export class Studio {
     else if (ev.type === 'session') this.setVariant(variantId, (v) => ({ ...v, sessionId: ev.sessionId }))
     else if (ev.type === 'usage') this.set({ usage: { fiveHour: ev.fiveHour, weekly: ev.weekly } }, false)
     else {
-      this.setVariant(
-        variantId,
-        (v) => ({ ...v, status: ev.status, turnAt: ev.status === 'working' ? v.turnAt : null }),
-        false
-      )
+      this.setVariant(variantId, (v) => ({ ...v, status: ev.status }), false)
       const took = ev.ms === undefined ? '' : ' after ' + formatSpan(ev.ms)
       if (ev.status === 'error') this.pushChat(variantId, { kind: 'note', text: ev.error ?? 'Claude stopped with an error.', bad: true })
       if (ev.status === 'stopped') this.pushChat(variantId, { kind: 'note', text: 'Stopped' + took + '.', bad: false })

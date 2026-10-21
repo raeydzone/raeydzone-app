@@ -20,19 +20,6 @@ type Block = { kind: 'steps'; id: string; items: ToolItem[] } | { kind: 'item'; 
 
 const EASE = [0.22, 0.61, 0.36, 1] as const
 
-// A ticking clock reads better in whole seconds; finished work keeps its tenths.
-const liveSpan = (ms: number): string => (ms < 60_000 ? Math.round(ms / 1000) + 's' : formatSpan(ms))
-
-function Elapsed({ from }: { from: number }): ReactNode {
-  const [ms, setMs] = useState(() => Date.now() - from)
-  useEffect(() => {
-    setMs(Date.now() - from)
-    const id = setInterval(() => setMs(Date.now() - from), 1000)
-    return () => clearInterval(id)
-  }, [from])
-  return <span className={s.elapsed}>{liveSpan(ms)}</span>
-}
-
 const TOOL_ICONS: Record<string, (p: { size?: number }) => ReactNode> = {
   get_document: IconLog,
   list_fonts: IconText,
@@ -347,7 +334,6 @@ export function Chat({
           />
           <div className={`${s.chatStatus} ${working ? s.chatWorking : ''}`}>
             {fresh ? 'Built live on the canvas' : STATUS_TEXT[variant!.status]}
-            {working && variant!.turnAt !== null && <Elapsed from={variant!.turnAt} />}
           </div>
         </div>
         {fresh && variant ? (

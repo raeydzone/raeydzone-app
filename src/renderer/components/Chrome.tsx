@@ -97,6 +97,9 @@ export function Sidebar({
             Downloading {state.update.version}… {state.update.percent}%
           </div>
         )}
+        {state.update.status === 'installing' && (
+          <div className={s.updateNote}>Installing {state.update.version}…</div>
+        )}
         {state.update.status === 'error' && (
           <button
             className={s.updateFail}

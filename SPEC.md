@@ -201,8 +201,9 @@ runs on the subscription.
 Time worked sits beside the money. Every image request banks how long it took, and every Claude
 turn banks its own duration in the same ledger, so the popover reads *Claude worked 14m 02s over 9
 turns, 1m 20s generating* for this one thumbnail, and Settings shows the same across all of them.
-In the chat, each reply carries the time Claude spent before it, each tool step its own duration,
-and the header counts up live while a turn runs.
+In the chat, each reply carries the time Claude spent before it and each tool step its own
+duration. These are stamps, written once when the work finishes — nothing on screen ticks, and
+none of it is shown to the model. The numbers are for the creator.
 
 **Missing features** collects what Claude could not do. Claude has a `report_missing_feature`
 canvas tool and is told to file one per gap it hits, then carry on with a workaround. Reports land
@@ -401,6 +402,12 @@ Shown per-video on the detail page (filtered to that video) and in full on a glo
 | **Timer** | Big clock, start/stop, 30-day chart |
 | **Log** | Global history |
 | **Settings** | Grouped into Library (root folder, rescan), Projects (Premiere template, archiving), Daily goal, AI connections (Claude account, OpenRouter key — models are chosen in the studio) and App (updates) |
+
+Updates download in the background and install **silently** — the NSIS installer runs with `/S`
+into the existing location and relaunches the app, so a new version never shows the setup wizard
+again. The sidebar and Settings report downloading → downloaded → installing. Windows reads the
+executable's FileDescription for the Task Manager name, so the build overrides the package
+description with `RaeydZone`; the long description stays in `package.json` for the repo.
 
 ---
 

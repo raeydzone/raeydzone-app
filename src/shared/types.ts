@@ -104,7 +104,7 @@ export interface RunningSession {
 }
 
 export interface UpdateState {
-  status: 'idle' | 'checking' | 'downloading' | 'ready' | 'error'
+  status: 'idle' | 'checking' | 'downloading' | 'ready' | 'installing' | 'error'
   version: string | null
   percent: number
   error: string | null

@@ -29,7 +29,9 @@ function describeUpdate(u: UpdateState): string {
     case 'downloading':
       return `Downloading ${u.version} — ${u.percent}%`
     case 'ready':
-      return `${u.version} is ready to install`
+      return `${u.version} is downloaded — installs in the background`
+    case 'installing':
+      return `Installing ${u.version} — RaeydZone will restart`
     case 'error':
       return `Last check failed — ${u.error ?? 'unknown error'}`
     default:
@@ -237,9 +239,13 @@ export default function SettingsPage(): ReactNode {
 
       <Section id="app">
         <Row label={`RaeydZone ${state.appVersion}`} hint={describeUpdate(state.update)}>
-          {state.update.status === 'ready' ? (
-            <button className={`${k.btn} ${k.btnPrimary}`} onClick={() => void api.installUpdate()}>
-              Install {state.update.version}
+          {state.update.status === 'ready' || state.update.status === 'installing' ? (
+            <button
+              className={`${k.btn} ${k.btnPrimary}`}
+              disabled={state.update.status === 'installing'}
+              onClick={() => void api.installUpdate()}
+            >
+              {state.update.status === 'installing' ? 'Installing…' : `Install ${state.update.version}`}
             </button>
           ) : (
             <button
