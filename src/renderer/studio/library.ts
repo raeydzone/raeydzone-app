@@ -43,7 +43,9 @@ export async function importLayers(
   assets: AssetInfo[],
   shift = 0
 ): Promise<string[]> {
-  const needed = new Set(layers.flatMap((l) => (l.kind === 'image' ? [l.asset, ...(l.mask ? [l.mask] : [])] : [])))
+  const needed = new Set(
+    layers.flatMap((l) => [...(l.kind === 'image' ? [l.asset] : []), ...(l.mask ? [l.mask] : [])])
+  )
   const map = await bringAssets(studio, fromProject, assets.filter((a) => needed.has(a.id)))
   let doc = studio.doc(variantId)
   const regroup = new Map<string, string>()
@@ -60,8 +62,11 @@ export async function importLayers(
       const asset = map.get(src.asset)
       if (!asset) continue
       layer.asset = asset
-      layer.mask = src.mask ? map.get(src.mask) ?? null : null
     }
+    layer.mask = src.mask ? map.get(src.mask) ?? null : null
+    // A clip points at a layer id from the other document; keep it only if that layer
+    // came along in the same import.
+    layer.clip = src.clip && layers.some((l) => l.id === src.clip!.from) ? { ...src.clip } : null
     doc = { ...doc, layers: [...doc.layers, layer] }
     ids.push(layer.id)
   }

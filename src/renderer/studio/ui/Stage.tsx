@@ -145,8 +145,8 @@ export function Stage({
   }
 
   const maskTarget = (): string | null => {
-    if (selected?.kind === 'image') return selected.id
-    notify('Select an image layer first', 'bad')
+    if (selected) return selected.id
+    notify('Select a layer first', 'bad')
     return null
   }
 

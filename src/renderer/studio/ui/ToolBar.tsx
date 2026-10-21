@@ -15,8 +15,8 @@ const TOOLS: { id: Tool; icon: ReactNode; label: string; key: string }[] = [
   { id: 'rect', icon: <IconRect />, label: 'Rectangle', key: 'R' },
   { id: 'ellipse', icon: <IconEllipse />, label: 'Ellipse', key: 'E' },
   { id: 'pen', icon: <IconPen />, label: 'Shape from anchor points — manual glows', key: 'P' },
-  { id: 'lasso', icon: <IconLasso />, label: 'Lasso mask — hide or reveal an area', key: 'L' },
-  { id: 'brush', icon: <IconBrush />, label: 'Mask brush — paint edges away or back', key: 'B' },
+  { id: 'lasso', icon: <IconLasso />, label: 'Lasso mask — hide or reveal an area of any layer', key: 'L' },
+  { id: 'brush', icon: <IconBrush />, label: 'Mask brush — paint any layer away or back', key: 'B' },
   { id: 'cut', icon: <IconScissors />, label: 'Smart cut-out — box an object', key: 'C' },
   { id: 'fill', icon: <IconSparkle />, label: 'Generative fill — box an area', key: 'G' }
 ]
@@ -54,8 +54,8 @@ const HINTS: Partial<Record<Tool, string>> = {
   rect: 'Drag to draw a rectangle.',
   ellipse: 'Drag to draw an ellipse.',
   pen: 'Click to set anchor points. Click the first point, double-click or press Enter to close. Backspace removes the last point.',
-  lasso: 'Click anchor points around the area on the selected image layer, then close the shape.',
-  brush: 'Paint over the selected image layer.',
+  lasso: 'Click anchor points around the area on the selected layer, then close the shape.',
+  brush: 'Paint over the selected layer.',
   cut: 'Drag a box around one object. The selected image layer (or the top image) is cut down to it.',
   fill: 'Drag a box over the area to repaint, then describe what should appear.'
 }
@@ -93,7 +93,7 @@ export function ToolOptionsBar({
         <Toggle checked={options.glowPen} onChange={(glowPen) => setOptions({ ...options, glowPen })} label="Soft glow shape" />
       )}
       <span className={s.optionHint}>
-        {masking && selected?.kind !== 'image' ? 'Select an image layer first.' : HINTS[tool] ?? 'Click to select, drag to move. Handles resize and rotate; Shift keeps proportions free.'}
+        {masking && !selected ? 'Select a layer first.' : HINTS[tool] ?? 'Click to select, drag to move. Handles resize and rotate; Shift keeps proportions free.'}
       </span>
     </div>
   )

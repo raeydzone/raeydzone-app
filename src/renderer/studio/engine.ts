@@ -109,7 +109,11 @@ export class Studio {
         picked: [],
         touched: null
       }))
-      const used = new Set(variants.flatMap((v) => v.doc.layers.flatMap((l) => (l.kind === 'image' ? [l.asset, l.mask] : []))))
+      const used = new Set(
+        variants.flatMap((v) =>
+          v.doc.layers.flatMap((l) => [...(l.kind === 'image' ? [l.asset] : []), l.mask])
+        )
+      )
       const assets = (file?.assets ?? []).filter((a) => a.source === 'upload' || a.source === 'generated' || used.has(a.id))
       this.assets.register(assets)
       this.legacy = !!file && file.thumbHash === undefined && variants.length > 0
@@ -275,7 +279,9 @@ export class Studio {
   }
 
   removeMany(variantId: string, ids: string[]): void {
-    this.update(variantId, (d) => ({ ...d, layers: d.layers.filter((l) => !ids.includes(l.id)) }))
+    this.update(variantId, (d) =>
+      tidyGroups({ ...d, layers: d.layers.filter((l) => !ids.includes(l.id)) })
+    )
   }
 
   duplicateMany(variantId: string, ids: string[]): string[] {

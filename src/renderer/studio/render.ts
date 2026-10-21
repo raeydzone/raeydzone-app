@@ -1,4 +1,4 @@
-import type { Adjust, Gradient, Layer, ShapeLayer, StudioDoc } from '@shared/studio'
+import type { Adjust, Clip, Gradient, Layer, ShapeLayer, StudioDoc } from '@shared/studio'
 import { canvas, ctx2d } from './assets'
 import type { AssetStore } from './assets'
 import { drawText } from './text'
@@ -26,8 +26,26 @@ function cached(key: string, build: () => Raster | null): Raster | null {
 }
 
 function contentKey(l: Layer): string {
-  const { x, y, opacity, blend, visible, name, locked, rotation, group, ...rest } = l
+  const { x, y, opacity, blend, visible, name, locked, rotation, group, clip, ...rest } = l
   return JSON.stringify(rest) + (l.shadow ? '@' + rotation : '')
+}
+
+// A clip depends on where both layers sit, so it is keyed and cached apart from the
+// content raster — moving the source must not rebuild the layer itself.
+function placeKey(l: Layer): string {
+  return [l.x, l.y, l.rotation, l.opacity].join(',')
+}
+
+function clipKey(doc: StudioDoc, l: Layer, clip: Clip): string {
+  const sources = clipSources(doc, clip.from)
+  const src = sources.map((s) => contentKey(s) + '@' + placeKey(s)).join('|')
+  return [contentKey(l), placeKey(l), clip.mode, clip.invert, clip.feather, src].join('~')
+}
+
+function clipSources(doc: StudioDoc, from: string): Layer[] {
+  const layer = doc.layers.find((l) => l.id === from)
+  if (layer) return [layer]
+  return doc.layers.filter((l) => l.group === from)
 }
 
 function padFor(l: Layer): number {
@@ -83,16 +101,14 @@ function drawContent(l: Layer, assets: AssetStore, w: number, h: number, pad: nu
     g.translate(l.flipX ? w : 0, l.flipY ? h : 0)
     g.scale(l.flipX ? -1 : 1, l.flipY ? -1 : 1)
   }
+  const mask = l.mask ? assets.peek(l.mask) : null
+  if (l.mask && !mask) return null
+
   if (l.kind === 'image') {
     const px = assets.peek(l.asset)
-    const mask = l.mask ? assets.peek(l.mask) : null
-    if (!px || (l.mask && !mask)) return null
+    if (!px) return null
     g.imageSmoothingQuality = 'high'
     g.drawImage(px, 0, 0, w, h)
-    if (mask) {
-      g.globalCompositeOperation = 'destination-in'
-      g.drawImage(mask, 0, 0, w, h)
-    }
   } else if (l.kind === 'text') {
     drawText(g, l, 0, 0, paintOf(g, l.fill, l.gradient, w, h))
   } else {
@@ -100,6 +116,13 @@ function drawContent(l: Layer, assets: AssetStore, w: number, h: number, pad: nu
     g.fillStyle = paintOf(g, l.fill, l.gradient, w, h)
     shapePath(g, l, w, h)
     g.fill()
+  }
+
+  if (mask) {
+    g.filter = 'none'
+    g.globalCompositeOperation = 'destination-in'
+    g.drawImage(mask, 0, 0, w, h)
+    g.globalCompositeOperation = 'source-over'
   }
 
   const filter = filterOf(l.adjust)
@@ -191,8 +214,75 @@ export function raster(l: Layer, assets: AssetStore): Raster | null {
   return cached(contentKey(l), () => buildRaster(l, assets))
 }
 
-export function drawLayer(g: CanvasRenderingContext2D, l: Layer, assets: AssetStore): void {
-  const r = raster(l, assets)
+function lumaToAlpha(src: HTMLCanvasElement): HTMLCanvasElement {
+  const g = ctx2d(src)
+  const img = g.getImageData(0, 0, src.width, src.height)
+  const d = img.data
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255
+    d[i] = d[i + 1] = d[i + 2] = 255
+    d[i + 3] = Math.round(d[i + 3] * lum)
+  }
+  g.putImageData(img, 0, 0)
+  return src
+}
+
+function invertAlpha(src: HTMLCanvasElement): HTMLCanvasElement {
+  const out = canvas(src.width, src.height)
+  const g = ctx2d(out)
+  g.fillStyle = '#fff'
+  g.fillRect(0, 0, out.width, out.height)
+  g.globalCompositeOperation = 'destination-out'
+  g.drawImage(src, 0, 0)
+  return out
+}
+
+function softened(src: HTMLCanvasElement, px: number): HTMLCanvasElement {
+  const out = canvas(src.width, src.height)
+  const g = ctx2d(out)
+  g.filter = `blur(${px / 2}px)`
+  g.drawImage(src, 0, 0)
+  return out
+}
+
+function clipCoverage(doc: StudioDoc, clip: Clip, assets: AssetStore): HTMLCanvasElement | null {
+  const sources = clipSources(doc, clip.from)
+  if (!sources.length) return null
+  let cov = canvas(doc.width, doc.height)
+  const g = ctx2d(cov)
+  for (const s of sources) drawLayer(g, s, assets)
+  if (clip.mode === 'luma') cov = lumaToAlpha(cov)
+  if (clip.invert) cov = invertAlpha(cov)
+  if (clip.feather > 0) cov = softened(cov, clip.feather)
+  return cov
+}
+
+function clipped(doc: StudioDoc, l: Layer, assets: AssetStore): Raster | null {
+  const base = raster(l, assets)
+  const clip = l.clip
+  if (!base || !clip) return base
+  return cached('clip~' + clipKey(doc, l, clip), () => {
+    const cov = clipCoverage(doc, clip, assets)
+    if (!cov) return base
+    const out = canvas(base.canvas.width, base.canvas.height)
+    const g = ctx2d(out)
+    g.drawImage(base.canvas, 0, 0)
+    g.globalCompositeOperation = 'destination-in'
+    g.translate(base.pad + Math.round(l.width) / 2, base.pad + Math.round(l.height) / 2)
+    g.rotate((-l.rotation * Math.PI) / 180)
+    g.translate(-(l.x + l.width / 2), -(l.y + l.height / 2))
+    g.drawImage(cov, 0, 0)
+    return { canvas: out, pad: base.pad }
+  })
+}
+
+export function drawLayer(
+  g: CanvasRenderingContext2D,
+  l: Layer,
+  assets: AssetStore,
+  doc: StudioDoc | null = null
+): void {
+  const r = doc && l.clip ? clipped(doc, l, assets) : raster(l, assets)
   if (!r) return
   g.save()
   g.globalAlpha = l.opacity
@@ -228,7 +318,7 @@ export function drawDoc(
   }
   for (const l of doc.layers) {
     if (only ? l.id !== only : !l.visible) continue
-    drawLayer(g, l, assets)
+    drawLayer(g, l, assets, doc)
   }
   g.restore()
 }
@@ -265,11 +355,16 @@ export function hitLayer(doc: StudioDoc, assets: AssetStore, x: number, y: numbe
 }
 
 export function isReady(doc: StudioDoc, assets: AssetStore): boolean {
-  return doc.layers.every((l) => l.kind !== 'image' || (assets.peek(l.asset) && (!l.mask || assets.peek(l.mask))))
+  return doc.layers.every(
+    (l) => (l.kind !== 'image' || !!assets.peek(l.asset)) && (!l.mask || !!assets.peek(l.mask))
+  )
 }
 
 
 export async function loadDocAssets(assets: AssetStore, doc: StudioDoc): Promise<void> {
-  const ids = doc.layers.flatMap((l) => (l.kind === 'image' ? [l.asset, ...(l.mask ? [l.mask] : [])] : []))
+  const ids = doc.layers.flatMap((l) => [
+    ...(l.kind === 'image' ? [l.asset] : []),
+    ...(l.mask ? [l.mask] : [])
+  ])
   await Promise.all(ids.map((id) => assets.load(id)))
 }

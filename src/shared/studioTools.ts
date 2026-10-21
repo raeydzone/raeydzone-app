@@ -62,6 +62,15 @@ const common: Record<string, Schema> = {
     obj({ color: color('Tint colour.'), amount: num('0 to 1.') }),
     'Washes the layer with a colour, keeping its shape. null removes it.'
   ),
+  clip: nullable(
+    obj({
+      from: str('Id of the layer or group this one is clipped to.'),
+      mode: { type: 'string', enum: ['alpha', 'luma'], description: 'alpha clips to where the source covers anything; luma also uses its brightness, so dark areas hide and light areas show.' },
+      invert: bool('Show only where the source does NOT cover.'),
+      feather: num('Softens the clip edge by this many px.')
+    }, ['from']),
+    'Clipping mask: this layer is only visible where another layer or group covers. Put an image over a text layer and clip it to that text for photo-filled letters; clip a gradient or a light wash to a cut-out subject; clip a texture to a badge group. The source does not have to be visible — hide it to use it purely as a mask. null removes the clip.'
+  ),
   adjust: obj({
     brightness: num('Percent, 100 is unchanged.'),
     contrast: num('Percent, 100 is unchanged.'),
@@ -152,7 +161,7 @@ export const STUDIO_TOOLS: ToolDef[] = [
   },
   {
     name: 'update_layer',
-    description: 'Changes any properties of a layer: position, size, rotation, opacity, blend, effects (shadow, glow, stroke, tint), adjustments, text and shape properties. Only the given properties change. Effects passed as null are removed.',
+    description: 'Changes any properties of a layer: position, size, rotation, opacity, blend, effects (shadow, glow, stroke, tint), clipping, adjustments, text and shape properties. Only the given properties change. Effects passed as null are removed.',
     inputSchema: obj({ layer_id: str('Layer id.'), ...common, ...textProps, ...shapeProps }, ['layer_id'])
   },
   {
@@ -253,9 +262,9 @@ export const STUDIO_TOOLS: ToolDef[] = [
   },
   {
     name: 'edit_mask',
-    description: 'Manual mask editing on an image layer, exactly like a human with a lasso and brush. Coordinates are canvas pixels. hide_polygon / show_polygon hide or reveal the area inside the anchor points; hide_brush / show_brush paint along a path; feather softens edges; invert swaps shown and hidden; reset removes the mask.',
+    description: 'Manual mask editing on any layer — image, text or shape — exactly like a human with a lasso and brush. Coordinates are canvas pixels. hide_polygon / show_polygon hide or reveal the area inside the anchor points; hide_brush / show_brush paint along a path; feather softens edges; invert swaps shown and hidden; reset removes the mask. For clipping one layer to the shape of another, use clip on update_layer instead.',
     inputSchema: obj({
-      layer_id: str('Image layer id.'),
+      layer_id: str('Layer id — any kind.'),
       action: { type: 'string', enum: ['hide_polygon', 'show_polygon', 'hide_brush', 'show_brush', 'feather', 'invert', 'reset'] },
       points: { type: 'array', items: point, description: 'Polygon anchors or brush path, canvas pixels.' },
       radius: num('Brush radius px, or feather amount px.')

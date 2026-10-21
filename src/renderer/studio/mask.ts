@@ -1,4 +1,4 @@
-import type { ImageLayer } from '@shared/studio'
+import type { Layer } from '@shared/studio'
 import { canvas, ctx2d } from './assets'
 import type { Pixels } from './assets'
 
@@ -17,7 +17,7 @@ export function baseMask(w: number, h: number, current: Pixels | null): HTMLCanv
 
 // Masks live in the source image's own pixels, so a canvas point has to be carried back
 // through the layer's rotation, flip and scale before it can be painted.
-export function toSource(layer: ImageLayer, srcW: number, srcH: number, [px, py]: Pt): Pt {
+export function toSource(layer: Layer, srcW: number, srcH: number, [px, py]: Pt): Pt {
   const cx = layer.x + layer.width / 2
   const cy = layer.y + layer.height / 2
   const a = (-layer.rotation * Math.PI) / 180
@@ -30,7 +30,7 @@ export function toSource(layer: ImageLayer, srcW: number, srcH: number, [px, py]
   return [((lx + layer.width / 2) / layer.width) * srcW, ((ly + layer.height / 2) / layer.height) * srcH]
 }
 
-export function sourceScale(layer: ImageLayer, srcW: number): number {
+export function sourceScale(layer: Layer, srcW: number): number {
   return srcW / layer.width
 }
 

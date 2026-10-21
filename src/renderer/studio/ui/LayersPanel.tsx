@@ -178,7 +178,11 @@ function LayerRow({
             {layer.name}
           </span>
         )}
-        <span className={s.layerKind}>{KIND_LABEL[layer.kind]}</span>
+        <span className={s.layerKind}>
+          {KIND_LABEL[layer.kind]}
+          {layer.mask ? ' · masked' : ''}
+          {layer.clip ? ' · clipped' : ''}
+        </span>
       </div>
       <button
         className={`${s.layerIcon} ${layer.locked ? s.layerIconOn : ''}`}

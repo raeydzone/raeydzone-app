@@ -19,8 +19,25 @@ const image = (studio: Studio, task: ImageTask, req: Omit<ImageRequest, 'task' |
 
 function imageLayer(studio: Studio, variantId: string, layerId: string): ImageLayer {
   const layer = findLayer(studio.doc(variantId), layerId)
-  if (layer.kind !== 'image') throw new Error(`${layer.name} is a ${layer.kind} layer — masks only apply to image layers.`)
+  if (layer.kind !== 'image') throw new Error(`${layer.name} is a ${layer.kind} layer — cutting out needs an image.`)
   return layer
+}
+
+// An image layer's mask lives in the source image's pixels; text and shapes have no
+// source, so theirs is the layer box and stretches with it.
+async function maskCanvasFor(
+  studio: Studio,
+  layer: Layer
+): Promise<{ width: number; height: number; scale: number }> {
+  if (layer.kind === 'image') {
+    const src = await studio.assets.get(layer.asset)
+    return { width: src.width, height: src.height, scale: src.width / layer.width }
+  }
+  return {
+    width: Math.max(1, Math.round(layer.width)),
+    height: Math.max(1, Math.round(layer.height)),
+    scale: 1
+  }
 }
 
 const modelFor = (studio: Studio, task: ImageTask) => imageModel(studio.state.imageModels[task])
@@ -39,7 +56,7 @@ function padToAspect(src: HTMLCanvasElement, aspects: string[]): { padded: HTMLC
   return { padded, ox, oy, aspect: label }
 }
 
-async function saveMask(studio: Studio, variantId: string, layer: ImageLayer, mask: HTMLCanvasElement | null): Promise<void> {
+async function saveMask(studio: Studio, variantId: string, layer: Layer, mask: HTMLCanvasElement | null): Promise<void> {
   let maskId: string | null = null
   if (mask) {
     const info = await studio.assets.addCanvas(mask, layer.name + ' mask', 'mask')
@@ -48,7 +65,7 @@ async function saveMask(studio: Studio, variantId: string, layer: ImageLayer, ma
   }
   studio.update(variantId, (d) => ({
     ...d,
-    layers: d.layers.map((l) => (l.id === layer.id ? { ...(l as ImageLayer), mask: maskId } : l))
+    layers: d.layers.map((l) => (l.id === layer.id ? { ...l, mask: maskId } : l))
   }), { touched: layer.id })
 }
 
@@ -119,14 +136,13 @@ export async function editMask(
   points: Pt[] = [],
   radius = 20
 ): Promise<void> {
-  const layer = imageLayer(studio, variantId, layerId)
+  const layer = findLayer(studio.doc(variantId), layerId)
   if (action === 'reset') return saveMask(studio, variantId, layer, null)
 
-  const src = await studio.assets.get(layer.asset)
+  const { width, height, scale } = await maskCanvasFor(studio, layer)
   const current = layer.mask ? await studio.assets.get(layer.mask) : null
-  const scale = src.width / layer.width
-  const mask = baseMask(src.width, src.height, current)
-  const pts = points.map((p) => toSource(layer, src.width, src.height, p))
+  const mask = baseMask(width, height, current)
+  const pts = points.map((p) => toSource(layer, width, height, p))
 
   let result = mask
   switch (action) {

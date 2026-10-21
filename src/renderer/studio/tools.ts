@@ -215,6 +215,16 @@ function updateGroup(studio: Studio, v: string, args: Args): Outcome {
   return { reply: groupReply(studio, v, id, 'Updated group'), summary: `Changed group ${group.name}` }
 }
 
+// patchLayer has no view of the document, so the clip target is checked here.
+function checkClip(doc: StudioDoc, args: Args): void {
+  const clip = args.clip
+  if (!clip || typeof clip !== 'object') return
+  const from = (clip as Record<string, unknown>).from
+  if (typeof from !== 'string' || !from) return
+  if (doc.layers.some((l) => l.id === from) || doc.groups.some((g) => g.id === from)) return
+  throw new Error(`clip.from "${from}" is not a layer or group in this document.`)
+}
+
 function patchSummary(l: Layer, ignored: string[]): ToolReply {
   const note = ignored.length ? ` Ignored (not valid for a ${l.kind} layer): ${ignored.join(', ')}.` : ''
   return { text: `Updated ${l.id}: ${json(describeLayer(l))}${note}` }
@@ -261,6 +271,7 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
     }
 
     case 'add_image': {
+      checkClip(studio.doc(v), args)
       const info = studio.assets.info(str(args, 'asset_id'))
       const fit = args.fit === 'cover' ? 'cover' : 'contain'
       const placed = placeAsset(studio, v, info, fit, true)
@@ -272,6 +283,7 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
     }
 
     case 'add_text': {
+      checkClip(studio.doc(v), args)
       const base = makeText(studio.doc(v), str(args, 'text'))
       const { layer, ignored } = patchLayer(base, props(args))
       if (!('x' in args) && !('y' in args)) {
@@ -283,6 +295,7 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
     }
 
     case 'add_shape': {
+      checkClip(studio.doc(v), args)
       const kind = args.shape === 'ellipse' || args.shape === 'polygon' ? args.shape : 'rect'
       const { layer, ignored } = patchLayer(makeShape(studio.doc(v), kind), props(args))
       studio.addLayer(v, layer, typeof args.below_layer_id === 'string' ? args.below_layer_id : null, true)
@@ -290,6 +303,7 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
     }
 
     case 'update_layer': {
+      checkClip(studio.doc(v), args)
       const id = str(args, 'layer_id')
       const { layer, ignored } = studio.patch(v, id, props(args), undefined, true)
       const keys = Object.keys(props(args)).filter((k) => !ignored.includes(k))

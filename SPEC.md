@@ -179,6 +179,25 @@ session on the same conversation.
   never repaints the person. Masks are then refined by hand or by Claude with a lasso of
   anchor points, a brush, feather, invert and reset
 
+### Masks and clipping
+
+Every layer carries a **mask** — image, text or shape alike. An image layer's mask lives in the
+source image's own pixels, so cut-outs survive scaling; a text or shape mask is the layer box and
+stretches with it. The lasso and brush paint any selected layer, not only images.
+
+A layer can also be **clipped** to another layer or to a whole group: it then shows only where
+that source covers, by its shape (`alpha`) or by its brightness (`luma`), optionally inverted and
+softened by a feather. This is how a photo fills letters, a gradient stays inside a cut-out
+subject, or a texture lives inside a badge. The source does not have to be visible — hiding it
+leaves a shape that exists purely to clip. Clips are resolved in canvas space and carried into
+the clipped layer's own rotation, and a clip source is drawn without its own clip, so chains
+cannot recurse. Deleting a source clears the clips that pointed at it; duplicating a source
+together with what it clips rebinds the copy to the copy.
+
+Render caches are keyed so that moving a clip source rebuilds only the clip, never the layer
+content underneath it. `npm run test:render` composites these cases in an offscreen Electron
+window and compares the pixels
+
 Every call goes through OpenRouter's Images API with the source images as
 `input_references`, capped at what the chosen model accepts. Each studio picks a model **per
 task** from its header — generate, generative fill, cut-out — out of GPT Image 2.5 Sunburst

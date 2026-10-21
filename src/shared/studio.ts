@@ -23,6 +23,15 @@ export interface Adjust {
   hue: number
   blur: number
 }
+// A clipping mask: this layer only shows where the source layer or group covers. The
+// source needs no visibility of its own, so a shape can exist purely to clip.
+export interface Clip {
+  from: string
+  mode: 'alpha' | 'luma'
+  invert: boolean
+  feather: number
+}
+
 export interface Gradient {
   type: 'linear' | 'radial'
   from: string
@@ -50,12 +59,13 @@ interface LayerBase {
   stroke: Outline | null
   tint: Tint | null
   adjust: Adjust
+  mask: string | null
+  clip: Clip | null
 }
 
 export interface ImageLayer extends LayerBase {
   kind: 'image'
   asset: string
-  mask: string | null
 }
 
 export interface TextLayer extends LayerBase {

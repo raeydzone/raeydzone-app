@@ -32,7 +32,9 @@ export async function copyLayers(studio: Studio, variantId: string, ids: string[
   const out = canvas(Math.max(...all.map((b) => b.x1)) - x0, Math.max(...all.map((b) => b.y1)) - y0)
   const g = ctx2d(out)
   g.translate(-x0, -y0)
-  for (const l of layers) drawLayer(g, layers.length > 1 ? l : ({ ...l, blend: 'normal' } as Layer), studio.assets)
+  for (const l of layers) {
+    drawLayer(g, layers.length > 1 ? l : ({ ...l, blend: 'normal' } as Layer), studio.assets, doc)
+  }
   await window.raeydzone.studio.copyImage(await encode(out))
   const whole = doc.groups.filter((g) => doc.layers.every((l) => l.group !== g.id || ids.includes(l.id)))
   copied = { projectId: studio.projectId, layers, groups: whole, assets: [...studio.assets.infos.values()] }

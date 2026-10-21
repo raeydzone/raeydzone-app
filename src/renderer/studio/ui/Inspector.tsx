@@ -165,7 +165,7 @@ function ShapeSection({ layer, patch }: { layer: ShapeLayer; patch: Patch }): Re
   )
 }
 
-function ImageSection({
+function MaskSection({
   studio,
   variantId,
   layer,
@@ -173,7 +173,7 @@ function ImageSection({
 }: {
   studio: Studio
   variantId: string
-  layer: Extract<Layer, { kind: 'image' }>
+  layer: Layer
   setTool: (t: Tool) => void
 }): ReactNode {
   const { notify } = useStore()
@@ -193,25 +193,32 @@ function ImageSection({
   }
 
   return (
-    <Section title="Cut-out & mask" aside={layer.mask ? <span className={k.tag}>masked</span> : null}>
-      <input
-        className={k.field}
-        placeholder="What to keep (optional) — e.g. the man"
-        value={subject}
-        onChange={(e) => setSubject(e.target.value)}
-      />
-      <div className={s.rowGap}>
-        <button
-          className={`${k.btn} ${k.btnPrimary} ${s.grow}`}
-          disabled={!!busy}
-          onClick={() => void run('cut', () => cutOut(studio, variantId, layer.id, subject || undefined))}
-        >
-          {busy === 'cut' ? 'Cutting out…' : 'Smart cut-out'}
-        </button>
-        <button className={k.btn} title="Drag a box around one object to cut it out" onClick={() => setTool('cut')}>
-          In box
-        </button>
-      </div>
+    <Section
+      title={layer.kind === 'image' ? 'Cut-out & mask' : 'Mask'}
+      aside={layer.mask ? <span className={k.tag}>masked</span> : null}
+    >
+      {layer.kind === 'image' && (
+        <>
+          <input
+            className={k.field}
+            placeholder="What to keep (optional) — e.g. the man"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+          />
+          <div className={s.rowGap}>
+            <button
+              className={`${k.btn} ${k.btnPrimary} ${s.grow}`}
+              disabled={!!busy}
+              onClick={() => void run('cut', () => cutOut(studio, variantId, layer.id, subject || undefined))}
+            >
+              {busy === 'cut' ? 'Cutting out…' : 'Smart cut-out'}
+            </button>
+            <button className={k.btn} title="Drag a box around one object to cut it out" onClick={() => setTool('cut')}>
+              In box
+            </button>
+          </div>
+        </>
+      )}
       <div className={s.rowGap}>
         <button className={`${k.btn} ${s.grow}`} onClick={() => setTool('brush')}>Brush</button>
         <button className={`${k.btn} ${s.grow}`} onClick={() => setTool('lasso')}>Lasso</button>
@@ -240,6 +247,85 @@ function ImageSection({
           Reset mask
         </button>
       </div>
+    </Section>
+  )
+}
+
+const layerLabel = (l: Layer): string =>
+  l.kind === 'text' ? l.text.replace(/\*/g, '').slice(0, 28) || l.name : l.name
+
+function ClipSection({
+  studio,
+  variantId,
+  layer,
+  patch
+}: {
+  studio: Studio
+  variantId: string
+  layer: Layer
+  patch: Patch
+}): ReactNode {
+  const doc = studio.doc(variantId)
+  const clip = layer.clip
+  const groups = doc.groups.map((g) => ({ id: g.id, label: 'Group · ' + g.name }))
+  const layers = doc.layers.filter((l) => l.id !== layer.id).map((l) => ({ id: l.id, label: layerLabel(l) }))
+  const options = [...groups, ...layers]
+  const source = options.find((o) => o.id === clip?.from)
+
+  return (
+    <Section
+      title="Clip to"
+      aside={
+        clip ? (
+          <button className={s.linkBtn} onClick={() => patch({ clip: null })}>
+            Clear
+          </button>
+        ) : null
+      }
+    >
+      {options.length === 0 ? (
+        <p className={s.hint}>Add another layer to clip this one to it.</p>
+      ) : (
+        <MenuSelect
+          wide
+          align="start"
+          trigger={
+            <span className={s.pillGrow}>
+              <span className={s.pillDim}>Shape of</span> {source?.label ?? 'nothing'}
+            </span>
+          }
+          groups={[
+            {
+              title: 'Clip to the shape of',
+              value: clip?.from ?? '',
+              options,
+              onChange: (from) => patch({ clip: { from } })
+            }
+          ]}
+        />
+      )}
+      {clip && (
+        <>
+          <Segmented
+            value={clip.mode}
+            onChange={(mode) => patch({ clip: { mode } })}
+            options={[
+              { id: 'alpha', label: 'Shape', title: 'Show wherever the source covers anything' },
+              { id: 'luma', label: 'Brightness', title: 'Bright areas of the source show, dark areas hide' }
+            ]}
+          />
+          <Toggle checked={clip.invert} onChange={(invert) => patch({ clip: { invert } })} label="Invert" />
+          <SliderField
+            label="Soften edge"
+            value={clip.feather}
+            min={0}
+            max={120}
+            unit="px"
+            onChange={(feather) => patch({ clip: { feather } }, 'cf')}
+          />
+          <p className={s.hint}>The layer it clips to can stay hidden — it still shapes this one.</p>
+        </>
+      )}
     </Section>
   )
 }
@@ -316,7 +402,8 @@ export function Inspector({
 
       {layer.kind === 'text' && <TextSection layer={layer} patch={patch} focus={focusText} />}
       {layer.kind === 'shape' && <ShapeSection layer={layer} patch={patch} />}
-      {layer.kind === 'image' && <ImageSection studio={studio} variantId={variantId} layer={layer} setTool={setTool} />}
+      <MaskSection studio={studio} variantId={variantId} layer={layer} setTool={setTool} />
+      <ClipSection studio={studio} variantId={variantId} layer={layer} patch={patch} />
 
       <Section title="Effects">
         <Effect layer={layer} name="stroke" title="Outline" patch={patch}>

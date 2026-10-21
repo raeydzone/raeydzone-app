@@ -1,7 +1,7 @@
 import { BLEND_MODES, CANVAS_H, CANVAS_W } from '@shared/studio'
 import type {
-  Adjust, AssetInfo, BlendMode, Glow, Gradient, ImageLayer, Layer, LayerGroup, Outline, Shadow,
-  ShapeLayer, StudioDoc, TextLayer, Tint
+  Adjust, AssetInfo, BlendMode, Clip, Glow, Gradient, ImageLayer, Layer, LayerGroup, Outline,
+  Shadow, ShapeLayer, StudioDoc, TextLayer, Tint
 } from '@shared/studio'
 import { findFont } from './fonts'
 import { measureText } from './text'
@@ -16,6 +16,8 @@ const EFFECT_DEFAULTS = {
   gradient: { type: 'radial', from: '#ff2a2a', to: '#00000000', angle: 90 } as Gradient
 }
 
+const CLIP_DEFAULT: Clip = { from: '', mode: 'alpha', invert: false, feather: 0 }
+
 export const emptyDoc = (): StudioDoc => ({
   width: CANVAS_W,
   height: CANVAS_H,
@@ -24,12 +26,17 @@ export const emptyDoc = (): StudioDoc => ({
   groups: []
 })
 
-// Docs saved before groups existed carry neither field.
+// Docs saved before groups, masks-on-anything or clipping carry none of those fields.
 export function normalizeDoc(doc: StudioDoc): StudioDoc {
   return tidyGroups({
     ...doc,
     groups: doc.groups ?? [],
-    layers: doc.layers.map((l) => (l.group === undefined ? { ...l, group: null } : l))
+    layers: doc.layers.map((l) => ({
+      ...l,
+      group: l.group ?? null,
+      mask: l.mask ?? null,
+      clip: l.clip ?? null
+    }))
   })
 }
 
@@ -61,7 +68,9 @@ function base(doc: StudioDoc, name: string) {
     glow: null,
     stroke: null,
     tint: null,
-    adjust: { ...NEUTRAL }
+    adjust: { ...NEUTRAL },
+    mask: null,
+    clip: null
   }
 }
 
@@ -76,7 +85,6 @@ export function makeImage(doc: StudioDoc, asset: AssetInfo, fit: 'cover' | 'cont
     ...base(doc, asset.label || 'Image'),
     kind: 'image',
     asset: asset.id,
-    mask: null,
     width,
     height,
     x: Math.round((doc.width - width) / 2),
@@ -160,7 +168,7 @@ function mergeEffect<T extends object>(
 
 const COMMON = new Set([
   'name', 'x', 'y', 'width', 'height', 'rotation', 'flipX', 'flipY', 'opacity', 'blend',
-  'visible', 'locked', 'shadow', 'glow', 'stroke', 'tint', 'adjust'
+  'visible', 'locked', 'shadow', 'glow', 'stroke', 'tint', 'adjust', 'clip'
 ])
 const BY_KIND: Record<Layer['kind'], Set<string>> = {
   image: new Set(),
@@ -225,6 +233,25 @@ export function patchLayer(layer: Layer, patch: Record<string, unknown>): PatchR
       case 'gradient':
         next[key] = mergeEffect(next[key] as object | null, value, EFFECT_DEFAULTS[key], key)
         break
+      case 'clip': {
+        if (value === null || value === false) {
+          next.clip = null
+          break
+        }
+        if (typeof value !== 'object') throw new Error('clip must be an object or null')
+        const given = value as Record<string, unknown>
+        const current = (next.clip as Clip | null) ?? CLIP_DEFAULT
+        const from = given.from === undefined ? current.from : String(given.from)
+        if (!from) throw new Error('clip.from must name the layer or group to clip to')
+        if (from === layer.id) throw new Error('A layer cannot clip to itself')
+        next.clip = {
+          from,
+          mode: (given.mode === undefined ? current.mode : given.mode) === 'luma' ? 'luma' : 'alpha',
+          invert: given.invert === undefined ? current.invert : !!given.invert,
+          feather: clamp(given.feather === undefined ? current.feather : asNumber(given.feather, 'clip.feather'), 0, 400)
+        }
+        break
+      }
       case 'adjust': {
         const adjust = { ...(next.adjust as Adjust) }
         for (const [k, v] of Object.entries((value ?? {}) as Record<string, unknown>)) {
@@ -318,7 +345,7 @@ export function replaceLayer(doc: StudioDoc, layer: Layer): StudioDoc {
 
 export function removeLayer(doc: StudioDoc, id: string): StudioDoc {
   findLayer(doc, id)
-  return { ...doc, layers: doc.layers.filter((l) => l.id !== id) }
+  return tidyGroups({ ...doc, layers: doc.layers.filter((l) => l.id !== id) })
 }
 
 export function arrangeLayer(doc: StudioDoc, id: string, to: 'top' | 'bottom' | 'up' | 'down' | number): StudioDoc {
@@ -354,13 +381,19 @@ export const newGroupId = (doc: StudioDoc): string => {
 export function tidyGroups(doc: StudioDoc): StudioDoc {
   const used = new Set(doc.layers.map((l) => l.group))
   const known = new Set(doc.groups.map((g) => g.id))
+  const alive = new Set([...doc.layers.map((l) => l.id), ...doc.groups.map((g) => g.id)])
   const stray = doc.layers.some((l) => l.group && !known.has(l.group))
   const empty = doc.groups.some((g) => !used.has(g.id))
-  if (!stray && !empty) return doc
+  const dangling = doc.layers.some((l) => l.clip && !alive.has(l.clip.from))
+  if (!stray && !empty && !dangling) return doc
   return {
     ...doc,
     groups: doc.groups.filter((g) => used.has(g.id)),
-    layers: stray ? doc.layers.map((l) => (l.group && !known.has(l.group) ? { ...l, group: null } : l)) : doc.layers
+    layers: doc.layers.map((l) => {
+      const group = l.group && !known.has(l.group) ? null : l.group
+      const clip = l.clip && !alive.has(l.clip.from) ? null : l.clip
+      return group === l.group && clip === l.clip ? l : ({ ...l, group, clip } as Layer)
+    })
   }
 }
 
@@ -445,6 +478,7 @@ export function scaleLayer(l: Layer, k: number, ox: number, oy: number): Layer {
 export function duplicateLayers(doc: StudioDoc, ids: string[], shift = 0): { doc: StudioDoc; ids: string[] } {
   let next = doc
   const copies: string[] = []
+  const remap = new Map<string, string>()
   const regroup = new Map<string, string>()
   for (const g of doc.groups) {
     const members = groupMembers(doc, g.id)
@@ -467,8 +501,15 @@ export function duplicateLayers(doc: StudioDoc, ids: string[], shift = 0): { doc
     } as Layer
     layers.splice(top + 1 + copies.length, 0, layer)
     copies.push(layer.id)
+    remap.set(src.id, layer.id)
   }
-  return { doc: { ...next, layers }, ids: copies }
+  // Copying a clip source together with what it clips keeps the pair self-contained.
+  const rebound = layers.map((l) =>
+    l.clip && copies.includes(l.id) && remap.has(l.clip.from)
+      ? ({ ...l, clip: { ...l.clip, from: remap.get(l.clip.from)! } } as Layer)
+      : l
+  )
+  return { doc: { ...next, layers: rebound }, ids: copies }
 }
 
 export function polygonPoints(layer: ShapeLayer): [number, number][] {
