@@ -93,36 +93,37 @@ export async function createVideo(root: string, rawName: string): Promise<Video>
   return video
 }
 
-export async function renameVideo(
-  root: string,
-  id: string,
-  rawName: string
-): Promise<Video> {
+// The folder keeps the name it was born with. Premiere projects, proxies and anything
+// else holding the path open reference it by that name, and we cannot know what is open —
+// so a title change touches the database only.
+function retitle(raw: string): string {
+  const name = raw.trim()
+  if (!name) throw new Error('That title is empty.')
+  return name
+}
+
+export function renameVideo(id: string, rawName: string): Video {
   const video = findVideo(id)
-  const name = rawName.trim()
-  const base = folderNameFrom(name)
+  const name = retitle(rawName)
   const previous = video.name
-
-  if (base === video.folder) {
-    video.name = name
-    db.saveVideo(video)
-    return video
-  }
-
-  const folder = await uniqueFolder(videosDir(root), base)
-  const to = path.join(videosDir(root), folder)
-  await fs.rename(videoPath(root, video), to)
-
-  const oldProj = path.join(to, video.folder + '.prproj')
-  if (await exists(oldProj)) {
-    await fs.rename(oldProj, path.join(to, folder + '.prproj'))
-  }
+  if (name === previous) return video
 
   video.name = name
-  video.folder = folder
   db.saveVideo(video)
-  log('video.rename', 'Renamed "' + previous + '" to "' + name + '"', { id, name })
+  log('video.rename', 'Retitled "' + previous + '" to "' + name + '"', { id, name })
   return video
+}
+
+export function renameStream(id: string, rawName: string): Stream {
+  const stream = findStream(id)
+  const name = retitle(rawName)
+  const previous = stream.name
+  if (name === previous) return stream
+
+  stream.name = name
+  db.saveStream(stream)
+  log('stream.rename', 'Retitled "' + previous + '" to "' + name + '"', { id, name })
+  return stream
 }
 
 export function toggleStep(id: string, step: StepId): Video {

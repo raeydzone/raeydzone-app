@@ -111,8 +111,8 @@ export interface AssetInfo {
 
 export type ChatItem =
   | { id: string; kind: 'user'; text: string; images: string[]; at: string }
-  | { id: string; kind: 'assistant'; text: string; at: string }
-  | { id: string; kind: 'tool'; name: string; summary: string; status: 'running' | 'done' | 'error'; detail: string | null; cost?: number | null; at: string }
+  | { id: string; kind: 'assistant'; text: string; ms?: number; at: string }
+  | { id: string; kind: 'tool'; name: string; summary: string; status: 'running' | 'done' | 'error'; detail: string | null; cost?: number | null; ms?: number; at: string }
   | { id: string; kind: 'note'; text: string; bad: boolean; at: string }
 
 export type VariantStatus = 'idle' | 'working' | 'stopped' | 'error'
@@ -239,8 +239,11 @@ export interface SpendSummary {
   images: number
   unpriced: number
   since: string | null
-  models: { id: string; label: string; cost: number; images: number }[]
-  months: { key: string; cost: number; images: number }[]
+  imageMs: number
+  claudeMs: number
+  turns: number
+  models: { id: string; label: string; cost: number; images: number; ms: number }[]
+  months: { key: string; cost: number; images: number; ms: number }[]
   tasks: Record<ImageTask, number>
 }
 
@@ -294,8 +297,8 @@ export interface SendRequest {
 }
 
 export type StudioEvent =
-  | { type: 'status'; status: VariantStatus; error?: string }
-  | { type: 'text'; text: string }
+  | { type: 'status'; status: VariantStatus; error?: string; ms?: number }
+  | { type: 'text'; text: string; ms?: number }
   | { type: 'session'; sessionId: string }
   | { type: 'usage'; fiveHour: number | null; weekly: number | null }
 

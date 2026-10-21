@@ -219,9 +219,7 @@ export function register(): void {
   handle('archive:video', (id: string) => lib.archiveVideo(requireRoot(), id))
 
   handle('videos:create', (name: string) => lib.createVideo(requireRoot(), name))
-  handle('videos:rename', (id: string, name: string) =>
-    lib.renameVideo(requireRoot(), id, name)
-  )
+  handle('videos:rename', (id: string, name: string) => lib.renameVideo(id, name))
   handle('videos:step', (id: string, step: StepId) => lib.toggleStep(id, step))
   handle('videos:premiere', (id: string) => lib.openPremiere(requireRoot(), id))
   handle('videos:remove', (id: string, deleteFolder: boolean) =>
@@ -229,6 +227,7 @@ export function register(): void {
   )
 
   handle('streams:create', (name: string) => lib.createStream(requireRoot(), name))
+  handle('streams:rename', (id: string, name: string) => lib.renameStream(id, name))
   handle('streams:streamed', (id: string, done: boolean) => lib.setStreamed(id, done))
   handle('streams:schedule', (id: string, iso: string | null) => lib.setSchedule(id, iso))
   handle('streams:remove', (id: string, deleteFolder: boolean) =>

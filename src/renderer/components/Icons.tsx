@@ -196,3 +196,6 @@ export const IconArrowDown = ({ size = 14 }: Props): ReactNode =>
 
 export const IconLayers = ({ size = 14 }: Props): ReactNode =>
   base(size, <><path d="m12 3.5 9 4.5-9 4.5-9-4.5z" /><path d="m3 12.5 9 4.5 9-4.5" /></>)
+
+export const IconPencil = ({ size = 16 }: Props): ReactNode =>
+  base(size, <><path d="M4 20h4l11-11-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></>)

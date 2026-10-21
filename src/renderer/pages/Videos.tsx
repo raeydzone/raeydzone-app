@@ -10,7 +10,8 @@ import {
 import { LogRows } from '../components/LogFeed'
 import { FilesPanel } from '../components/FilesPanel'
 import {
-  IconFolder, IconImage, IconPlus, IconPremiere, IconSearch, IconSparkle, IconTrash, IconVideo
+  IconFolder, IconImage, IconPencil, IconPlus, IconPremiere, IconSearch, IconSparkle,
+  IconTrash, IconVideo
 } from '../components/Icons'
 import c from '../components/components.module.css'
 import {
@@ -195,12 +196,18 @@ function Detail({
           <h1 className={ui.title}>{video.name}</h1>
           <p className={ui.sub}>
             Created {formatStamp(video.createdAt)}
+            {` · folder ${video.folder}`}
             {video.archivedAt ? ` · archived ${formatStamp(video.archivedAt)}` : ''}
             {video.missing ? ' · folder missing on disk' : ''}
           </p>
         </div>
         <div className={ui.row}>
-          <button className={ui.btn} onClick={() => setRenaming(true)}>
+          <button
+            className={ui.btn}
+            title="Change the title — the folder on disk keeps its name"
+            onClick={() => setRenaming(true)}
+          >
+            <IconPencil size={15} />
             Rename
           </button>
           {isComplete(video) && !video.archivedAt ? (
@@ -366,11 +373,12 @@ function Detail({
       <Prompt
         open={renaming}
         title="Rename video"
-        placeholder="New name"
+        placeholder="New title"
+        note={'The folder stays ' + video.folder + ' — anything open on disk keeps working.'}
         initial={video.name}
         confirmLabel="Rename"
         onConfirm={(name) =>
-          void run(() => api.renameVideo(video.id, name), 'Renamed — folder moved too')
+          void run(() => api.renameVideo(video.id, name), 'Title updated')
         }
         onOpenChange={setRenaming}
       />

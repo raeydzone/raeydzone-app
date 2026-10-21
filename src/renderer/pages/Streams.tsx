@@ -5,7 +5,8 @@ import type { Stream } from '@shared/types'
 import { formatStamp } from '@shared/format'
 import { DropZone, Prompt, RemoveDialog, Thumb } from '../components/Bits'
 import {
-  IconCalendar, IconCheck, IconFolder, IconImage, IconPlus, IconSparkle, IconTrash
+  IconCalendar, IconCheck, IconFolder, IconImage, IconPencil, IconPlus, IconSparkle,
+  IconTrash
 } from '../components/Icons'
 import { lastStreamActivityAt, mediaUrl, useAppState, useStore } from '../state/store'
 import mascot from '../assets/mascot.png'
@@ -26,6 +27,7 @@ export default function Streams(): ReactNode {
   const { run, rev, notify } = useStore()
   const [creating, setCreating] = useState(false)
   const [removing, setRemoving] = useState<Stream | null>(null)
+  const [renaming, setRenaming] = useState<Stream | null>(null)
   const [studioId, setStudioId] = useState<string | null>(null)
   const api = window.raeydzone
 
@@ -76,7 +78,9 @@ export default function Streams(): ReactNode {
           <Thumb src={mediaUrl('stream', stream, stream.thumbnail, rev)} />
 
           <div className={p.streamHead}>
-            <div className={p.cardName}>{stream.name}</div>
+            <div className={p.cardName} title={'Folder: ' + stream.folder}>
+              {stream.name}
+            </div>
             <span
               className={`${c.statusPill} ${
                 stream.streamedAt ? c.statusDone : due ? c.statusLive : ''
@@ -130,6 +134,13 @@ export default function Streams(): ReactNode {
               }}
             >
               <IconImage />
+            </button>
+            <button
+              className={`${ui.btn} ${p.iconBtn}`}
+              title="Rename — the folder on disk keeps its name"
+              onClick={() => setRenaming(stream)}
+            >
+              <IconPencil size={15} />
             </button>
             <button
               className={`${ui.btn} ${p.iconBtn}`}
@@ -200,6 +211,23 @@ export default function Streams(): ReactNode {
             deleteFolder ? 'Folder moved to the Recycle Bin' : 'Removed — folder kept'
           )
         }}
+      />
+
+      <Prompt
+        open={renaming !== null}
+        title="Rename stream"
+        placeholder="New title"
+        note={
+          renaming
+            ? 'The folder stays ' + renaming.folder + ' — anything open on disk keeps working.'
+            : undefined
+        }
+        initial={renaming?.name ?? ''}
+        confirmLabel="Rename"
+        onConfirm={(name) => {
+          if (renaming) void run(() => api.renameStream(renaming.id, name), 'Title updated')
+        }}
+        onOpenChange={(o) => !o && setRenaming(null)}
       />
 
       <Prompt

@@ -42,7 +42,11 @@ export function registerStudio(
     return true
   }
 
-  claude.onEvent((variantId, event) => send('studio:event', variantId, event))
+  claude.onEvent((variantId, event) => {
+    send('studio:event', variantId, event)
+    // A finished turn lands in the ledger as time worked, so the spend panel refreshes.
+    if (event.type === 'status' && event.ms !== undefined) send('studio:spendChanged')
+  })
 
   mcp.setExecutor(
     (variantId, name, args) =>
@@ -113,8 +117,12 @@ export function registerStudio(
   })
   quiet('studio:stop', (variantId: string) => claude.stop(variantId))
   quiet('studio:image', async (req: ImageRequest) => {
+    const started = Date.now()
     const res = await openrouter.generate(req)
-    await spend.record({ model: res.model, task: req.task, project: req.projectId, cost: res.cost })
+    await spend.record({
+      model: res.model, task: req.task, project: req.projectId, cost: res.cost,
+      ms: Date.now() - started
+    })
     send('studio:spendChanged')
     return res
   })

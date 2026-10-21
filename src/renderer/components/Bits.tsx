@@ -218,6 +218,7 @@ export function Prompt({
   title,
   placeholder,
   initial = '',
+  note,
   confirmLabel = 'Create',
   onConfirm,
   onOpenChange
@@ -226,6 +227,7 @@ export function Prompt({
   title: string
   placeholder: string
   initial?: string
+  note?: string
   confirmLabel?: string
   onConfirm: (value: string) => void
   onOpenChange: (open: boolean) => void
@@ -259,6 +261,7 @@ export function Prompt({
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
           />
+          {note && <p className={s.modalNote}>{note}</p>}
           <div className={s.modalActions}>
             <Dialog.Close asChild>
               <button className={`${ui.btn} ${ui.btnGhost}`}>Cancel</button>

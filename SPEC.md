@@ -72,12 +72,18 @@ trim trailing dots and spaces (Windows rejects them), reject reserved names
 (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`). Collision → append ` (2)`.
 
 The display name in the app keeps the original typed text; the folder name is the
-sanitized one. Both stored.
+sanitized one. Both stored, and from here on they drift independently — see Renaming.
 
 ### Renaming
 
-Renames the folder and the `.prproj` alongside it. If either is locked (Premiere open),
-the rename fails loudly and nothing changes — no half-renamed state.
+Videos and streams can both be retitled at any time. A rename changes the **title only** —
+the folder on disk, the `.prproj` inside it and every file path stay exactly as they were.
+Premiere, proxies, renders and anything else holding those paths open cannot be known
+about from here, so they are never pulled out from under a running program.
+
+The folder therefore records the name a project was *born* with. The video detail page
+prints it under the title and the stream card carries it as a tooltip, so the folder is
+always findable once the two have drifted apart.
 
 ### Premiere Pro
 
@@ -191,6 +197,12 @@ each OpenRouter call's reported price is appended to `studio-spend.json` in the 
 folder, and the popover breaks it down by today, this month, this project, model and task, with the
 OpenRouter key's own lifetime usage and remaining credit beside it. Claude adds nothing there — it
 runs on the subscription.
+
+Time worked sits beside the money. Every image request banks how long it took, and every Claude
+turn banks its own duration in the same ledger, so the popover reads *Claude worked 14m 02s over 9
+turns, 1m 20s generating* for this one thumbnail, and Settings shows the same across all of them.
+In the chat, each reply carries the time Claude spent before it, each tool step its own duration,
+and the header counts up live while a turn runs.
 
 **Missing features** collects what Claude could not do. Claude has a `report_missing_feature`
 canvas tool and is told to file one per gap it hits, then carry on with a workaround. Reports land

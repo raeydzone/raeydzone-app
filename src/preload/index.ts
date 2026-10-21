@@ -101,6 +101,7 @@ const api = {
     call<void>('videos:remove', id, deleteFolder),
 
   createStream: (name: string) => call<Stream>('streams:create', name),
+  renameStream: (id: string, name: string) => call<Stream>('streams:rename', id, name),
   setStreamed: (id: string, done: boolean) => call<Stream>('streams:streamed', id, done),
   setSchedule: (id: string, iso: string | null) =>
     call<Stream>('streams:schedule', id, iso),

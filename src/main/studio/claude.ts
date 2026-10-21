@@ -7,12 +7,15 @@ import fs from 'node:fs/promises'
 import { getSettings } from '../services/settings'
 import { exists } from '../util/paths'
 import { SYSTEM_PROMPT } from './prompt'
+import * as spend from './spend'
 import { CLAUDE_EFFORTS, CLAUDE_MODELS, DEFAULT_CLAUDE } from '@shared/studio'
 import type { ClaudeChoice, ClaudeStatus, SendRequest, StudioEvent, VariantStatus } from '@shared/studio'
 
 interface Session {
   proc: ChildProcessWithoutNullStreams
   choice: ClaudeChoice
+  project: string
+  turnAt: number | null
   status: VariantStatus
   stopping: boolean
   stdout: string
@@ -117,9 +120,22 @@ export async function connect(): Promise<void> {
   )
 }
 
+// How long Claude has been on the current turn. Read while it works, banked when it stops.
+function elapsed(s: Session): number | undefined {
+  return s.turnAt === null ? undefined : Date.now() - s.turnAt
+}
+
+function closeTurn(s: Session): number | undefined {
+  const ms = elapsed(s)
+  s.turnAt = null
+  if (ms !== undefined) void spend.recordTurn(s.project, ms).catch(() => {})
+  return ms
+}
+
 function setStatus(variantId: string, s: Session, next: VariantStatus, error?: string): void {
   s.status = next
-  emit(variantId, { type: 'status', status: next, error })
+  if (next === 'working') s.turnAt = Date.now()
+  emit(variantId, { type: 'status', status: next, error, ms: next === 'working' ? undefined : closeTurn(s) })
   if (s.idleTimer) clearTimeout(s.idleTimer)
   s.idleTimer = next === 'working' ? null : setTimeout(() => s.proc.kill(), IDLE_MS)
 }
@@ -136,7 +152,9 @@ function handleLine(variantId: string, s: Session, line: string): void {
   } else if (msg.type === 'assistant') {
     const content = (msg.message as { content?: { type: string; text?: string }[] })?.content ?? []
     for (const block of content) {
-      if (block.type === 'text' && block.text?.trim()) emit(variantId, { type: 'text', text: block.text.trim() })
+      if (block.type === 'text' && block.text?.trim()) {
+        emit(variantId, { type: 'text', text: block.text.trim(), ms: elapsed(s) })
+      }
     }
   } else if (msg.type === 'rate_limit_event') {
     const windows = (msg.rate_limit_info as {
@@ -200,7 +218,8 @@ async function spawnSession(
 
   const proc = spawn(exe, args, { cwd: dir, env, windowsHide: true })
   const s: Session = {
-    proc, choice: req.claude, status: 'working', stopping: false, stdout: '', stderr: '', idleTimer: null, killTimer: null
+    proc, choice: req.claude, project: req.projectId, turnAt: Date.now(), status: 'working',
+    stopping: false, stdout: '', stderr: '', idleTimer: null, killTimer: null
   }
   sessions.set(req.variantId, s)
 

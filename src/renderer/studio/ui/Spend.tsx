@@ -2,7 +2,7 @@ import * as Popover from '@radix-ui/react-popover'
 import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { formatMoney, formatStamp, monthLabel } from '@shared/format'
+import { formatMoney, formatSpan, formatStamp, monthLabel } from '@shared/format'
 import { IMAGE_TASKS } from '@shared/studio'
 import type { OpenRouterStatus, SpendSummary, StudioProject } from '@shared/studio'
 import { IconChevron } from '../../components/Icons'
@@ -28,7 +28,7 @@ function Stat({ label, value }: { label: string; value: string }): ReactNode {
   )
 }
 
-function Bars({ title, rows }: { title: string; rows: { id: string; label: string; images: number; cost: number }[] }): ReactNode {
+function Bars({ title, rows }: { title: string; rows: { id: string; label: string; images: number; cost: number; ms: number }[] }): ReactNode {
   const top = Math.max(...rows.map((r) => r.cost), 0.0001)
   return (
     <div className={s.block}>
@@ -36,7 +36,9 @@ function Bars({ title, rows }: { title: string; rows: { id: string; label: strin
       {rows.map((r) => (
         <div key={r.id} className={s.modelRow}>
           <span className={s.modelName}>{r.label}</span>
-          <span className={s.modelCount}>{r.images}×</span>
+          <span className={s.modelCount}>
+            {r.images}×{r.ms > 0 ? ' · ' + formatSpan(r.ms) : ''}
+          </span>
           <span className={s.modelCost}>{formatMoney(r.cost)}</span>
           <span className={s.bar}>
             <motion.span
@@ -73,6 +75,21 @@ const requests = (summary: SpendSummary | null): string => {
   return `${n} ${n === 1 ? 'request' : 'requests'}${summary?.since ? ` since ${formatStamp(summary.since)}` : ''}`
 }
 
+// Claude is free on a subscription, so its share of the work only shows up as time.
+function Worked({ summary }: { summary: SpendSummary | null }): ReactNode {
+  const claudeMs = summary?.claudeMs ?? 0
+  const imageMs = summary?.imageMs ?? 0
+  if (claudeMs + imageMs === 0) return null
+  const turns = summary?.turns ?? 0
+  return (
+    <div className={s.stats}>
+      <Stat label="Claude worked" value={formatSpan(claudeMs)} />
+      <Stat label={turns === 1 ? 'Turn' : 'Turns'} value={String(turns)} />
+      <Stat label="Generating" value={formatSpan(imageMs)} />
+    </div>
+  )
+}
+
 export function SpendPill({ project }: { project: StudioProject }): ReactNode {
   const summary = useSpend(project.id)
   const what = project.kind === 'stream' ? 'stream' : 'video'
@@ -91,6 +108,7 @@ export function SpendPill({ project }: { project: StudioProject }): ReactNode {
             <span className={s.total}>{formatMoney(summary?.total ?? 0)}</span>
             <span className={s.sub}>{requests(summary)}</span>
           </div>
+          <Worked summary={summary} />
           {summary && <Breakdown summary={summary} />}
           <div className={s.foot}>
             {!!summary?.unpriced && <span>{summary.unpriced} requests came back without a price.</span>}
@@ -123,6 +141,7 @@ export function SpendOverview(): ReactNode {
         <Stat label="Today" value={formatMoney(summary?.today ?? 0)} />
         <Stat label="Requests" value={String(summary?.images ?? 0)} />
       </div>
+      <Worked summary={summary} />
       {!!summary?.months.length && (
         <Bars title="By month" rows={summary.months.map((m) => ({ ...m, id: m.key, label: monthLabel(m.key) }))} />
       )}

@@ -2,7 +2,7 @@ import * as Slider from '@radix-ui/react-slider'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { formatMoney } from '@shared/format'
+import { formatMoney, formatSpan } from '@shared/format'
 import type { AssetInfo, ChatItem, ClaudeStatus } from '@shared/studio'
 import {
   IconArrowDown, IconArrowUp, IconBrush, IconCheck, IconChevron, IconClaude, IconClose, IconCopy, IconCursor, IconEye, IconFlag,
@@ -19,6 +19,19 @@ type ToolItem = Extract<ChatItem, { kind: 'tool' }>
 type Block = { kind: 'steps'; id: string; items: ToolItem[] } | { kind: 'item'; id: string; item: ChatItem }
 
 const EASE = [0.22, 0.61, 0.36, 1] as const
+
+// A ticking clock reads better in whole seconds; finished work keeps its tenths.
+const liveSpan = (ms: number): string => (ms < 60_000 ? Math.round(ms / 1000) + 's' : formatSpan(ms))
+
+function Elapsed({ from }: { from: number }): ReactNode {
+  const [ms, setMs] = useState(() => Date.now() - from)
+  useEffect(() => {
+    setMs(Date.now() - from)
+    const id = setInterval(() => setMs(Date.now() - from), 1000)
+    return () => clearInterval(id)
+  }, [from])
+  return <span className={s.elapsed}>{liveSpan(ms)}</span>
+}
 
 const TOOL_ICONS: Record<string, (p: { size?: number }) => ReactNode> = {
   get_document: IconLog,
@@ -84,6 +97,7 @@ function Step({ item }: { item: ToolItem }): ReactNode {
       </span>
       <span className={s.stepText}>{item.summary}</span>
       {!!item.cost && <span className={s.stepCost}>{formatMoney(item.cost)}</span>}
+      {item.ms !== undefined && <span className={s.stepTime}>{formatSpan(item.ms)}</span>}
       {item.status === 'error' && <span className={s.stepBad}>failed</span>}
       {item.detail && <span className={s.stepDetail}>{item.detail}</span>}
     </div>
@@ -96,6 +110,7 @@ function Steps({ items, latest }: { items: ToolItem[]; latest: boolean }): React
   const open = toggled ?? (latest || !!running)
   const failed = items.filter((i) => i.status === 'error').length
   const cost = items.reduce((sum, i) => sum + (i.cost ?? 0), 0)
+  const spent = items.reduce((sum, i) => sum + (i.ms ?? 0), 0)
   return (
     <div className={`${s.steps} ${running ? s.stepsLive : ''}`}>
       <button className={s.stepsHead} onClick={() => setToggled(!open)} aria-expanded={open}>
@@ -117,6 +132,7 @@ function Steps({ items, latest }: { items: ToolItem[]; latest: boolean }): React
         </span>
         {failed > 0 && <span className={s.stepBad}>{failed} failed</span>}
         {cost > 0 && <span className={s.stepCost}>{formatMoney(cost)}</span>}
+        {spent > 0 && <span className={s.stepTime}>{formatSpan(spent)}</span>}
         <motion.span className={s.stepsChevron} animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.16, ease: EASE }}>
           <IconChevron size={12} />
         </motion.span>
@@ -163,7 +179,14 @@ function Message({ studio, item }: { studio: Studio; item: ChatItem }): ReactNod
       <span className={s.aiAvatar}>
         <IconClaude size={13} />
       </span>
-      <div className={s.aiText}>{item.text}</div>
+      <div className={s.aiBody}>
+        <div className={s.aiText}>{item.text}</div>
+        {item.ms !== undefined && (
+          <div className={s.aiTime} title="How long Claude worked before this reply">
+            {formatSpan(item.ms)}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -324,6 +347,7 @@ export function Chat({
           />
           <div className={`${s.chatStatus} ${working ? s.chatWorking : ''}`}>
             {fresh ? 'Built live on the canvas' : STATUS_TEXT[variant!.status]}
+            {working && variant!.turnAt !== null && <Elapsed from={variant!.turnAt} />}
           </div>
         </div>
         {fresh && variant ? (
