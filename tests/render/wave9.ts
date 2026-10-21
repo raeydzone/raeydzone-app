@@ -1,7 +1,7 @@
 import { canvas, ctx2d } from '@renderer/studio/assets'
 import { applyStyle, brandId, saveBrand, styleFrom, syncLinked } from '@renderer/studio/brand'
 import {
-  chainOf, emptyDoc, findLayer, groupLayers, groupMembers, makeImage, makeShape, makeText, patchLayer, scaleDoc, tidyGroups, ungroup
+  chainOf, emptyDoc, openDoc, findLayer, groupLayers, groupMembers, makeImage, makeShape, makeText, patchLayer, scaleDoc, tidyGroups, ungroup
 } from '@renderer/studio/doc'
 import { Studio } from '@renderer/studio/engine'
 import { encodeFor, renderAt } from '@renderer/studio/exporter'
@@ -121,6 +121,18 @@ export async function runWave9(): Promise<Case[]> {
   studio.addAsset(photo)
   const pic = makeImage(emptyDoc(), photo)
   check('an image takes only the shared part of a text style', String(patchLayer(pic, styleFrom(source)).ignored.length > 0), 'true')
+
+  const legacy = makeText(emptyDoc(), 'OLD') as Partial<TextLayer>
+  delete legacy.styles
+  delete legacy.wrap
+  const reopened = (() => {
+    try {
+      return String((openDoc(only(legacy as Layer)).layers[0] as TextLayer).styles.length)
+    } catch (err) {
+      return (err as Error).message
+    }
+  })()
+  check('a text layer saved before word styles still opens', reopened, '0')
 
   return cases
 }

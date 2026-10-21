@@ -7,7 +7,7 @@ import type {
 import { AssetStore, copyOf, encode } from './assets'
 import {
   arrangeLayer, chainOf, docAssets, duplicateLayer, duplicateLayers, emptyDoc, findLayer, groupLayers, insertLayer, makeImage,
-  normalizeDoc, patchLayer, refitText, removeLayer, replaceLayer, tidyGroups, ungroup, wholeGroupOf
+  normalizeDoc, openDoc, patchLayer, removeLayer, replaceLayer, tidyGroups, ungroup, wholeGroupOf
 } from './doc'
 import type { PatchResult } from './doc'
 import { loadFonts } from './fonts'
@@ -117,7 +117,7 @@ export class Studio {
       const variants = (file?.variants ?? []).map((v) => ({
         ...v,
         claude: { ...claude, ...v.claude },
-        doc: normalizeDoc({ ...v.doc, layers: v.doc.layers.map(refitText) }),
+        doc: openDoc(v.doc),
         snapshots: (v.snapshots ?? []).map((sn) => ({ ...sn, doc: normalizeDoc(sn.doc) })),
         status: 'idle' as VariantStatus,
         past: [],

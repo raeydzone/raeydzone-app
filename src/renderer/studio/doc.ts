@@ -652,6 +652,12 @@ function fitText(before: TextLayer, after: TextLayer, patch: Record<string, unkn
   return { ...after, x, width: box.width, height: box.height }
 }
 
+// Text is measured with fields older files lack, so they are filled in before the refit.
+export function openDoc(doc: StudioDoc): StudioDoc {
+  const normal = normalizeDoc(doc)
+  return { ...normal, layers: normal.layers.map(refitText) }
+}
+
 export function refitText(layer: Layer): Layer {
   if (layer.kind !== 'text') return layer
   const box = measureText(layer)
