@@ -1,14 +1,17 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { readFile, stat } from 'node:fs/promises'
+import { basename } from 'node:path'
 import * as lib from '../services/library'
 import { getSettings, saveSettings } from '../services/settings'
+import * as brand from './brand'
 import * as claude from './claude'
 import * as files from './files'
 import * as mcp from './mcp'
 import * as openrouter from './openrouter'
 import * as reports from './reports'
 import * as spend from './spend'
-import type { ImageRequest, ReportInput, SendRequest, ToolReply } from '@shared/studio'
+import type { BrandKit, ImageRequest, ReportInput, SendRequest, ToolReply } from '@shared/studio'
 
 const TOOL_TIMEOUT_MS = 5 * 60 * 1000
 const pending = new Map<string, (reply: ToolReply) => void>()
@@ -100,6 +103,43 @@ export function registerStudio(
     }
     const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? [] : result.filePaths
+  })
+
+  quiet('studio:export', async (projectId: string, items: { name: string; data: Uint8Array }[]) => {
+    const written = await files.writeExports(requireRoot(), projectId, items)
+    if (written[0]) shell.showItemInFolder(written[0])
+    return written.length
+  })
+
+  const kitChanged = (kit: BrandKit): BrandKit => {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send('brand:changed', kit)
+    return kit
+  }
+  quiet('brand:get', () => brand.loadKit(requireRoot()))
+  quiet('brand:save', async (kit: BrandKit) => kitChanged(await brand.saveKit(requireRoot(), kit)))
+  quiet('brand:pickLogo', async () => {
+    const win = getWin()
+    const options = {
+      properties: ['openFile'] as 'openFile'[],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'] }]
+    }
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    if (result.canceled || !result.filePaths[0]) return null
+    return brand.addLogo(requireRoot(), result.filePaths[0])
+  })
+  quiet('brand:readLogo', (file: string) => brand.readLogo(requireRoot(), file))
+  quiet('brand:removeLogo', (file: string) => brand.removeLogo(requireRoot(), file))
+  quiet('brand:logoToProject', (projectId: string, file: string) => brand.logoToProject(requireRoot(), projectId, file))
+
+  // Reading a file the creator just picked is safe from main; nothing here writes.
+  quiet('studio:pickLut', async () => {
+    const win = getWin()
+    const options = { properties: ['openFile'] as 'openFile'[], filters: [{ name: 'Colour LUT', extensions: ['cube'] }] }
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    const file = result.canceled ? null : result.filePaths[0]
+    if (!file) return null
+    if ((await stat(file)).size > 20 * 1024 * 1024) throw new Error('That LUT is larger than 20 MB.')
+    return { name: basename(file).replace(/\.cube$/i, ''), text: await readFile(file, 'utf-8') }
   })
 
   ipcMain.handle('studio:apply', async (_e, projectId: string, data: Uint8Array, ext: 'png' | 'jpg') => {

@@ -248,9 +248,77 @@ opacity; Alt-click sets the clone source, and an active selection confines the s
 stroke saves a new version of the layer's pixels, so undo steps back through them. Mask edges can
 also be grown, shrunk, smoothed and hardened — the refine-edge pass for cut-outs.
 
+### Tone, adjustment layers and camera blurs
+
+Pixel work that a 2D canvas filter cannot do runs as WebGL2 passes: the canvas stays the
+compositor, and a pass takes a canvas in and hands one back. Without WebGL2 the per-channel tone
+still applies on the CPU and the camera blurs fall back to a Gaussian.
+
+Every layer has a **tone**: Levels (black, white and midtone points, output range, Auto), Curves
+(master and per-channel, edited in a curve box), a gradient map, a 3D `.cube` LUT the creator
+loads (stored as an image asset) and a per-channel **grade**. Grade, levels and curves fold into
+one 256-entry table, so the shader does one lookup. Looks — Punchy, Teal & orange, Moody, Warm,
+Cold, Noir, Red duotone — fill these in one click. **Match colours** sets the grade so a layer's
+mean and spread per channel match another layer or the rest of the thumbnail (Reinhard's transfer),
+which pulls a pasted-in cut-out into the scene.
+
+An **adjustment layer** draws nothing: its tone, adjust and camera blur apply to everything below
+it, limited by its box, mask and clip, faded by its opacity and blended by its blend mode. Clicks
+pass through it on the canvas. Each layer can also take a **camera blur** — motion, zoom, spin,
+lens (bokeh that blooms highlights, optionally with a sharp area) and tilt-shift (a sharp band).
+
+### Guides, safe area and the design doctor
+
+Rulers along the top and left of the canvas pull out guides; dragging one off the canvas removes
+it. Guides are part of the design and undoable. While dragging, layers **snap** to the canvas
+edges and centre, the guides, and every other layer's edges and centre, with the lines shown;
+holding Ctrl lets go. Selections align (edges, centres) and distribute evenly, whole groups moving
+as one block; one layer, or Alt, aligns to the canvas.
+
+**Safe area** shades where YouTube draws over a thumbnail: the length badge, the watch-later and
+queue buttons, the watched bar. **Small preview** shows the design at 320 and 210 px, with a
+length badge, the way the feed and the suggestions column show it. The **doctor** checks text too
+small to read at 210 px, text whose edge has low contrast with the scene around it, text off the
+canvas or under the length badge, text or shapes over the upper part of a cut-out where the face
+is, more than six words, and a flat image; each finding selects its layer. Claude runs the same
+checks through `check_design`.
+
+### Finishing, export and snapshots
+
+A **finish** — sharpen, clarity, vibrance, bloom, vignette, grain — is the last pass over the
+whole picture. **Light wrap** screens the blurred scene into the edge of a layer; a **contact
+shadow** squashes the layer's own silhouette flat under its lowest point.
+
+**Export** renders any of 1280×720, 1920×1080, 2560×1440 and 3840×2160 from the layers themselves,
+every pixel measure scaled with the size, as JPG or PNG. Supersampling renders at twice the size
+and halves down step by step; JPGs can be held under YouTube's 2 MB. Files land in
+`thumbnail_studio/exports/` and the folder opens. Applying a thumbnail uses the same supersampled
+render.
+
+**Snapshots** save a version's design under a name, kept with the version (up to 24). Compare
+splits the canvas, snapshot on the left and now on the right, with a draggable divider; restore is
+an ordinary undoable edit.
+
+### Groups, brand kit and colour
+
+Groups nest: grouping whole groups makes them children of the new one, ungrouping hands members to
+the parent, and picking a layer on the canvas picks its outermost group. A group can carry a
+**group mask**, a canvas-sized mask cutting every member, set from a selection.
+
+The **brand kit** lives in `<root>/.raeydzone/brand/` — `brand.json` and copied-in logos — so every
+project shares it. It holds colours, fonts, logos and **styles**: the look of a layer (fonts,
+fills, outlines, shadows, glows, grade), never its place. A layer given a style is linked and
+follows when the style is updated, here or in any project when it opens; deleting a style leaves
+its layers looking the same. A brand font missing on a PC leaves the layer as it was.
+
+The **eyedropper** (I) samples the finished canvas into the selected text or shape and the
+clipboard; every colour field has its own dropper that takes the next click on the canvas. **Palette
+from this thumbnail** pulls its main colours (k-means, seeded farthest-first so a small accent
+survives).
+
 Render caches are keyed so that moving a clip source rebuilds only the clip, never the layer
 content underneath it. `npm run test:render` composites these cases in an offscreen Electron
-window and compares the pixels
+window and compares the pixels.
 
 Every call goes through OpenRouter's Images API with the source images as
 `input_references`, capped at what the chosen model accepts. Each studio picks a model **per

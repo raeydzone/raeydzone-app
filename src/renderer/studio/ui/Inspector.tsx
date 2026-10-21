@@ -2,17 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { BLEND_MODES, WARP_STYLES } from '@shared/studio'
 import type {
-  Glow, Gradient, GradientStop, Layer, Outline, Shadow, ShapeKind, ShapeLayer, TextLayer, TextStyle, WarpStyle
+  Finish, Glow, Gradient, GradientStop, Layer, Outline, Shadow, ShapeKind, ShapeLayer, TextLayer, TextStyle, WarpStyle
 } from '@shared/studio'
 import { Toggle } from '../../components/Bits'
 import { useStore } from '../../state/store'
 import { cutOut, editMask } from '../ai'
 import { MenuSelect } from '../../components/MenuSelect'
-import { NEUTRAL, effectDefault } from '../doc'
+import { FINISH_DEFAULT, NEUTRAL, effectDefault, patchFinish } from '../doc'
 import { WEIGHT_NAMES, findFont, nearestWeight } from '../fonts'
 import type { Studio } from '../engine'
 import { ColorField, NumField, Section, Segmented, SliderField } from './fields'
 import { FontPicker } from './FontPicker'
+import { BlurSection, ToneSection } from './ToneSection'
 import { presetAmount, withPreset } from '../warp'
 import type { CornerPreset } from '../warp'
 import type { Tool } from './Stage'
@@ -545,6 +546,62 @@ function MaskSection({
   )
 }
 
+function SceneEffects({ layer, patch }: { layer: Layer; patch: Patch }): ReactNode {
+  const wrap = layer.lightWrap
+  const contact = layer.contact
+  return (
+    <>
+      <div className={s.effect}>
+        <Toggle checked={!!wrap} onChange={(on) => patch({ lightWrap: on ? {} : null })} label="Light wrap" />
+        {wrap && (
+          <div className={s.effectBody}>
+            <SliderField label="Amount" value={Math.round(wrap.amount * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ lightWrap: { amount: v / 100 } }, 'lwa')} />
+            <SliderField label="Reach" value={wrap.size} min={2} max={120} unit="px" onChange={(size) => patch({ lightWrap: { size } }, 'lws')} />
+          </div>
+        )}
+      </div>
+      <div className={s.effect}>
+        <Toggle checked={!!contact} onChange={(on) => patch({ contact: on ? {} : null })} label="Contact shadow" />
+        {contact && (
+          <div className={s.effectBody}>
+            <ColorField label="Colour" value={contact.color} onChange={(color) => patch({ contact: { color } }, 'ctc')} />
+            <SliderField label="Opacity" value={Math.round(contact.opacity * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ contact: { opacity: v / 100 } }, 'cto')} />
+            <SliderField label="Softness" value={contact.blur} min={0} max={120} unit="px" onChange={(blur) => patch({ contact: { blur } }, 'ctb')} />
+            <SliderField label="Flatness" value={Math.round(contact.squash * 100)} min={2} max={100} unit="%" onChange={(v) => patch({ contact: { squash: v / 100 } }, 'cts')} />
+            <SliderField label="Drop" value={contact.y} min={-100} max={100} unit="px" onChange={(y) => patch({ contact: { y } }, 'cty')} />
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+const FINISH_SLIDERS: { key: keyof Finish; label: string }[] = [
+  { key: 'sharpen', label: 'Sharpen' },
+  { key: 'clarity', label: 'Clarity' },
+  { key: 'vibrance', label: 'Vibrance' },
+  { key: 'bloom', label: 'Bloom' },
+  { key: 'vignette', label: 'Vignette' },
+  { key: 'grain', label: 'Grain' }
+]
+
+function FinishSection({ studio, variantId }: { studio: Studio; variantId: string }): ReactNode {
+  const finish = studio.doc(variantId).finish ?? FINISH_DEFAULT
+  const set = (key: keyof Finish, v: number): void =>
+    studio.update(variantId, (d) => ({ ...d, finish: patchFinish(d.finish, { [key]: v / 100 }) }), { coalesce: 'finish' + key })
+  return (
+    <Section
+      title="Finish"
+      aside={studio.doc(variantId).finish ? <button className={s.linkBtn} onClick={() => studio.update(variantId, (d) => ({ ...d, finish: null }))}>Reset</button> : null}
+    >
+      {FINISH_SLIDERS.map((f) => (
+        <SliderField key={f.key} label={f.label} value={Math.round(finish[f.key] * 100)} min={0} max={100} unit="%" onChange={(v) => set(f.key, v)} />
+      ))}
+      <p className={s.hint}>The last pass over the whole thumbnail, after every layer.</p>
+    </Section>
+  )
+}
+
 const layerLabel = (l: Layer): string =>
   l.kind === 'text' ? l.text.replace(/\*/g, '').slice(0, 28) || l.name : l.name
 
@@ -652,6 +709,7 @@ export function Inspector({
             arrows nudge, Ctrl+D duplicates.
           </p>
         </Section>
+        <FinishSection studio={studio} variantId={variantId} />
       </div>
     )
   }
@@ -661,7 +719,18 @@ export function Inspector({
 
   return (
     <div className={s.inspector}>
-      <Section title="Layer" aside={<span className={k.tag}>{layer.kind}</span>}>
+      <Section
+        title="Layer"
+        aside={
+          layer.link ? (
+            <button className={s.linkBtn} title="Stop following the brand style; the look stays" onClick={() => patch({ link: null })}>
+              Brand style · unlink
+            </button>
+          ) : (
+            <span className={k.tag}>{layer.kind}</span>
+          )
+        }
+      >
         <input className={k.field} value={layer.name} onChange={(e) => patch({ name: e.target.value }, 'name')} />
         <div className={s.grid2}>
           <NumField label="X" value={layer.x} onChange={(x) => patch({ x }, 'x')} />
@@ -703,7 +772,7 @@ export function Inspector({
       <MaskSection studio={studio} variantId={variantId} layer={layer} setTool={setTool} />
       <ClipSection studio={studio} variantId={variantId} layer={layer} patch={patch} />
 
-      <Section title="Effects">
+      {layer.kind !== 'adjust' && <Section title="Effects">
         <EffectStack layer={layer} name="strokes" title="Outline" patch={patch}>
           {(e, set) => (
             <>
@@ -761,7 +830,8 @@ export function Inspector({
           )}
         </EffectStack>
         <Tint layer={layer} patch={patch} />
-      </Section>
+        <SceneEffects layer={layer} patch={patch} />
+      </Section>}
 
       <Section
         title="Adjust"
@@ -776,7 +846,10 @@ export function Inspector({
         <SliderField label="Saturation" value={a.saturation} min={0} max={300} unit="%" onChange={(v) => patch({ adjust: { saturation: v } }, 'as')} />
         <SliderField label="Hue" value={a.hue} min={-180} max={180} unit="°" onChange={(v) => patch({ adjust: { hue: v } }, 'ah')} />
         <SliderField label="Blur" value={a.blur} min={0} max={40} unit="px" onChange={(v) => patch({ adjust: { blur: v } }, 'abl')} />
+        {layer.kind === 'adjust' && <Tint layer={layer} patch={patch} />}
       </Section>
+      <ToneSection studio={studio} variantId={variantId} layer={layer} patch={patch} />
+      <BlurSection layer={layer} patch={patch} />
     </div>
   )
 }

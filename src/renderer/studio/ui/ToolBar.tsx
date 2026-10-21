@@ -4,16 +4,20 @@ import type { ReactNode } from 'react'
 import type { Layer } from '@shared/studio'
 import { Toggle } from '../../components/Bits'
 import {
-  IconBrush, IconCursor, IconDistort, IconEllipse, IconLasso, IconMarquee, IconPaint, IconPen, IconRect,
-  IconScissors, IconSparkle, IconText
+  IconAlignBottom, IconAlignCenter, IconAlignLeft, IconAlignMiddle, IconAlignRight, IconAlignTop, IconBrush, IconCursor,
+  IconDistort, IconDropper, IconEllipse, IconLasso, IconMarquee, IconPaint, IconPen, IconRect, IconScissors, IconSparkle, IconSpreadX,
+  IconSpreadY, IconText
 } from '../../components/Icons'
 import { useStore } from '../../state/store'
+import { alignLayers, distributeLayers } from '../doc'
+import type { AlignEdge } from '../doc'
 import type { Studio } from '../engine'
 import { newPaintLayer } from '../paint'
-import { fillSelection, layerFromSelection, maskWithSelection, refine } from '../selection'
+import { chainOf } from '../doc'
+import { fillSelection, layerFromSelection, maskGroup, maskWithSelection, refine } from '../selection'
 import type { Refine } from '../selection'
 import { Segmented, SliderField, Swatch } from './fields'
-import type { Tool, ToolOptions } from './Stage'
+import type { Tool, ToolOptions, ViewState } from './Stage'
 import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
 
@@ -29,7 +33,8 @@ const TOOLS: { id: Tool; icon: ReactNode; label: string; key: string }[] = [
   { id: 'fill', icon: <IconSparkle />, label: 'Generative fill — box an area', key: 'G' },
   { id: 'select', icon: <IconMarquee />, label: 'Select — marquee, lasso, magic wand, colour range', key: 'M' },
   { id: 'paint', icon: <IconPaint />, label: 'Paint — brush, eraser, clone, heal', key: 'N' },
-  { id: 'distort', icon: <IconDistort />, label: 'Distort — drag the corners of a layer', key: 'D' }
+  { id: 'distort', icon: <IconDistort />, label: 'Distort — drag the corners of a layer', key: 'D' },
+  { id: 'dropper', icon: <IconDropper />, label: 'Eyedropper — pick a colour from the canvas', key: 'I' }
 ]
 
 export function ToolBar({ tool, setTool, disabled }: { tool: Tool; setTool: (t: Tool) => void; disabled: boolean }): ReactNode {
@@ -69,7 +74,8 @@ const HINTS: Partial<Record<Tool, string>> = {
   brush: 'Paint over the selected layer.',
   cut: 'Drag a box around one object. The selected image layer (or the top image) is cut down to it.',
   fill: 'Drag a box over the area to repaint, then describe what should appear.',
-  distort: 'Drag a corner to skew, add perspective or distort freely. Click a layer to switch to it.'
+  distort: 'Drag a corner to skew, add perspective or distort freely. Click a layer to switch to it.',
+  dropper: 'Click a colour: it fills the selected text or shape and is copied. Alt-click sets the text highlight.'
 }
 
 const SELECT_HINT: Record<ToolOptions['selectShape'], string> = {
@@ -106,6 +112,7 @@ function SelectOptions({
   const [color, setColor] = useState('#ff2a2a')
   const [busy, setBusy] = useState(false)
   const sel = studio.selectionOf(variantId)
+  const group = selected ? chainOf(studio.doc(variantId), selected.group).at(-1) ?? null : null
   const run = async (fn: () => Promise<unknown>): Promise<void> => {
     setBusy(true)
     try {
@@ -167,6 +174,16 @@ function SelectOptions({
           >
             Hide inside
           </button>
+          {group && (
+            <button
+              className={k.chip}
+              disabled={busy}
+              title={`Keep only what is inside the selection, for every layer of ${group.name}`}
+              onClick={() => void run(() => maskGroup(studio, variantId, group.id, sel, 'inside'))}
+            >
+              Mask {group.name}
+            </button>
+          )}
           <button
             className={k.chip}
             disabled={busy}
@@ -245,7 +262,91 @@ function PaintOptions({
   )
 }
 
-export function ToolOptionsBar({
+const ALIGNS: { edge: AlignEdge; icon: ReactNode; label: string }[] = [
+  { edge: 'left', icon: <IconAlignLeft size={15} />, label: 'Align left edges' },
+  { edge: 'center', icon: <IconAlignCenter size={15} />, label: 'Align horizontal centres' },
+  { edge: 'right', icon: <IconAlignRight size={15} />, label: 'Align right edges' },
+  { edge: 'top', icon: <IconAlignTop size={15} />, label: 'Align top edges' },
+  { edge: 'middle', icon: <IconAlignMiddle size={15} />, label: 'Align vertical centres' },
+  { edge: 'bottom', icon: <IconAlignBottom size={15} />, label: 'Align bottom edges' }
+]
+
+function AlignBar({ studio, variantId }: { studio: Studio; variantId: string }): ReactNode {
+  const ids = studio.selection(variantId)
+  if (!ids.length) return null
+  const one = ids.length === 1
+  return (
+    <div className={s.iconRow}>
+      {ALIGNS.map((a) => (
+        <button
+          key={a.edge}
+          className={s.iconBtn}
+          title={a.label + (one ? ' to the canvas' : '') + ' · Alt aligns to the canvas'}
+          onClick={(e) => studio.update(variantId, (d) => alignLayers(d, ids, a.edge, e.altKey))}
+        >
+          {a.icon}
+        </button>
+      ))}
+      {ids.length >= 3 && (
+        <>
+          <button className={s.iconBtn} title="Space evenly side to side" onClick={() => studio.update(variantId, (d) => distributeLayers(d, ids, 'x'))}>
+            <IconSpreadX size={15} />
+          </button>
+          <button className={s.iconBtn} title="Space evenly top to bottom" onClick={() => studio.update(variantId, (d) => distributeLayers(d, ids, 'y'))}>
+            <IconSpreadY size={15} />
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+const VIEW_CHIPS: { id: keyof ViewState; label: string; title: string }[] = [
+  { id: 'snap', label: 'Snap', title: 'Snap to edges, centres and guides while dragging — hold Ctrl to let go' },
+  { id: 'guides', label: 'Guides', title: 'Show guides and the rulers to drag them from' },
+  { id: 'safe', label: 'Safe area', title: 'Show where YouTube draws over the thumbnail' },
+  { id: 'preview', label: 'Small preview', title: 'See it at the sizes YouTube shows it' },
+  { id: 'doctor', label: 'Doctor', title: 'Check legibility, contrast, cut-offs and covered faces' }
+]
+
+function ViewBar({ view, setView, studio, variantId }: { view: ViewState; setView: (v: ViewState) => void; studio: Studio; variantId: string }): ReactNode {
+  const guides = studio.doc(variantId).guides.length
+  return (
+    <div className={s.viewBar}>
+      {view.guides && guides > 0 && (
+        <button className={k.chip} title="Remove every guide" onClick={() => studio.update(variantId, (d) => ({ ...d, guides: [] }))}>
+          Clear guides
+        </button>
+      )}
+      {VIEW_CHIPS.map((c) => (
+        <button key={c.id} className={`${k.chip} ${view[c.id] ? s.chipOn : ''}`} title={c.title} onClick={() => setView({ ...view, [c.id]: !view[c.id] })}>
+          {c.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function ToolOptionsBar(props: {
+  tool: Tool
+  options: ToolOptions
+  setOptions: (o: ToolOptions) => void
+  selected: Layer | null
+  studio: Studio
+  variantId: string
+  setTool: (t: Tool) => void
+  view: ViewState
+  setView: (v: ViewState) => void
+}): ReactNode {
+  return (
+    <div className={s.optionsBar}>
+      <ToolOptions {...props} />
+      <ViewBar view={props.view} setView={props.setView} studio={props.studio} variantId={props.variantId} />
+    </div>
+  )
+}
+
+function ToolOptions({
   tool,
   options,
   setOptions,
@@ -266,25 +367,22 @@ export function ToolOptionsBar({
   const selecting = tool === 'move' && !!studio.selectionOf(variantId)
   if (tool === 'select' || selecting) {
     return (
-      <div className={s.optionsBar}>
+      <>
         {tool !== 'select' && (
           <button className={k.chip} onClick={() => setTool('select')}>
             Selection
           </button>
         )}
         <SelectOptions options={options} setOptions={setOptions} selected={selected} studio={studio} variantId={variantId} />
-      </div>
+      </>
     )
   }
   if (tool === 'paint') {
-    return (
-      <div className={s.optionsBar}>
-        <PaintOptions options={options} setOptions={setOptions} selected={selected} studio={studio} variantId={variantId} />
-      </div>
-    )
+    return <PaintOptions options={options} setOptions={setOptions} selected={selected} studio={studio} variantId={variantId} />
   }
   return (
-    <div className={s.optionsBar}>
+    <>
+      {tool === 'move' && <AlignBar studio={studio} variantId={variantId} />}
       {masking && (
         <Segmented
           value={options.maskShow ? 'show' : 'hide'}
@@ -306,6 +404,6 @@ export function ToolOptionsBar({
       <span className={s.optionHint}>
         {masking && !selected ? 'Select a layer first.' : HINTS[tool] ?? 'Click to select, drag to move. Handles resize and rotate; Shift keeps proportions free.'}
       </span>
-    </div>
+    </>
   )
 }

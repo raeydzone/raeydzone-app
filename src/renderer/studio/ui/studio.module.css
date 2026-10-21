@@ -175,6 +175,7 @@
 }
 
 .stageWrap {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -199,6 +200,12 @@
   width: 100%;
   height: 100%;
   border-radius: var(--r-md);
+}
+
+.stageCanvas + .stageCanvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .overlay {
@@ -566,10 +573,6 @@
 
 .layerHidden .layerLabel {
   opacity: 0.45;
-}
-
-.layerNested {
-  margin-left: var(--s-4);
 }
 
 .groupRow .layerName {
@@ -1861,3 +1864,401 @@
   background: var(--accent-hot);
   box-shadow: 0 0 var(--s-2) var(--accent-glow);
 }
+
+.curveBox {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--r-md);
+  background: var(--grad-field);
+  box-shadow: inset 0 var(--hairline) 0 var(--edge-soft), 0 0 0 var(--hairline) var(--edge-softer);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.curveGrid,
+.curveDiag {
+  fill: none;
+  stroke: var(--edge-soft);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.curveDiag {
+  stroke-dasharray: 3 4;
+}
+
+.curveLine {
+  fill: none;
+  stroke: var(--accent-hot);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.curvePoint {
+  fill: var(--bg-raised);
+  stroke: var(--text);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+  transition: fill var(--t-fast) var(--ease);
+}
+
+.curvePoint:hover,
+.curvePointOn {
+  fill: var(--accent-hot);
+}
+
+.adjustThumb {
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+}
+
+.rulerTop,
+.rulerLeft {
+  position: absolute;
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+  opacity: 0.5;
+  transition: opacity var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+
+.rulerTop:hover,
+.rulerLeft:hover {
+  opacity: 1;
+  background: var(--accent-wash);
+}
+
+.rulerTop {
+  left: 0;
+  right: 0;
+  bottom: calc(100% + var(--s-1));
+  height: var(--s-2);
+  cursor: row-resize;
+}
+
+.rulerLeft {
+  top: 0;
+  bottom: 0;
+  right: calc(100% + var(--s-1));
+  width: var(--s-2);
+  cursor: col-resize;
+}
+
+.guide {
+  stroke: var(--claude);
+  stroke-width: var(--hairline);
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.guideHitX,
+.guideHitY {
+  stroke: transparent;
+  pointer-events: stroke;
+}
+
+.guideHitX {
+  cursor: col-resize;
+}
+
+.guideHitY {
+  cursor: row-resize;
+}
+
+.guideLeaving {
+  opacity: 0.35;
+}
+
+.snapLine {
+  stroke: var(--accent-hot);
+  stroke-width: var(--hairline);
+  stroke-dasharray: var(--s-1) var(--s-1);
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.safeZone {
+  fill: var(--scrim);
+  stroke: var(--warn);
+  stroke-width: var(--hairline);
+  stroke-dasharray: var(--s-2) var(--s-1);
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.safeLabel {
+  fill: var(--warn);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.viewBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  margin-left: auto;
+}
+
+.chipOn {
+  color: var(--accent-hot);
+  background: var(--accent-wash);
+}
+
+.iconRow {
+  display: flex;
+  gap: var(--hairline);
+}
+
+.iconBtn {
+  display: grid;
+  place-items: center;
+  width: var(--s-6);
+  height: var(--s-6);
+  border-radius: var(--r-md);
+  color: var(--text-dim);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.iconBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.stageCards {
+  position: absolute;
+  top: var(--s-3);
+  right: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  max-height: calc(100% - var(--s-5));
+  overflow-y: auto;
+  pointer-events: none;
+}
+
+.stageCards > * {
+  pointer-events: auto;
+}
+
+.stageCard {
+  display: grid;
+  gap: var(--s-2);
+  width: calc(var(--studio-panel-w) + var(--s-7));
+  padding: var(--s-3);
+  border-radius: var(--r-lg);
+  background: var(--grad-panel);
+  box-shadow: var(--shadow-panel), 0 0 0 var(--hairline) var(--edge-soft);
+}
+
+.stageCardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.previewFig {
+  display: grid;
+  gap: var(--s-1);
+  margin: 0;
+}
+
+.previewCanvas {
+  border-radius: var(--r-md);
+  background: var(--bg-inset);
+}
+
+.issueList {
+  display: grid;
+  gap: var(--s-1);
+}
+
+.issue {
+  display: grid;
+  gap: var(--hairline);
+  padding: var(--s-2);
+  border-radius: var(--r-md);
+  text-align: left;
+  background: var(--bg-raised);
+  box-shadow: inset var(--hairline) 0 0 var(--edge-soft);
+  transition: background var(--t-fast) var(--ease);
+}
+
+.issue:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.issue:disabled {
+  cursor: default;
+}
+
+.issueWarn {
+  box-shadow: inset calc(var(--hairline) * 3) 0 0 var(--warn);
+}
+
+.issueTitle {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dropBtn {
+  display: grid;
+  place-items: center;
+  width: var(--s-5);
+  height: var(--s-5);
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+
+.dropBtn:hover {
+  color: var(--accent-hot);
+  background: var(--bg-hover);
+}
+
+.splitLine {
+  stroke: var(--text);
+  stroke-width: calc(var(--hairline) * 2);
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.splitHandle {
+  fill: var(--accent);
+  stroke: var(--text);
+  stroke-width: var(--hairline);
+  vector-effect: non-scaling-stroke;
+  cursor: ew-resize;
+}
+
+.compareTag {
+  position: absolute;
+  top: var(--s-2);
+  padding: var(--hairline) var(--s-2);
+  border-radius: var(--r-xl);
+  background: var(--scrim);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  pointer-events: none;
+}
+
+.compareTagA {
+  left: var(--s-2);
+}
+
+.compareTagB {
+  right: var(--s-2);
+}
+
+.snapMenu {
+  display: grid;
+  gap: var(--s-2);
+  width: calc(var(--studio-panel-w) + var(--s-7));
+  padding: var(--s-3);
+}
+
+.snapList {
+  display: grid;
+  gap: var(--s-1);
+}
+
+.snapRow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-md);
+  transition: background var(--t-fast) var(--ease);
+}
+
+.snapRow:hover,
+.snapRowOn {
+  background: var(--bg-hover);
+}
+
+.exportBody {
+  display: grid;
+  gap: var(--s-4);
+  margin: var(--s-3) 0 var(--s-4);
+}
+
+.exportGrid {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.brandPanel {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: var(--s-4);
+  padding: var(--s-2) var(--s-3) var(--s-3);
+}
+
+.brandPanel img {
+  object-fit: contain;
+}
+
+.brandBlock {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.brandBlock .assetGrid {
+  padding: 0;
+}
+
+.brandSwatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.brandSwatchWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.brandSwatch {
+  width: var(--s-6);
+  height: var(--s-6);
+  border-radius: var(--r-md);
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 var(--hairline) var(--edge-soft);
+  transition: transform var(--t-fast) var(--ease);
+}
+
+.brandSwatch:hover {
+  transform: scale(1.08);
+}
+
+.brandDrop {
+  position: absolute;
+  top: calc(var(--s-1) * -1);
+  right: calc(var(--s-1) * -1);
+  display: grid;
+  place-items: center;
+  width: var(--s-4);
+  height: var(--s-4);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.brandSwatchWrap:hover .brandDrop {
+  opacity: 1;
+}
+
+.brandDrop:hover {
+  color: var(--accent-hot);
+}
+

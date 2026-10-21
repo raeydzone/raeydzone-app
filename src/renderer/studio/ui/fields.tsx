@@ -2,7 +2,8 @@ import * as Slider from '@radix-ui/react-slider'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { IconChevron } from '../../components/Icons'
+import { IconChevron, IconDropper } from '../../components/Icons'
+import { pickFromCanvas } from '../picker'
 import s from './studio.module.css'
 
 // The inspector remounts for every selected layer, so folded sections are remembered here
@@ -173,6 +174,13 @@ export function ColorField({
           onBlur={commit}
           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         />
+        <button
+          className={s.dropBtn}
+          title="Pick a colour from the canvas"
+          onClick={() => void pickFromCanvas().then((picked) => picked && onChange(join(picked, a)))}
+        >
+          <IconDropper size={13} />
+        </button>
         {alpha && (
           <label className={s.colorAlpha} title="Opacity">
             <input

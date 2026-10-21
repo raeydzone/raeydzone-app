@@ -164,6 +164,35 @@ export async function maskWithSelection(
   await saveMask(studio, variantId, layer, keep === 'inside' ? intersect(base, shape) : subtract(base, shape))
 }
 
+// A group mask lives in canvas space, so a selection applies to it as drawn; like a layer
+// mask it only narrows what was already showing.
+export async function maskGroup(
+  studio: Studio,
+  variantId: string,
+  groupId: string,
+  sel: HTMLCanvasElement | null,
+  keep: 'inside' | 'outside'
+): Promise<void> {
+  const doc = studio.doc(variantId)
+  const group = doc.groups.find((g) => g.id === groupId)
+  if (!group) throw new Error(`No group with id ${groupId}`)
+  let mask: string | null = null
+  if (sel) {
+    const current = group.mask ? await studio.assets.get(group.mask) : null
+    const base = blank(doc)
+    const g = ctx2d(base)
+    if (current) g.drawImage(current, 0, 0, doc.width, doc.height)
+    else {
+      g.fillStyle = '#fff'
+      g.fillRect(0, 0, doc.width, doc.height)
+    }
+    const info = await studio.assets.addCanvas(keep === 'inside' ? intersect(base, sel) : subtract(base, sel), group.name + ' mask', 'mask')
+    studio.addAsset(info)
+    mask = info.id
+  }
+  studio.update(variantId, (d) => ({ ...d, groups: d.groups.map((g) => (g.id === groupId ? { ...g, mask } : g)) }))
+}
+
 async function placeCrop(
   studio: Studio,
   variantId: string,

@@ -12,8 +12,11 @@ const result = path.join(work, 'result.json')
 const ENTRY = [
   "import { run } from '@tests/render/cases'",
   "import { runBundle } from '@tests/render/bundle'",
+  "import { runWave7 } from '@tests/render/wave7'",
+  "import { runWave8 } from '@tests/render/wave8'",
+  "import { runWave9 } from '@tests/render/wave9'",
   'const page = window as unknown as { report: (text: string) => void }',
-  'void Promise.all([run(), runBundle()])',
+  'void Promise.all([run(), runBundle(), runWave7(), runWave8(), runWave9()])',
   '  .then((groups) => groups.flat())',
   '  .then((cases) => page.report(JSON.stringify(cases)))',
   '  .catch((err: Error) =>',

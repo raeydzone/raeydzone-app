@@ -2,6 +2,7 @@ import type { AssetInfo, Layer, LayerGroup } from '@shared/studio'
 import { placeAsset } from './ai'
 import { canvas, ctx2d, encode } from './assets'
 import type { Studio } from './engine'
+import { groupMembers } from './doc'
 import { importLayers } from './library'
 import { drawLayer, loadDocAssets, raster } from './render'
 
@@ -36,7 +37,7 @@ export async function copyLayers(studio: Studio, variantId: string, ids: string[
     drawLayer(g, layers.length > 1 ? l : ({ ...l, blend: 'normal' } as Layer), studio.assets, doc)
   }
   await window.raeydzone.studio.copyImage(await encode(out))
-  const whole = doc.groups.filter((g) => doc.layers.every((l) => l.group !== g.id || ids.includes(l.id)))
+  const whole = doc.groups.filter((g) => groupMembers(doc, g.id).every((l) => ids.includes(l.id)))
   copied = { projectId: studio.projectId, layers, groups: whole, assets: [...studio.assets.infos.values()] }
 }
 

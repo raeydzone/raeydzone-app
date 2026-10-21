@@ -91,6 +91,24 @@ export async function copyAssets(root: string, from: string, to: string, names: 
   return out
 }
 
+const EXPORT_NAME = /^[\w.-]+\.(png|jpg)$/i
+
+export async function writeExports(root: string, projectId: string, items: { name: string; data: Uint8Array }[]): Promise<string[]> {
+  const dir = path.join(await studioDir(root, projectId), 'exports')
+  assertInside(root, dir)
+  await fs.mkdir(dir, { recursive: true })
+  const out: string[] = []
+  for (const item of items) {
+    if (!EXPORT_NAME.test(item.name)) throw new Error('Invalid export name: ' + item.name)
+    const target = path.join(dir, item.name)
+    assertInside(root, target)
+    await fs.writeFile(target + '.tmp', item.data)
+    await fs.rename(target + '.tmp', target)
+    out.push(target)
+  }
+  return out
+}
+
 export const digest = (data: Uint8Array): string => createHash('sha1').update(data).digest('hex')
 
 // The studio remembers the hash of the thumbnail it last saw, so a thumbnail set from

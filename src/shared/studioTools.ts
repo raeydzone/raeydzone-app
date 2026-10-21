@@ -1,5 +1,5 @@
 import {
-  BLEND_MODES, BUNDLED_FONTS, CANVAS_H, CANVAS_W, GRADIENT_TYPES, SHAPES, STROKE_POSITIONS, WARP_STYLES
+  BLEND_MODES, BLUR_STYLES, BUNDLED_FONTS, CANVAS_H, CANVAS_W, GRADIENT_TYPES, SHAPES, STROKE_POSITIONS, WARP_STYLES
 } from './studio'
 
 type Schema = Record<string, unknown>
@@ -56,6 +56,59 @@ const strokeItem = obj({
   opacity: num('0 to 1.'),
   position: { type: 'string', enum: [...STROKE_POSITIONS], description: 'outside grows out of the shape (default), inside eats into it, center straddles the edge.' }
 })
+
+const curve = (description: string): Schema => ({
+  type: 'array',
+  items: point,
+  maxItems: 16,
+  description: description + ' Points are [input, output], 0 to 255; at least two make a curve, [] resets it.'
+})
+
+const toneSchema = nullable(
+  obj({
+    levels: nullable(obj({
+      black: num('Input black point 0 to 254: everything this dark or darker turns black.'),
+      white: num('Input white point 1 to 255: everything this bright or brighter turns white.'),
+      gamma: num('Midtone gamma, 1 is unchanged, above 1 brightens the midtones.'),
+      outBlack: num('Output floor 0 to 255 — raise it for faded, matte blacks.'),
+      outWhite: num('Output ceiling 0 to 255.')
+    }), 'Photoshop Levels. null removes them.'),
+    curves: nullable(obj({
+      rgb: curve('Master curve for all channels. An S-curve [[0,0],[64,48],[192,210],[255,255]] adds punch.'),
+      r: curve('Red channel curve.'),
+      g: curve('Green channel curve.'),
+      b: curve('Blue channel curve — lift its shadows for a teal cast.')
+    }), 'Photoshop Curves, applied after levels. null removes them.'),
+    map: nullable(obj({
+      stops: {
+        type: 'array',
+        items: obj({ at: num('Brightness 0 (shadows) to 1 (highlights).'), color: color('Colour for that brightness.') }, ['at', 'color']),
+        minItems: 2,
+        maxItems: 16
+      },
+      amount: num('0 to 1 blend with the original colours.')
+    }), 'Gradient map: recolours by brightness, shadows to the first stop and highlights to the last — duotones, noir, a red hell look. null removes it.'),
+    lut: nullable(obj({ amount: num('0 to 1 strength of the loaded .cube LUT.') }), 'A colour LUT the creator loaded; you can change its strength or remove it with null.'),
+    grade: nullable(obj({
+      gain: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 3, description: 'Multiplier per channel [r, g, b], 1 is unchanged.' },
+      lift: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 3, description: 'Offset per channel [r, g, b], -1 to 1.' },
+      amount: num('0 to 1.')
+    }), 'A per-channel colour shift, what match_colors writes. null removes it.')
+  }),
+  'Tonal adjustments on this layer (on an adjustment layer: on everything below it). Each part is optional and null removes it; null for the whole tone removes them all.'
+)
+
+const blurFxSchema = nullable(
+  obj({
+    style: { type: 'string', enum: [...BLUR_STYLES], description: 'motion streaks in one direction, zoom radiates from a centre (speed, impact), spin swirls round it, lens is a bokeh blur that blooms highlights into discs, tilt keeps a band sharp and blurs away from it (miniature look).' },
+    amount: num('Strength: blur length px for motion and zoom, degrees for spin (up to 90), disc radius px for lens and tilt.'),
+    angle: num('Degrees: the direction of a motion blur, the direction of the sharp band of a tilt-shift.'),
+    x: num('Centre of a zoom or spin, or the sharp spot of lens and tilt, as a fraction of the layer box: 0.5 is the middle.'),
+    y: num('As x, vertically.'),
+    focus: num('0 to 1: half-height of the sharp band for tilt; for lens, the size of the sharp area around x/y (0 blurs everything).')
+  }, ['style']),
+  'A camera-style blur beyond the Gaussian adjust.blur. null removes it.'
+)
 
 const common: Record<string, Schema> = {
   name: str('Layer name shown in the layers panel.'),
@@ -115,7 +168,28 @@ const common: Record<string, Schema> = {
     saturation: num('Percent, 100 is unchanged, 0 is greyscale.'),
     hue: num('Hue rotation in degrees.'),
     blur: num('Gaussian blur px.')
-  })
+  }),
+  tone: toneSchema,
+  blurFx: blurFxSchema,
+  lightWrap: nullable(
+    obj({ amount: num('0 to 1 strength.'), size: num('How far the light reaches in from the edge, px.') }),
+    'Light wrap: the scene behind the layer bleeds into its edge, so a pasted-in cut-out looks lit by the background instead of stuck on. Use it on every cut-out person over a bright or colourful background. null removes it.'
+  ),
+  contact: nullable(
+    obj({
+      color: color('Shadow colour.'),
+      opacity: num('0 to 1.'),
+      blur: num('Softness px.'),
+      squash: num('0.02 to 1: how flat the silhouette is squashed onto the floor, 0.1 is a thin pool.'),
+      y: num('Moves the shadow down px from the lowest point of the layer.')
+    }),
+    'Contact shadow: the layer\'s own silhouette squashed flat under its lowest point, as if it stands on the ground. For products, people, objects. null removes it.'
+  ),
+  link: nullable(str('Brand style id.'), 'The brand style this layer follows; set by apply_brand_style. null unlinks it, keeping its look.')
+}
+
+const lookProp: Record<string, Schema> = {
+  look: { type: 'string', enum: ['punch', 'teal', 'moody', 'warm', 'cold', 'noir', 'duo'], description: 'Applies a preset tone in one go (replacing levels, curves, map and grade): punch, teal (teal & orange), moody, warm, cold, noir, duo (red duotone). Fine-tune with tone afterwards.' }
 }
 
 const gradient = (description: string): Schema => nullable(
@@ -233,9 +307,91 @@ export const STUDIO_TOOLS: ToolDef[] = [
     inputSchema: obj({ ...shapeProps, ...common, below_layer_id: str('Insert under this layer.') }, ['shape'])
   },
   {
+    name: 'add_adjustment_layer',
+    description: 'Adds an adjustment layer: it draws nothing itself but applies its tone (levels, curves, gradient map, grade, look), adjust (brightness, contrast, saturation, hue, blur) and blurFx to everything below it, like in Photoshop. By default it covers the whole canvas; give a box to limit it, mask it with edit_mask, or clip it to a layer or group so only that is changed (grade just the subject). Use it for the final colour grade of the whole thumbnail, a background-only blur under the subject, or a duotone.',
+    inputSchema: obj({ ...common, ...lookProp, below_layer_id: str('Insert under this layer, so it changes only what is below that.') })
+  },
+  {
+    name: 'match_colors',
+    description: 'Colour-matches a layer to a reference by shifting each channel to the reference\'s average and spread, written as tone.grade. Without reference_layer_id the layer is matched to the rest of the thumbnail — the quick way to make a pasted-in cut-out sit in the scene\'s light. On an adjustment layer it matches everything below to the reference.',
+    inputSchema: obj({
+      layer_id: str('Layer to recolour.'),
+      reference_layer_id: str('Layer whose colours to match, e.g. a hidden reference image. Omit for the rest of the canvas.')
+    }, ['layer_id'])
+  },
+  {
+    name: 'auto_levels',
+    description: 'Stretches a layer\'s tones so its darkest pixels go black and its brightest white, written as tone.levels. On an adjustment layer it measures everything below it.',
+    inputSchema: obj({ layer_id: str('Layer id.') }, ['layer_id'])
+  },
+  {
     name: 'update_layer',
     description: 'Changes any properties of a layer: position, size, rotation, opacity, blend, effect stacks (shadows, glows, strokes) and tint, clipping, adjustments, text and shape properties. Only the given properties change. A stack passed as a list replaces it; null or [] removes it.',
-    inputSchema: obj({ layer_id: str('Layer id.'), ...common, ...textProps, ...shapeProps }, ['layer_id'])
+    inputSchema: obj({ layer_id: str('Layer id.'), ...common, ...lookProp, ...textProps, ...shapeProps }, ['layer_id'])
+  },
+  {
+    name: 'align_layers',
+    description: 'Lines layers up exactly instead of by eye: align edges or centres, or space three or more evenly. A whole group in the list moves as one block. One layer, or to "canvas", aligns against the canvas — centre a headline with align "center" to canvas.',
+    inputSchema: obj({
+      layer_ids: ids('Layers to align. Include every member of a group to move it as one.'),
+      align: { type: 'string', enum: ['left', 'center', 'right', 'top', 'middle', 'bottom'], description: 'center and middle are the horizontal and vertical centres.' },
+      distribute: { type: 'string', enum: ['horizontal', 'vertical'], description: 'Instead of aligning, make the gaps between three or more layers equal.' },
+      to: { type: 'string', enum: ['selection', 'canvas'], description: 'Align against the joint box of the layers (default) or the canvas.' }
+    }, ['layer_ids'])
+  },
+  {
+    name: 'check_design',
+    description: 'Runs the design doctor on the current canvas: text too small to read at 210px wide, text that blends into its background (contrast at its edge), text cut off at the canvas edge or under YouTube\'s video-length badge, text or shapes covering the face of a cut-out, too many words, and a flat overall image. Returns the findings with layer ids. Run it before you call a thumbnail finished and fix what it finds.',
+    inputSchema: obj({})
+  },
+  {
+    name: 'set_finish',
+    description: 'The finishing pass over the whole thumbnail, applied after every layer, each 0 to 1: sharpen (crisp edges), clarity (local contrast that makes faces and textures pop), vibrance (boosts dull colours, spares already strong ones), bloom (bright areas glow), vignette (darkens the corners), grain (film grain). Small values go a long way: sharpen 0.3, clarity 0.3, vibrance 0.3. Given values merge into the current ones; null removes the finish.',
+    inputSchema: obj({
+      finish: nullable(obj({
+        sharpen: num('0 to 1.'),
+        clarity: num('0 to 1.'),
+        vibrance: num('0 to 1.'),
+        bloom: num('0 to 1.'),
+        vignette: num('0 to 1.'),
+        grain: num('0 to 1.')
+      }), 'The finish, or null to remove it.')
+    }, ['finish'])
+  },
+  {
+    name: 'save_snapshot',
+    description: 'Saves the current design as a named snapshot the creator can compare against (A/B split view) and restore. Take one before a big change you might want to undo as a whole, or to offer two takes on one version.',
+    inputSchema: obj({ name: str('Short name, e.g. "Before the red grade".') })
+  },
+  {
+    name: 'extract_palette',
+    description: 'Returns the main colours of the canvas or of one layer, most used first, as hex — for picking text and accent colours that belong to the image, e.g. a highlight colour matching the subject\'s shirt.',
+    inputSchema: obj({ layer_id: str('Optional: only this layer.'), count: num('How many colours, 2 to 10. Default 6.') })
+  },
+  {
+    name: 'get_brand_kit',
+    description: 'Returns the creator\'s brand kit: brand colours, fonts, saved styles (ids, names and the layer kind each was made from) and logos. Use the brand colours and fonts for text and accents whenever a kit exists, apply saved styles with apply_brand_style, and place logos with place_logo.',
+    inputSchema: obj({})
+  },
+  {
+    name: 'apply_brand_style',
+    description: 'Gives a layer one of the brand kit\'s saved styles (fonts, colours, outlines, shadows, glows, grade) and links it, so the layer follows when the creator edits that style later. Style parts that only fit another layer kind are skipped.',
+    inputSchema: obj({ layer_id: str('Layer id.'), style_id: str('Style id from get_brand_kit.') }, ['layer_id', 'style_id'])
+  },
+  {
+    name: 'place_logo',
+    description: 'Places one of the brand kit\'s logos as an image layer, by default small in the top-left corner; pass x, y and width to put it elsewhere.',
+    inputSchema: obj({ logo_id: str('Logo id from get_brand_kit.'), x: num('Left edge.'), y: num('Top edge.'), width: num('Width px; height follows.') }, ['logo_id'])
+  },
+  {
+    name: 'mask_group',
+    description: 'Masks a whole group at once, in canvas pixels: hide_polygon hides what is inside the anchor points for every member, keep_polygon keeps only that area, reset removes the group mask. Use it to fade or cut a multi-layer element as one, e.g. a badge sliding out of frame.',
+    inputSchema: obj({
+      group_id: str('Group id.'),
+      action: { type: 'string', enum: ['hide_polygon', 'keep_polygon', 'reset'] },
+      points: points('Polygon anchors, canvas pixels.'),
+      feather: num('Softens the polygon edge px.')
+    }, ['group_id', 'action'])
   },
   {
     name: 'arrange_layer',

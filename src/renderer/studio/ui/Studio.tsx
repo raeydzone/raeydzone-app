@@ -9,11 +9,13 @@ import { useStore } from '../../state/store'
 import { cutOut, generateAsset, generativeFill, placeAsset } from '../ai'
 import { copyLayers, cutLayers, pasteLayers } from '../clipboard'
 import type { Box } from '../ai'
-import { encode } from '../assets'
+import { loadBrand, subscribeBrand, syncLinked } from '../brand'
+import { encodeFor, renderAt, UPLOAD_LIMIT } from '../exporter'
 import { emptyDoc } from '../doc'
 import { openStudio } from '../engine'
-import { loadDocAssets, renderDoc } from '../render'
+import { loadDocAssets } from '../render'
 import { Chat } from './Chat'
+import { ExportButton, SnapshotsButton } from './HeaderTools'
 import { Inspector } from './Inspector'
 import { LayerMenu } from './LayerMenu'
 import { ImageModelsPicker } from './Pickers'
@@ -21,8 +23,9 @@ import { LayersPanel } from './LayersPanel'
 import { ReportsButton } from './Reports'
 import { SpendPill } from './Spend'
 import { Stage } from './Stage'
-import { DEFAULT_OPTIONS } from './Stage'
-import type { Tool, ToolOptions } from './Stage'
+import { DEFAULT_OPTIONS, DEFAULT_VIEW } from './Stage'
+import type { Tool, ToolOptions, ViewState } from './Stage'
+import { StageCards } from './StageCards'
 import { Strip } from './Strip'
 import { ToolBar, ToolOptionsBar } from './ToolBar'
 import c from '../../components/components.module.css'
@@ -31,7 +34,7 @@ import s from './studio.module.css'
 
 const SHORTCUTS: Record<string, Tool> = {
   v: 'move', t: 'text', r: 'rect', e: 'ellipse', p: 'pen', l: 'lasso', b: 'brush', c: 'cut', g: 'fill',
-  m: 'select', n: 'paint', d: 'distort'
+  m: 'select', n: 'paint', d: 'distort', i: 'dropper'
 }
 
 function typing(): boolean {
@@ -45,6 +48,8 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
   const state = useSyncExternalStore(studio.subscribe, studio.getState)
   const [tool, setTool] = useState<Tool>('move')
   const [options, setOptions] = useState<ToolOptions>(DEFAULT_OPTIONS)
+  const [view, setView] = useState<ViewState>(DEFAULT_VIEW)
+  const [compare, setCompare] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [focusText, setFocusText] = useState<string | null>(null)
   const [pendingBox, setPendingBox] = useState<Box | null>(null)
@@ -55,6 +60,16 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
 
   const variant = state.variants.find((v) => v.id === state.activeId) ?? null
   const selected = variant?.doc.layers.find((l) => l.id === variant.selected) ?? null
+  const compareDoc = variant?.snapshots.find((sn) => sn.id === compare)?.doc ?? null
+
+  useEffect(() => setCompare(null), [state.activeId])
+
+  // Linked layers catch up with a brand kit edited in another project or on another PC.
+  useEffect(() => {
+    if (!state.ready) return
+    void loadBrand().then(() => syncLinked(studio)).catch(() => {})
+    return subscribeBrand(() => syncLinked(studio))
+  }, [studio, state.ready])
 
   useEffect(() => {
     void window.raeydzone.ai.claudeStatus().then(setClaude).catch(() => {})
@@ -105,12 +120,14 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
       const key = e.key.toLowerCase()
       const ids = studio.selection(v)
       const any = ids.length > 0
-      if (e.ctrlKey && key === 'z') studio[e.shiftKey ? 'redo' : 'undo'](v)
+      if (e.ctrlKey && e.code === 'Semicolon') setView({ ...view, [e.shiftKey ? 'snap' : 'guides']: !view[e.shiftKey ? 'snap' : 'guides'] })
+      else if (e.ctrlKey && e.code === 'Quote') setView({ ...view, safe: !view.safe })
+      else if (e.ctrlKey && key === 'z') studio[e.shiftKey ? 'redo' : 'undo'](v)
       else if (e.ctrlKey && key === 'y') studio.redo(v)
       else if (e.ctrlKey && key === 'a') studio.pick(v, variant.doc.layers.filter((l) => !l.locked).map((l) => l.id))
       else if (e.ctrlKey && key === 'd' && any) studio.duplicateMany(v, ids)
       else if (e.ctrlKey && key === 'g' && e.shiftKey) {
-        for (const g of new Set(variant.doc.layers.filter((l) => ids.includes(l.id) && l.group).map((l) => l.group!))) studio.ungroup(v, g)
+        studio.ungroupSelection(v, ids)
       } else if (e.ctrlKey && key === 'g' && ids.length > 1) studio.group(v, ids)
       else if (e.ctrlKey && key === 'c' && any) void runJob('Copying…', () => copyLayers(studio, v, ids))
       else if (e.ctrlKey && key === 'x' && any) void runJob('Cutting…', () => cutLayers(studio, v, ids))
@@ -138,11 +155,11 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
     if (!variant) return
     void runJob('Applying…', async () => {
       await loadDocAssets(studio.assets, variant.doc)
-      const out = renderDoc(variant.doc, studio.assets)
-      let data = await encode(out, 'image/png')
+      const out = await renderAt(variant.doc, studio.assets, variant.doc.width)
+      let data = await encodeFor(out, 'png', null)
       let ext: 'png' | 'jpg' = 'png'
-      if (data.length > 2_000_000) {
-        data = await encode(out, 'image/jpeg', 0.93)
+      if (data.length > UPLOAD_LIMIT) {
+        data = await encodeFor(out, 'jpg', UPLOAD_LIMIT)
         ext = 'jpg'
       }
       studio.markApplied((await window.raeydzone.studio.apply(project.id, data, ext)).hash)
@@ -173,6 +190,8 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
         <ImageModelsPicker models={state.imageModels} onChange={(task, id) => studio.setImageModel(task, id)} />
         {variant && (
           <>
+            <SnapshotsButton studio={studio} variant={variant} compare={compare} setCompare={setCompare} />
+            <ExportButton studio={studio} variant={variant} projectName={project.name} />
             <button className={`${k.btn} ${k.btnGhost}`} disabled={!variant.past.length} title="Undo (Ctrl+Z)" onClick={() => studio.undo(variant.id)}>
               Undo
             </button>
@@ -200,6 +219,8 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
                 studio={studio}
                 variantId={variant.id}
                 setTool={setTool}
+                view={view}
+                setView={setView}
               />
               <LayerMenu studio={studio} variant={variant}>
                 <div className={s.menuHost}>
@@ -212,6 +233,9 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
                     setTool={setTool}
                     onBox={onBox}
                     onTextCreated={setFocusText}
+                    view={view}
+                    compare={compareDoc}
+                    cards={<StageCards studio={studio} variantId={variant.id} doc={variant.doc} preview={view.preview} doctor={view.doctor} />}
                   />
                 </div>
               </LayerMenu>

@@ -208,3 +208,33 @@ export const IconPaint = ({ size = 18 }: Props): ReactNode =>
 
 export const IconDistort = ({ size = 18 }: Props): ReactNode =>
   base(size, <><path d="M5 6 19 3l-2 15L4 20z" /><circle cx="5" cy="6" r="1.4" /><circle cx="19" cy="3" r="1.4" /><circle cx="17" cy="18" r="1.4" /><circle cx="4" cy="20" r="1.4" /></>)
+
+export const IconAdjust = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" /></>)
+
+export const IconDropper = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="m14 7 3 3" /><path d="M16.5 4.5a2.1 2.1 0 0 1 3 3L17 10l-3-3z" /><path d="M14 7 5.5 15.5 4 20l4.5-1.5L17 10" /></>)
+
+export const IconAlignLeft = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M4 3v18" /><rect x="7" y="6" width="12" height="4" rx="1" /><rect x="7" y="14" width="7" height="4" rx="1" /></>)
+
+export const IconAlignCenter = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M12 3v18" /><rect x="5" y="6" width="14" height="4" rx="1" /><rect x="8" y="14" width="8" height="4" rx="1" /></>)
+
+export const IconAlignRight = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M20 3v18" /><rect x="5" y="6" width="12" height="4" rx="1" /><rect x="10" y="14" width="7" height="4" rx="1" /></>)
+
+export const IconAlignTop = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M3 4h18" /><rect x="6" y="7" width="4" height="12" rx="1" /><rect x="14" y="7" width="4" height="7" rx="1" /></>)
+
+export const IconAlignMiddle = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M3 12h18" /><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="8" width="4" height="8" rx="1" /></>)
+
+export const IconAlignBottom = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M3 20h18" /><rect x="6" y="5" width="4" height="12" rx="1" /><rect x="14" y="10" width="4" height="7" rx="1" /></>)
+
+export const IconSpreadX = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M3 4v16M21 4v16" /><rect x="9" y="8" width="6" height="8" rx="1" /></>)
+
+export const IconSpreadY = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M4 3h16M4 21h16" /><rect x="8" y="9" width="8" height="6" rx="1" /></>)

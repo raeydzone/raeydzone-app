@@ -1,13 +1,13 @@
 import { formatSpan } from '@shared/format'
 import { DEFAULT_CLAUDE, DEFAULT_IMAGE_MODELS, variantBrief } from '@shared/studio'
 import type {
-  AssetInfo, ChatImage, ChatItem, ClaudeChoice, ImageModels, ImageTask, Layer, StudioProject, StudioDoc, StudioEvent, StudioFile, ToolCall,
-  ToolReply, Variant, VariantStatus
+  AssetInfo, ChatImage, ChatItem, ClaudeChoice, ImageModels, ImageTask, Layer, Snapshot, StudioProject, StudioDoc, StudioEvent, StudioFile,
+  ToolCall, ToolReply, Variant, VariantStatus
 } from '@shared/studio'
 import { AssetStore, copyOf, encode } from './assets'
 import {
-  arrangeLayer, duplicateLayer, duplicateLayers, emptyDoc, findLayer, groupLayers, insertLayer, makeImage,
-  normalizeDoc, patchLayer, refitText, removeLayer, replaceLayer, tidyGroups, ungroup
+  arrangeLayer, chainOf, docAssets, duplicateLayer, duplicateLayers, emptyDoc, findLayer, groupLayers, insertLayer, makeImage,
+  normalizeDoc, patchLayer, refitText, removeLayer, replaceLayer, tidyGroups, ungroup, wholeGroupOf
 } from './doc'
 import type { PatchResult } from './doc'
 import { loadFonts } from './fonts'
@@ -118,6 +118,7 @@ export class Studio {
         ...v,
         claude: { ...claude, ...v.claude },
         doc: normalizeDoc({ ...v.doc, layers: v.doc.layers.map(refitText) }),
+        snapshots: (v.snapshots ?? []).map((sn) => ({ ...sn, doc: normalizeDoc(sn.doc) })),
         status: 'idle' as VariantStatus,
         past: [],
         future: [],
@@ -125,11 +126,8 @@ export class Studio {
         picked: [],
         touched: null
       }))
-      const used = new Set(
-        variants.flatMap((v) =>
-          v.doc.layers.flatMap((l) => [...(l.kind === 'image' ? [l.asset] : []), l.mask])
-        )
-      )
+      // Snapshots hold older versions of the design, so their pixels must outlive the edits.
+      const used = new Set(variants.flatMap((v) => [v.doc, ...v.snapshots.map((sn) => sn.doc)].flatMap(docAssets)))
       const assets = (file?.assets ?? []).filter((a) => a.source === 'upload' || a.source === 'generated' || used.has(a.id))
       this.assets.register(assets)
       this.legacy = !!file && file.thumbHash === undefined && variants.length > 0
@@ -197,8 +195,8 @@ export class Studio {
       claude: this.state.claude,
       imageModels: this.state.imageModels,
       thumbHash: this.state.thumbHash ?? undefined,
-      variants: this.state.variants.map(({ id, name, createdAt, doc, chat, sessionId, claude }) => ({
-        id, name, createdAt, doc, chat: chat.slice(-400), sessionId, claude
+      variants: this.state.variants.map(({ id, name, createdAt, doc, chat, sessionId, claude, snapshots }) => ({
+        id, name, createdAt, doc, chat: chat.slice(-400), sessionId, claude, snapshots
       }))
     }
     await api().save(this.projectId, JSON.stringify(file)).catch(() => {})
@@ -321,12 +319,39 @@ export class Studio {
     this.update(variantId, (d) => ungroup(d, groupId))
   }
 
-  // Picking any member of a group picks the whole group, the way a designer expects a
-  // badge built from several layers to behave.
+  // Whole groups in the selection dissolve; a selection inside a group dissolves that group.
+  ungroupSelection(variantId: string, ids: string[]): void {
+    const doc = this.doc(variantId)
+    const picked = doc.layers.filter((l) => ids.includes(l.id) && l.group)
+    const whole = new Set(picked.map((l) => wholeGroupOf(doc, l, ids)?.id).filter((id): id is string => !!id))
+    const targets = whole.size ? whole : new Set(picked.map((l) => l.group!))
+    this.update(variantId, (d) => [...targets].reduce((acc, id) => (acc.groups.some((g) => g.id === id) ? ungroup(acc, id) : acc), d))
+  }
+
+  // Picking any member of a group picks the whole outermost group, the way a designer
+  // expects a badge built from several layers to behave.
   withGroups(variantId: string, ids: string[]): string[] {
-    const layers = this.doc(variantId).layers
-    const groups = new Set(layers.filter((l) => ids.includes(l.id) && l.group).map((l) => l.group))
-    return layers.filter((l) => ids.includes(l.id) || (l.group && groups.has(l.group) && !l.locked)).map((l) => l.id)
+    const doc = this.doc(variantId)
+    const outer = (l: Layer): string | undefined => chainOf(doc, l.group).at(-1)?.id
+    const groups = new Set(doc.layers.filter((l) => ids.includes(l.id)).map(outer).filter(Boolean))
+    return doc.layers.filter((l) => ids.includes(l.id) || (groups.has(outer(l)) && !l.locked)).map((l) => l.id)
+  }
+
+  saveSnapshot(variantId: string, name?: string): Snapshot {
+    const v = this.variant(variantId)
+    const snap: Snapshot = { id: itemId(), name: name?.trim() || 'Snapshot ' + (v.snapshots.length + 1), at: now(), doc: v.doc }
+    this.setVariant(variantId, (x) => ({ ...x, snapshots: [...x.snapshots, snap].slice(-24) }))
+    return snap
+  }
+
+  restoreSnapshot(variantId: string, snapId: string): void {
+    const snap = this.variant(variantId).snapshots.find((x) => x.id === snapId)
+    if (!snap) throw new Error('That snapshot no longer exists.')
+    this.commit(variantId, snap.doc)
+  }
+
+  removeSnapshot(variantId: string, snapId: string): void {
+    this.setVariant(variantId, (x) => ({ ...x, snapshots: x.snapshots.filter((sn) => sn.id !== snapId) }))
   }
 
   setActive(id: string | null): void {
@@ -398,6 +423,7 @@ export class Studio {
       chat: [],
       sessionId: null,
       claude: { ...claude },
+      snapshots: [],
       status: 'idle',
       past: [],
       future: [],

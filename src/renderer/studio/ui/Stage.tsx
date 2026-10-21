@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { DragEvent, PointerEvent, ReactNode } from 'react'
-import type { Corners, Layer, ShapeLayer } from '@shared/studio'
+import { SAFE_ZONES } from '@shared/studio'
+import type { Corners, Guide, Layer, ShapeLayer, StudioDoc } from '@shared/studio'
 import { useStore } from '../../state/store'
 import { editMask, placeAsset } from '../ai'
 import type { Box } from '../ai'
@@ -10,16 +11,19 @@ import type { Bounds } from '../doc'
 import type { Studio, VariantState } from '../engine'
 import type { Pt } from '../mask'
 import { paint } from '../paint'
+import { deliverPick, sampleAt, usePicking } from '../picker'
 import type { PaintMode } from '../paint'
 import { drawDoc, hitLayer, renderDoc, toLocal } from '../render'
 import { boxSelection, colorSelection, combine, lassoSelection, selectionOverlay } from '../selection'
 import type { Combine, SelectShape } from '../selection'
+import { snapMove } from '../snap'
+import type { SnapLine } from '../snap'
 import { forward } from '../warp'
 import s from './studio.module.css'
 
 export type Tool =
   | 'move' | 'text' | 'rect' | 'ellipse' | 'pen' | 'lasso' | 'brush' | 'cut' | 'fill'
-  | 'select' | 'paint' | 'distort'
+  | 'select' | 'paint' | 'distort' | 'dropper'
 
 export interface ToolOptions {
   brush: number
@@ -49,6 +53,16 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   cloneSource: null
 }
 
+export interface ViewState {
+  snap: boolean
+  guides: boolean
+  safe: boolean
+  preview: boolean
+  doctor: boolean
+}
+
+export const DEFAULT_VIEW: ViewState = { snap: true, guides: true, safe: false, preview: false, doctor: false }
+
 // Photoshop's modifiers: Shift adds to the selection, Alt takes away, both keep the overlap.
 function combineFrom(e: { shiftKey: boolean; altKey: boolean }): Combine {
   if (e.shiftKey && e.altKey) return 'intersect'
@@ -68,7 +82,9 @@ function cornerPoints(l: Layer): Pt[] {
 }
 
 type Drag =
-  | { kind: 'move'; from: Pt; orig: Record<string, Pt> }
+  | { kind: 'move'; from: Pt; orig: Record<string, Pt>; box: Bounds }
+  | { kind: 'guide'; index: number; out: boolean }
+  | { kind: 'split' }
   | { kind: 'marquee'; from: Pt; to: Pt; add: boolean }
   | { kind: 'resize'; id: string; hx: number; hy: number; orig: Layer }
   | { kind: 'rotate'; id: string; orig: Layer }
@@ -133,12 +149,18 @@ export function Stage({
   setOptions,
   setTool,
   onBox,
-  onTextCreated
+  onTextCreated,
+  view,
+  cards,
+  compare
 }: {
   studio: Studio
   variant: VariantState
   tool: Tool
   options: ToolOptions
+  view: ViewState
+  cards?: ReactNode
+  compare?: StudioDoc | null
   setOptions: (o: ToolOptions) => void
   setTool: (t: Tool) => void
   onBox: (tool: 'cut' | 'fill', box: Box) => void
@@ -155,6 +177,10 @@ export function Stage({
   const [pointer, setPointer] = useState<Pt | null>(null)
   const [hover, setHover] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [snaps, setSnaps] = useState<SnapLine[]>([])
+  const [split, setSplit] = useState(50)
+  const compareRef = useRef<HTMLCanvasElement>(null)
+  const picking = usePicking()
   const selRef = useRef<HTMLCanvasElement>(null)
   const lassoMode = useRef<Combine>('replace')
   const [dropping, setDropping] = useState(false)
@@ -189,6 +215,27 @@ export function Stage({
     })
     return () => cancelAnimationFrame(id)
   }, [doc, tick, studio])
+
+  useEffect(() => {
+    if (!compare) return
+    const id = requestAnimationFrame(() => {
+      const c = compareRef.current
+      if (c) drawDoc(c.getContext('2d')!, compare, studio.assets)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [compare, tick, studio])
+
+  useEffect(() => {
+    if (!picking) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      deliverPick(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [picking])
 
   const marked = studio.selectionOf(v)
   useEffect(() => {
@@ -273,11 +320,35 @@ export function Stage({
     return () => window.removeEventListener('keydown', onKey, true)
   })
 
+  // The eyedropper reads the finished composite, what the creator actually sees.
+  const sample = (p: Pt): string => sampleAt(canvasRef.current!, p[0], p[1])
+
+  const dropper = (p: Pt, alt: boolean): void => {
+    const color = sample(p)
+    setOptions({ ...options, paintColor: color })
+    if (selected?.kind === 'text') studio.patch(v, selected.id, alt ? { highlight: color } : { fill: color, gradient: null })
+    else if (selected?.kind === 'shape') studio.patch(v, selected.id, { fill: color, gradient: null })
+    void navigator.clipboard.writeText(color).catch(() => {})
+    notify(`${color.toUpperCase()} — copied${selected && selected.kind !== 'image' && selected.kind !== 'adjust' ? ' and applied' : ''}`)
+  }
+
   const down = (e: PointerEvent<SVGSVGElement>): void => {
     if (e.button !== 0 || busy) return
     const p = at(e)
     svgRef.current!.setPointerCapture(e.pointerId)
     const handle = (e.target as Element).getAttribute('data-handle')
+    if (picking) {
+      deliverPick(sample(p))
+      return
+    }
+    if (handle === 'split') {
+      setDrag({ kind: 'split' })
+      return
+    }
+    if (tool === 'dropper') {
+      dropper(p, e.altKey)
+      return
+    }
 
     if (tool === 'distort') {
       if (handle?.startsWith('c') && selected && !selected.locked) {
@@ -318,6 +389,10 @@ export function Stage({
       return
     }
     if (tool === 'move') {
+      if (handle?.startsWith('g')) {
+        setDrag({ kind: 'guide', index: Number(handle.slice(1)), out: false })
+        return
+      }
       if (handle?.startsWith('m') && multi.length) {
         const [hx, hy] = handle.slice(1).split(',').map(Number)
         setDrag({ kind: 'scale', hx, hy, box: boundsOf(multi), orig: multi })
@@ -349,8 +424,9 @@ export function Stage({
       else studio.pick(v, studio.withGroups(v, [target.id]), target.id)
       const group = studio.selection(v)
       if (!target.locked && group.includes(target.id)) {
-        const orig = Object.fromEntries(doc.layers.filter((l) => group.includes(l.id) && !l.locked).map((l) => [l.id, [l.x, l.y] as Pt]))
-        setDrag({ kind: 'move', from: p, orig })
+        const moving = doc.layers.filter((l) => group.includes(l.id) && !l.locked)
+        const orig = Object.fromEntries(moving.map((l) => [l.id, [l.x, l.y] as Pt]))
+        setDrag({ kind: 'move', from: p, orig, box: boundsOf(moving) })
       }
       return
     }
@@ -390,8 +466,17 @@ export function Stage({
       case 'move': {
         let dx = p[0] - drag.from[0]
         let dy = p[1] - drag.from[1]
-        if (e.shiftKey && Math.abs(dx) > Math.abs(dy)) dy = 0
-        else if (e.shiftKey) dx = 0
+        const lockY = e.shiftKey && Math.abs(dx) > Math.abs(dy)
+        const lockX = e.shiftKey && !lockY
+        if (lockY) dy = 0
+        else if (lockX) dx = 0
+        // Ctrl while dragging lets go of the snap, as in Photoshop.
+        if (view.snap && !e.ctrlKey) {
+          const snap = snapMove(doc, { ...drag.box, x: drag.box.x + dx, y: drag.box.y + dy }, new Set(Object.keys(drag.orig)), 6 * unit)
+          if (!lockX) dx += snap.dx
+          if (!lockY) dy += snap.dy
+          setSnaps(snap.lines.filter((l) => (l.axis === 'x' ? !lockX : !lockY)))
+        } else if (snaps.length) setSnaps([])
         const moved = Object.entries(drag.orig).map(([id, [x, y]]) => [id, [Math.round(x + dx), Math.round(y + dy)]])
         studio.place(v, Object.fromEntries(moved), 'move')
         break
@@ -437,6 +522,20 @@ export function Stage({
       case 'marquee':
         setDrag({ ...drag, to: p })
         break
+      case 'split':
+        setSplit(Math.max(0, Math.min(100, (p[0] / doc.width) * 100)))
+        break
+      case 'guide': {
+        const g = doc.guides[drag.index]
+        if (!g) break
+        const size = g.axis === 'x' ? doc.width : doc.height
+        let at = g.axis === 'x' ? p[0] : p[1]
+        const out = at < -4 * unit || at > size + 4 * unit
+        for (const c of [0, size / 2, size]) if (Math.abs(c - at) < 6 * unit) at = c
+        setDrag({ ...drag, out })
+        studio.update(v, (d) => ({ ...d, guides: d.guides.map((x, i) => (i === drag.index ? { ...x, at: Math.round(at) } : x)) }), { coalesce: 'guide' + drag.index })
+        break
+      }
       case 'brush':
       case 'paint': {
         const last = drag.pts[drag.pts.length - 1]
@@ -458,7 +557,13 @@ export function Stage({
   const up = (): void => {
     const d = drag
     setDrag(null)
+    setSnaps([])
     if (!d) return
+    if (d.kind === 'split') return
+    if (d.kind === 'guide') {
+      if (d.out) studio.update(v, (doc) => ({ ...doc, guides: doc.guides.filter((_, i) => i !== d.index) }), { coalesce: 'guide' + d.index })
+      return
+    }
     if (d.kind === 'brush') {
       void runMask(d.id, options.maskShow ? 'show_brush' : 'hide_brush', d.pts, options.brush)
       return
@@ -519,6 +624,16 @@ export function Stage({
     }
   }
 
+  // Dragging out of a ruler makes a guide, the way Photoshop's rulers do.
+  const pullGuide = (e: PointerEvent<HTMLDivElement>, axis: Guide['axis']): void => {
+    if (e.button !== 0) return
+    const p = at(e)
+    const index = doc.guides.length
+    studio.update(v, (d) => ({ ...d, guides: [...d.guides, { axis, at: Math.round(axis === 'x' ? p[0] : p[1]) }] }), { coalesce: 'guide' + index })
+    svgRef.current!.setPointerCapture(e.pointerId)
+    setDrag({ kind: 'guide', index, out: true })
+  }
+
   const outline = (l: Layer, cls: string): ReactNode => (
     <g transform={`translate(${l.x + l.width / 2} ${l.y + l.height / 2}) rotate(${l.rotation})`}>
       <rect className={cls} x={-l.width / 2} y={-l.height / 2} width={l.width} height={l.height} />
@@ -532,7 +647,7 @@ export function Stage({
   const stroke = drag?.kind === 'paint' ? drag : null
   const ellipseBox = tool === 'select' && options.selectShape === 'ellipse'
   const others = doc.layers.filter((l) => l.id !== selected?.id && variant.picked.includes(l.id))
-  const drawing = tool !== 'move'
+  const drawing = tool !== 'move' || picking
 
   return (
     <div
@@ -546,7 +661,26 @@ export function Stage({
       onDrop={(e) => void dropFiles(e)}
     >
       <div className={`${s.stage} ${dropping ? s.stageDrop : ''}`} style={{ width: size.w, height: size.h }}>
+        {view.guides && (
+          <>
+            <div className={s.rulerTop} title="Drag down to place a guide" onPointerDown={(e) => pullGuide(e, 'y')} />
+            <div className={s.rulerLeft} title="Drag right to place a guide" onPointerDown={(e) => pullGuide(e, 'x')} />
+          </>
+        )}
         <canvas ref={canvasRef} className={s.stageCanvas} width={doc.width} height={doc.height} />
+        {compare && (
+          <>
+            <canvas
+              ref={compareRef}
+              className={s.stageCanvas}
+              width={doc.width}
+              height={doc.height}
+              style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
+            />
+            <span className={`${s.compareTag} ${s.compareTagA}`}>Snapshot</span>
+            <span className={`${s.compareTag} ${s.compareTagB}`}>Now</span>
+          </>
+        )}
         <canvas ref={selRef} className={s.stageCanvas} width={doc.width} height={doc.height} />
         <svg
           ref={svgRef}
@@ -569,6 +703,46 @@ export function Stage({
             (tool === 'pen' || tool === 'lasso' || tool === 'select') && poly.length >= 3 && finishPoly(poly)
           }
         >
+          {view.safe &&
+            SAFE_ZONES.map((z) => (
+              <g key={z.id}>
+                <rect className={s.safeZone} x={z.x * doc.width} y={z.y * doc.height} width={z.w * doc.width} height={z.h * doc.height} />
+                <text
+                  className={s.safeLabel}
+                  x={z.x * doc.width + 6 * unit}
+                  y={z.y + z.h > 0.95 && z.h < 0.05 ? z.y * doc.height - 5 * unit : z.y * doc.height + 15 * unit}
+                  fontSize={11 * unit}
+                >
+                  {z.label}
+                </text>
+              </g>
+            ))}
+          {view.guides &&
+            doc.guides.map((g, i) => {
+              const ends = g.axis === 'x' ? { x1: g.at, x2: g.at, y1: 0, y2: doc.height } : { x1: 0, x2: doc.width, y1: g.at, y2: g.at }
+              const leaving = drag?.kind === 'guide' && drag.index === i && drag.out
+              return (
+                <g key={i} className={leaving ? s.guideLeaving : undefined}>
+                  <line className={s.guide} {...ends} />
+                  {tool === 'move' && (
+                    <line className={g.axis === 'x' ? s.guideHitX : s.guideHitY} data-handle={'g' + i} strokeWidth={8 * unit} {...ends} />
+                  )}
+                </g>
+              )
+            })}
+          {snaps.map((l, i) =>
+            l.axis === 'x' ? (
+              <line key={i} className={s.snapLine} x1={l.at} x2={l.at} y1={0} y2={doc.height} />
+            ) : (
+              <line key={i} className={s.snapLine} x1={0} x2={doc.width} y1={l.at} y2={l.at} />
+            )
+          )}
+          {compare && (
+            <g>
+              <line className={s.splitLine} x1={(split / 100) * doc.width} x2={(split / 100) * doc.width} y1={0} y2={doc.height} />
+              <circle className={s.splitHandle} data-handle="split" cx={(split / 100) * doc.width} cy={doc.height / 2} r={hs * 1.1} />
+            </g>
+          )}
           {hovered && tool === 'move' && outline(hovered, s.hoverBox)}
           <AnimatePresence>
             {touched && (
@@ -628,6 +802,7 @@ export function Stage({
         </svg>
         {busy && <div className={s.stageBusy}>{busy}</div>}
       </div>
+      {cards}
     </div>
   )
 }

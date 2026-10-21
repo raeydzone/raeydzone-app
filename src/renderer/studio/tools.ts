@@ -4,17 +4,23 @@ import { canvas, ctx2d, copyOf, encode, toBase64 } from './assets'
 import { cutOut, editMask, generateAsset, generativeFill, placeAsset } from './ai'
 import type { Box } from './ai'
 import {
-  arrangeGroup, asColor, boundsOf, describeGroups, describeLayer, findGroup, findLayer, groupMembers, makeShape,
-  makeText, patchLayer, refitText, scaleLayer
+  alignLayers, arrangeGroup, asColor, boundsOf, describeGroups, distributeLayers, patchFinish, describeLayer, findGroup, findLayer, groupMembers, makeAdjust,
+  makeShape, makeText, patchLayer, refitText, scaleLayer
 } from './doc'
 import type { Studio } from './engine'
 import type { Pt } from './mask'
 import { fontFamilies } from './fonts'
 import { bringAssets, importLayers, openSource } from './library'
 import type { Source } from './library'
+import { applyLook, autoLevelsOn, matchColors } from './adjustments'
+import { softened } from './alpha'
+import { applyStyle, brandKit, loadBrand, placeLogo } from './brand'
+import { diagnose } from './doctor'
+import { extractPalette } from './palette'
+import { lassoSelection, maskGroup } from './selection'
 import { newPaintLayer, paint } from './paint'
 import type { PaintMode } from './paint'
-import { loadDocAssets, renderDoc } from './render'
+import { drawLayer, loadDocAssets, renderDoc } from './render'
 
 type Args = Record<string, unknown>
 
@@ -24,7 +30,7 @@ interface Outcome {
   cost?: number | null
 }
 
-const PLACEMENT = new Set(['asset_id', 'fit', 'below_layer_id', 'layer_id'])
+const PLACEMENT = new Set(['asset_id', 'fit', 'below_layer_id', 'layer_id', 'look'])
 const label = (l: Layer): string => (l.kind === 'text' ? `"${l.text.replace(/\*/g, '').slice(0, 30)}"` : l.name)
 const json = (value: unknown): string => JSON.stringify(value)
 
@@ -165,20 +171,19 @@ async function importFromProject(studio: Studio, v: string, args: Args): Promise
   const groupIds = list(args, 'group_ids').map((id) => findGroup(doc, id).id)
   const wanted = new Set([
     ...list(args, 'layer_ids').map((id) => findLayer(doc, id).id),
-    ...doc.layers.filter((l) => l.group && groupIds.includes(l.group)).map((l) => l.id)
+    ...groupIds.flatMap((g) => groupMembers(doc, g).map((l) => l.id))
   ])
-  const layers = doc.layers
-    .filter((l) => wanted.has(l.id))
-    .map((l) => (l.group && !groupIds.includes(l.group) ? ({ ...l, group: null } as Layer) : l))
+  const inside = new Set(groupIds.flatMap((g) => [g, ...doc.groups.filter((x) => groupMembers(doc, x.id).every((l) => wanted.has(l.id))).map((x) => x.id)]))
+  const layers = doc.layers.filter((l) => wanted.has(l.id))
   const assetIds = list(args, 'asset_ids')
   if (!layers.length && !assetIds.length) throw new Error('Pass layer_ids, group_ids or asset_ids to import.')
   const all = [...src.assets.infos.values()]
   const added = layers.length
-    ? await importLayers(studio, v, src.projectId, layers, doc.groups.filter((g) => groupIds.includes(g.id)), all)
+    ? await importLayers(studio, v, src.projectId, layers, doc.groups.filter((g) => inside.has(g.id)), all)
     : []
   const assets = await bringAssets(studio, src.projectId, assetIds.map((id) => src.assets.info(id)))
   const now = studio.doc(v)
-  const groups = describeGroups(now).filter((g) => now.layers.some((l) => added.includes(l.id) && l.group === g.id))
+  const groups = describeGroups(now).filter((g) => groupMembers(now, g.id as string).some((l) => added.includes(l.id)))
   return {
     reply: {
       text: json({
@@ -305,12 +310,129 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
       return { reply: patchSummary(layer, ignored), summary: `Added ${layer.name.toLowerCase()}` }
     }
 
+    case 'add_adjustment_layer': {
+      checkClip(studio.doc(v), args)
+      const { layer, ignored } = patchLayer(makeAdjust(studio.doc(v)), props(args))
+      studio.addLayer(v, layer, typeof args.below_layer_id === 'string' ? args.below_layer_id : null, true)
+      if (typeof args.look === 'string') applyLook(studio, v, layer.id, args.look)
+      return { reply: patchSummary(findLayer(studio.doc(v), layer.id), ignored), summary: `Added adjustment ${layer.name}` }
+    }
+
+    case 'match_colors': {
+      const id = str(args, 'layer_id')
+      await matchColors(studio, v, id, typeof args.reference_layer_id === 'string' ? args.reference_layer_id : null)
+      const layer = findLayer(studio.doc(v), id)
+      return { reply: { text: `Matched: tone.grade is now ${json(layer.tone?.grade)}. Check it with view_canvas.` }, summary: `Matched colours of ${label(layer)}` }
+    }
+
+    case 'auto_levels': {
+      const id = str(args, 'layer_id')
+      await autoLevelsOn(studio, v, id)
+      const layer = findLayer(studio.doc(v), id)
+      return { reply: { text: `Levels set to ${json(layer.tone?.levels)}.` }, summary: `Auto levels on ${label(layer)}` }
+    }
+
     case 'update_layer': {
       checkClip(studio.doc(v), args)
       const id = str(args, 'layer_id')
+      if (typeof args.look === 'string') applyLook(studio, v, id, args.look)
       const { layer, ignored } = studio.patch(v, id, props(args), undefined, true)
       const keys = Object.keys(props(args)).filter((k) => !ignored.includes(k))
       return { reply: patchSummary(layer, ignored), summary: `Changed ${label(layer)} · ${keys.join(', ') || 'nothing'}` }
+    }
+
+    case 'align_layers': {
+      const doc = studio.doc(v)
+      const ids = list(args, 'layer_ids').map((id) => findLayer(doc, id).id)
+      if (!ids.length) throw new Error('layer_ids is required')
+      const spread = args.distribute === 'horizontal' ? 'x' : args.distribute === 'vertical' ? 'y' : null
+      const edge = String(args.align ?? '')
+      if (!spread && !['left', 'center', 'right', 'top', 'middle', 'bottom'].includes(edge)) throw new Error('Pass align or distribute')
+      studio.update(v, (d) => (spread ? distributeLayers(d, ids, spread) : alignLayers(d, ids, edge as 'left', args.to === 'canvas')), { touched: ids[0] })
+      const now = studio.doc(v)
+      const boxes = ids.map((id) => findLayer(now, id)).map((l) => ({ id: l.id, x: round(l.x), y: round(l.y), width: round(l.width), height: round(l.height) }))
+      return { reply: { text: 'Now: ' + json(boxes) }, summary: spread ? `Spaced ${ids.length} layers evenly` : `Aligned ${ids.length} layers ${edge}` }
+    }
+
+    case 'set_finish': {
+      const finish = patchFinish(studio.doc(v).finish, args.finish)
+      studio.update(v, (d) => ({ ...d, finish }))
+      return { reply: { text: 'Finish now ' + json(finish) + '. Check it with view_canvas.' }, summary: finish ? 'Set the finish' : 'Removed the finish' }
+    }
+
+    case 'save_snapshot': {
+      const snap = studio.saveSnapshot(v, typeof args.name === 'string' ? args.name : undefined)
+      return { reply: { text: `Saved snapshot "${snap.name}".` }, summary: `Snapshot · ${snap.name}` }
+    }
+
+    case 'extract_palette': {
+      const doc = studio.doc(v)
+      await loadDocAssets(studio.assets, doc)
+      let src = renderDoc(doc, studio.assets)
+      if (typeof args.layer_id === 'string') {
+        src = canvas(doc.width, doc.height)
+        drawLayer(ctx2d(src), { ...findLayer(doc, args.layer_id), opacity: 1, blend: 'normal', visible: true } as Layer, studio.assets, doc)
+      }
+      const count = Math.max(2, Math.min(10, Number(args.count) || 6))
+      return { reply: { text: json(extractPalette(src, count)) }, summary: 'Pulled the palette' }
+    }
+
+    case 'get_brand_kit': {
+      const kit = await loadBrand()
+      return {
+        reply: {
+          text: json({
+            colors: kit.colors.map(({ name, color }) => ({ name, color })),
+            fonts: kit.fonts,
+            styles: kit.styles.map(({ id, name, kind }) => ({ id, name, made_from: kind })),
+            logos: kit.logos.map(({ id, name, w, h }) => ({ id, name, width: w, height: h }))
+          })
+        },
+        summary: 'Read the brand kit'
+      }
+    }
+
+    case 'apply_brand_style': {
+      await loadBrand()
+      const style = brandKit().styles.find((st) => st.id === args.style_id)
+      if (!style) throw new Error('No brand style with that id. Call get_brand_kit.')
+      const id = str(args, 'layer_id')
+      applyStyle(studio, v, id, style)
+      return { reply: patchSummary(findLayer(studio.doc(v), id), []), summary: `Applied brand style ${style.name}` }
+    }
+
+    case 'place_logo': {
+      await loadBrand()
+      const logo = brandKit().logos.find((x) => x.id === args.logo_id)
+      if (!logo) throw new Error('No logo with that id. Call get_brand_kit.')
+      const layer = await placeLogo(studio, v, logo)
+      const place = Object.fromEntries(['x', 'y', 'width'].filter((k) => typeof args[k] === 'number').map((k) => [k, args[k]]))
+      if (Object.keys(place).length) studio.patch(v, layer.id, place, undefined, true)
+      return { reply: { text: `Placed logo as ${layer.id}: ${json(describeLayer(findLayer(studio.doc(v), layer.id)))}` }, summary: `Placed logo ${logo.name}` }
+    }
+
+    case 'mask_group': {
+      const group = findGroup(studio.doc(v), str(args, 'group_id'))
+      if (args.action === 'reset') {
+        await maskGroup(studio, v, group.id, null, 'inside')
+        return { reply: { text: `Removed the mask of ${group.id}.` }, summary: `Unmasked group ${group.name}` }
+      }
+      const pts = Array.isArray(args.points) ? (args.points as Pt[]) : []
+      if (pts.length < 3) throw new Error('points needs at least 3 anchors')
+      let sel = lassoSelection(studio.doc(v), pts)
+      if (Number(args.feather) > 0) sel = softened(sel, Number(args.feather))
+      await maskGroup(studio, v, group.id, sel, args.action === 'keep_polygon' ? 'inside' : 'outside')
+      return { reply: { text: `Masked group ${group.id}.` }, summary: `Masked group ${group.name}` }
+    }
+
+    case 'check_design': {
+      const doc = studio.doc(v)
+      await loadDocAssets(studio.assets, doc)
+      const issues = diagnose(doc, studio.assets)
+      return {
+        reply: { text: issues.length ? json(issues.map(({ level, layer, title, detail }) => ({ level, layer_id: layer, title, detail }))) : 'No findings: readable, clear of the overlays, faces uncovered.' },
+        summary: issues.length ? `Design check · ${issues.length} findings` : 'Design check · all clear'
+      }
     }
 
     case 'arrange_layer': {

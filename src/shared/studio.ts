@@ -17,6 +17,9 @@ export type WarpStyle = (typeof WARP_STYLES)[number]
 export const GRADIENT_TYPES = ['linear', 'radial', 'conic'] as const
 export type GradientType = (typeof GRADIENT_TYPES)[number]
 
+export const BLUR_STYLES = ['motion', 'zoom', 'spin', 'lens', 'tilt'] as const
+export type BlurStyle = (typeof BLUR_STYLES)[number]
+
 export const BUNDLED_FONTS = [
   'Montserrat', 'Anton', 'Bebas Neue', 'Oswald', 'Archivo Black', 'Luckiest Guy', 'Bangers'
 ] as const
@@ -97,6 +100,75 @@ export interface TextStyle {
   rise?: number
 }
 
+// x and y place the centre of a zoom or spin, or the spot a lens or tilt-shift blur keeps
+// sharp, as fractions of the layer box; focus sizes that sharp area.
+export interface BlurFx {
+  style: BlurStyle
+  amount: number
+  angle: number
+  x: number
+  y: number
+  focus: number
+}
+
+export interface Levels {
+  black: number
+  white: number
+  gamma: number
+  outBlack: number
+  outWhite: number
+}
+
+export type CurvePoint = [number, number]
+export interface Curves {
+  rgb: CurvePoint[]
+  r: CurvePoint[]
+  g: CurvePoint[]
+  b: CurvePoint[]
+}
+
+export interface GradientMap {
+  stops: GradientStop[]
+  amount: number
+}
+
+// A 3D colour lookup, stored as an image asset of n slices of n x n laid side by side.
+export interface Lut {
+  asset: string
+  name: string
+  amount: number
+}
+
+// A per-channel gain and lift, the shape a colour match from another image takes.
+export interface Grade {
+  gain: [number, number, number]
+  lift: [number, number, number]
+  amount: number
+}
+
+export interface Tone {
+  levels: Levels | null
+  curves: Curves | null
+  map: GradientMap | null
+  lut: Lut | null
+  grade: Grade | null
+}
+
+// The backdrop bleeding into the edge of a cut-out, so it looks lit by the scene.
+export interface LightWrap {
+  amount: number
+  size: number
+}
+
+// The layer's own silhouette squashed flat under it: the shadow where it meets the floor.
+export interface Contact {
+  color: string
+  opacity: number
+  blur: number
+  squash: number
+  y: number
+}
+
 interface LayerBase {
   id: string
   name: string
@@ -121,6 +193,11 @@ interface LayerBase {
   clip: Clip | null
   corners: Corners | null
   warp: Warp | null
+  tone: Tone | null
+  blurFx: BlurFx | null
+  lightWrap: LightWrap | null
+  contact: Contact | null
+  link: string | null
 }
 
 export interface ImageLayer extends LayerBase {
@@ -162,13 +239,45 @@ export interface ShapeLayer extends LayerBase {
   smooth: number
 }
 
-export type Layer = ImageLayer | TextLayer | ShapeLayer
+// Changes everything below it instead of drawing anything; its box, mask and clip say where.
+export interface AdjustLayer extends LayerBase {
+  kind: 'adjust'
+}
+
+export type Layer = ImageLayer | TextLayer | ShapeLayer | AdjustLayer
 export type LayerKind = Layer['kind']
 
+// parent nests a group inside another; mask is a canvas-sized asset applied to every
+// member, so a group can be faded or cut as one.
 export interface LayerGroup {
   id: string
   name: string
+  parent: string | null
+  mask: string | null
 }
+
+// The last pass over the whole thumbnail, each 0 to 1.
+export interface Finish {
+  sharpen: number
+  clarity: number
+  vibrance: number
+  bloom: number
+  vignette: number
+  grain: number
+}
+
+export interface Guide {
+  axis: 'x' | 'y'
+  at: number
+}
+
+// Where YouTube draws over a thumbnail, as fractions of the canvas: the video length badge,
+// the watch-later and queue buttons on hover, and the red bar on videos already watched.
+export const SAFE_ZONES = [
+  { id: 'length', label: 'Video length', x: 0.83, y: 0.875, w: 0.155, h: 0.1 },
+  { id: 'queue', label: 'Hover icons', x: 0.89, y: 0.02, w: 0.09, h: 0.33 },
+  { id: 'progress', label: 'Watched bar', x: 0, y: 0.97, w: 1, h: 0.03 }
+] as const
 
 export interface StudioDoc {
   width: number
@@ -176,7 +285,47 @@ export interface StudioDoc {
   background: string
   layers: Layer[]
   groups: LayerGroup[]
+  guides: Guide[]
+  finish: Finish | null
 }
+
+export interface Snapshot {
+  id: string
+  name: string
+  at: string
+  doc: StudioDoc
+}
+
+export interface BrandColor {
+  id: string
+  name: string
+  color: string
+}
+
+export interface BrandStyle {
+  id: string
+  name: string
+  kind: LayerKind
+  props: Record<string, unknown>
+  updatedAt: string
+}
+
+export interface BrandLogo {
+  id: string
+  name: string
+  file: string
+  w: number
+  h: number
+}
+
+export interface BrandKit {
+  colors: BrandColor[]
+  fonts: string[]
+  styles: BrandStyle[]
+  logos: BrandLogo[]
+}
+
+export const EMPTY_KIT: BrandKit = { colors: [], fonts: [], styles: [], logos: [] }
 
 export interface AssetInfo {
   id: string
@@ -184,7 +333,7 @@ export interface AssetInfo {
   w: number
   h: number
   label: string
-  source: 'upload' | 'generated' | 'mask' | 'fill' | 'paint'
+  source: 'upload' | 'generated' | 'mask' | 'fill' | 'paint' | 'lut'
 }
 
 export type ChatItem =
@@ -218,6 +367,7 @@ export interface Variant {
   chat: ChatItem[]
   sessionId: string | null
   claude: ClaudeChoice
+  snapshots: Snapshot[]
 }
 
 export const IMAGE_TASKS = [

@@ -33,7 +33,7 @@ export function LayerMenu({ studio, variant, children }: { studio: Studio; varia
           }, false)}
           <Menu.Separator className={k.menuSep} />
           {item('Group', 'Ctrl+G', () => studio.group(v, ids), ids.length < 2)}
-          {item('Ungroup', 'Ctrl+Shift+G', () => groups.forEach((g) => studio.ungroup(v, g)), !groups.length)}
+          {item('Ungroup', 'Ctrl+Shift+G', () => studio.ungroupSelection(v, ids), !groups.length)}
           <Menu.Separator className={k.menuSep} />
           {item('Duplicate', 'Ctrl+D', () => studio.duplicateMany(v, ids))}
           {item('Delete', 'Del', () => studio.removeMany(v, ids))}

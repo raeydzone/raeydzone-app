@@ -1,11 +1,22 @@
 import type {
-  Adjust, Clip, Glow, Gradient, Layer, Outline, Shadow, ShapeLayer, StudioDoc
+  Adjust, Clip, Contact, Glow, Gradient, Layer, Outline, Shadow, ShapeLayer, StudioDoc
 } from '@shared/studio'
-import { colorize, dilate, erode, invertAlpha, lumaToAlpha, softened, subtract } from './alpha'
+import { boundsOfAlpha, colorize, dilate, erode, intersect, invertAlpha, lumaToAlpha, softened, subtract } from './alpha'
 import { canvas, ctx2d } from './assets'
 import type { AssetStore } from './assets'
+import { applyBlur, blurReach } from './blurfx'
+import { assetsOf, chainOf, docAssets, inGroup } from './doc'
+import { applyFinish } from './finish'
 import { drawText } from './text'
+import { applyTone, isNeutral, toneReady } from './tone'
 import { distort, isDistorted, overflow } from './warp'
+
+interface Box {
+  x: number
+  y: number
+  w: number
+  h: number
+}
 
 interface Raster {
   canvas: HTMLCanvasElement
@@ -40,16 +51,22 @@ function placeKey(l: Layer): string {
   return [l.x, l.y, l.rotation, l.opacity].join(',')
 }
 
-function clipKey(doc: StudioDoc, l: Layer, clip: Clip): string {
-  const sources = clipSources(doc, clip.from)
-  const src = sources.map((s) => contentKey(s) + '@' + placeKey(s)).join('|')
-  return [contentKey(l), placeKey(l), clip.mode, clip.invert, clip.feather, src].join('~')
+function groupMasks(doc: StudioDoc, l: Layer): string[] {
+  return chainOf(doc, l.group).flatMap((g) => (g.mask ? [g.mask] : []))
 }
+
+function clipKey(doc: StudioDoc, l: Layer, clip: Clip | null): string {
+  const sources = clip ? clipSources(doc, clip.from) : []
+  const src = sources.map((s) => contentKey(s) + '@' + placeKey(s)).join('|')
+  return [contentKey(l), placeKey(l), JSON.stringify(clip), src, doc.width, ...groupMasks(doc, l)].join('~')
+}
+
+const masked = (doc: StudioDoc | null, l: Layer): boolean => !!doc && (!!l.clip || groupMasks(doc, l).length > 0)
 
 function clipSources(doc: StudioDoc, from: string): Layer[] {
   const layer = doc.layers.find((l) => l.id === from)
   if (layer) return [layer]
-  return doc.layers.filter((l) => l.group === from)
+  return doc.layers.filter((l) => inGroup(doc, l, from))
 }
 
 // Outside strokes nest, so the room an effect needs is the whole stack, not one entry.
@@ -72,8 +89,9 @@ function padFor(l: Layer): number {
   }
   if (l.kind === 'shape') p = Math.max(p, l.feather * 1.6 + 2)
   if (l.kind === 'text') p = Math.max(p, l.size * 0.25 + spread)
+  if (l.contact) p = Math.max(p, l.contact.blur * 1.6 + Math.abs(l.contact.y) + 2)
   if (l.adjust.blur) p = Math.max(p, l.adjust.blur * 3)
-  return Math.ceil(p + overflow(l))
+  return Math.ceil(p + overflow(l) + blurReach(l.blurFx, l.width, l.height))
 }
 
 function filterOf(a: Adjust): string {
@@ -187,8 +205,12 @@ function drawContent(l: Layer, assets: AssetStore, w: number, h: number, pad: nu
   }
   const mask = l.mask ? assets.peek(l.mask) : null
   if (l.mask && !mask) return null
+  if (!toneReady(l.tone, assets)) return null
 
-  if (l.kind === 'image') {
+  if (l.kind === 'adjust') {
+    g.fillStyle = '#fff'
+    g.fillRect(0, 0, w, h)
+  } else if (l.kind === 'image') {
     const px = assets.peek(l.asset)
     if (!px) return null
     g.imageSmoothingQuality = 'high'
@@ -223,6 +245,13 @@ function drawContent(l: Layer, assets: AssetStore, w: number, h: number, pad: nu
   // Distortion bends the content itself, before any effect, so outlines and shadows trace
   // the bent shape at an even width instead of being stretched with it.
   const shaped = isDistorted(l) ? distort(out, l, w, h, pad) : out
+  if (l.kind === 'adjust') return shaped
+  return processed(shaped, l, assets, { x: pad, y: pad, w, h }, -l.rotation)
+}
+
+// The pixel work an adjustment does, shared by a layer on its own content and by an
+// adjustment layer on everything below it.
+function processed(shaped: HTMLCanvasElement, l: Layer, assets: AssetStore, box: Box, turn: number): HTMLCanvasElement {
   const filter = filterOf(l.adjust)
   let result = shaped
   if (filter) {
@@ -238,6 +267,8 @@ function drawContent(l: Layer, assets: AssetStore, w: number, h: number, pad: nu
     t.fillStyle = l.tint.color
     t.fillRect(0, 0, result.width, result.height)
   }
+  if (l.tone && !isNeutral(l.tone)) result = applyTone(result, l.tone, assets)
+  if (l.blurFx && l.blurFx.amount > 0) result = applyBlur(result, l.blurFx, box, turn)
   return result
 }
 
@@ -295,16 +326,32 @@ function inwardBand(
   return out
 }
 
+// Squashed towards the lowest point of the silhouette, where the layer meets the ground.
+function drawContact(g: CanvasRenderingContext2D, content: HTMLCanvasElement, c: Contact): void {
+  const box = boundsOfAlpha(content)
+  if (!box || c.opacity <= 0) return
+  const floor = box.y + box.height
+  g.save()
+  g.globalAlpha = c.opacity
+  if (c.blur > 0) g.filter = `blur(${c.blur / 2}px)`
+  g.translate(0, floor + c.y)
+  g.scale(1, c.squash)
+  g.translate(0, -floor)
+  g.drawImage(colorize(content, c.color), 0, 0)
+  g.restore()
+}
+
 function buildRaster(l: Layer, assets: AssetStore): Raster | null {
   const w = Math.max(1, Math.round(l.width))
   const h = Math.max(1, Math.round(l.height))
   const pad = padFor(l)
   const content = drawContent(l, assets, w, h, pad)
   if (!content) return null
-  if (!l.shadows.length && !l.glows.length && !l.strokes.length) return { canvas: content, pad }
+  if (l.kind === 'adjust' || (!l.shadows.length && !l.glows.length && !l.strokes.length && !l.contact)) return { canvas: content, pad }
 
   const out = canvas(content.width, content.height)
   const g = ctx2d(out)
+  if (l.contact) drawContact(g, content, l.contact)
   const live = l.strokes.filter((s) => s.width > 0 && s.opacity > 0)
   const outward = live.filter((s) => s.position !== 'inside')
   const spread = spreadOf(live)
@@ -377,12 +424,25 @@ function clipCoverage(doc: StudioDoc, clip: Clip, assets: AssetStore): HTMLCanva
   return cov
 }
 
+// A clip and the masks of every group around the layer all cut it, in canvas space.
+function coverage(doc: StudioDoc, l: Layer, assets: AssetStore): HTMLCanvasElement | null | 'wait' {
+  let cov = l.clip ? clipCoverage(doc, l.clip, assets) : null
+  for (const id of groupMasks(doc, l)) {
+    const m = assets.peek(id)
+    if (!m) return 'wait'
+    const sheet = canvas(doc.width, doc.height)
+    ctx2d(sheet).drawImage(m, 0, 0, doc.width, doc.height)
+    cov = cov ? intersect(cov, sheet) : sheet
+  }
+  return cov
+}
+
 function clipped(doc: StudioDoc, l: Layer, assets: AssetStore): Raster | null {
   const base = raster(l, assets)
-  const clip = l.clip
-  if (!base || !clip) return base
-  return cached('clip~' + clipKey(doc, l, clip), () => {
-    const cov = clipCoverage(doc, clip, assets)
+  if (!base || !masked(doc, l)) return base
+  return cached('clip~' + clipKey(doc, l, l.clip), () => {
+    const cov = coverage(doc, l, assets)
+    if (cov === 'wait') return null
     if (!cov) return base
     const out = canvas(base.canvas.width, base.canvas.height)
     const g = ctx2d(out)
@@ -402,7 +462,7 @@ export function drawLayer(
   assets: AssetStore,
   doc: StudioDoc | null = null
 ): void {
-  const r = doc && l.clip ? clipped(doc, l, assets) : raster(l, assets)
+  const r = doc && masked(doc, l) ? clipped(doc, l, assets) : raster(l, assets)
   if (!r) return
   g.save()
   g.globalAlpha = l.opacity
@@ -436,11 +496,93 @@ export function drawDoc(
     g.fillStyle = doc.background
     g.fillRect(0, 0, doc.width, doc.height)
   }
-  for (const l of doc.layers) {
-    if (only ? l.id !== only : !l.visible) continue
-    drawLayer(g, l, assets, doc)
+  // Adjustments and light wrap read back what is already painted, and the finish reworks
+  // the whole picture; the caller's context may be scaled or offset, so such documents are
+  // composited on a canvas of their own first.
+  const backdrop = doc.layers.some((l) => l.visible && (l.kind === 'adjust' || l.lightWrap))
+  if (!only && (backdrop || doc.finish)) {
+    let work = canvas(doc.width, doc.height)
+    const w = ctx2d(work)
+    w.fillStyle = doc.background
+    w.fillRect(0, 0, doc.width, doc.height)
+    doc.layers.forEach((l, i) => {
+      if (!l.visible) return
+      if (l.kind === 'adjust') return adjustBelow(w, doc, i, assets)
+      const below = l.lightWrap && l.lightWrap.amount > 0 ? snapshot(work) : null
+      drawLayer(w, l, assets, doc)
+      if (below) wrapLight(w, doc, i, below, assets)
+    })
+    if (doc.finish) work = applyFinish(work, doc.finish)
+    g.drawImage(work, 0, 0)
+  } else {
+    for (const l of doc.layers) {
+      if (only ? l.id !== only : !l.visible) continue
+      drawLayer(g, l, assets, doc)
+    }
   }
   g.restore()
+}
+
+const backdrops = new Map<string, HTMLCanvasElement>()
+
+function snapshot(c: HTMLCanvasElement): HTMLCanvasElement {
+  const out = canvas(c.width, c.height)
+  ctx2d(out).drawImage(c, 0, 0)
+  return out
+}
+
+function remember(key: string, out: HTMLCanvasElement): void {
+  backdrops.set(key, out)
+  if (backdrops.size > 8) backdrops.delete(backdrops.keys().next().value!)
+}
+
+// The blurred scene behind a cut-out, kept only in a band just inside its edge and screened
+// over it: the rim light a real photo of someone standing there would have.
+function wrapLight(w: CanvasRenderingContext2D, doc: StudioDoc, index: number, below: HTMLCanvasElement, assets: AssetStore): void {
+  const l = doc.layers[index]
+  const lw = l.lightWrap!
+  const ready = doc.layers.slice(0, index + 1).every((x) => !x.visible || layerReady(x, assets))
+  const key = 'wrap~' + backdropKey(doc, index) + '#' + contentKey(l) + placeKey(l)
+  let out = ready ? backdrops.get(key) : undefined
+  if (!out) {
+    const body = canvas(doc.width, doc.height)
+    const bare = { ...l, shadows: [], glows: [], strokes: [], contact: null, opacity: 1, blend: 'normal' } as Layer
+    drawLayer(ctx2d(body), bare, assets, doc)
+    const band = intersect(softened(subtract(body, erode(body, lw.size)), lw.size / 2), body)
+    out = intersect(softened(below, lw.size * 2), band)
+    if (ready) remember(key, out)
+  }
+  w.save()
+  w.globalAlpha = lw.amount * l.opacity
+  w.globalCompositeOperation = 'screen'
+  w.drawImage(out, 0, 0)
+  w.restore()
+}
+
+function backdropKey(doc: StudioDoc, index: number): string {
+  const below = doc.layers.slice(0, index).filter((l) => l.visible)
+  return [doc.width, doc.height, doc.background, ...below.map((l) => contentKey(l) + '@' + placeKey(l) + l.blend + JSON.stringify(l.clip))].join('|')
+}
+
+function adjustBelow(w: CanvasRenderingContext2D, doc: StudioDoc, index: number, assets: AssetStore): void {
+  const l = doc.layers[index]
+  const ready = doc.layers.slice(0, index + 1).every((x) => !x.visible || layerReady(x, assets))
+  const key = backdropKey(doc, index) + '#' + contentKey(l) + placeKey(l) + JSON.stringify(l.clip)
+  let out = ready ? backdrops.get(key) : undefined
+  if (!out) {
+    const below = canvas(doc.width, doc.height)
+    ctx2d(below).drawImage(w.canvas, 0, 0)
+    const changed = processed(below, l, assets, { x: l.x, y: l.y, w: l.width, h: l.height }, 0)
+    const area = canvas(doc.width, doc.height)
+    drawLayer(ctx2d(area), { ...l, opacity: 1, blend: 'normal' }, assets, doc)
+    out = intersect(changed, area)
+    if (ready) remember(key, out)
+  }
+  w.save()
+  w.globalAlpha = l.opacity
+  w.globalCompositeOperation = l.blend === 'normal' ? 'source-over' : l.blend
+  w.drawImage(out, 0, 0)
+  w.restore()
 }
 
 export function renderDoc(doc: StudioDoc, assets: AssetStore, only: string | null = null): HTMLCanvasElement {
@@ -461,12 +603,12 @@ export function toLocal(l: Layer, x: number, y: number): [number, number] {
 export function hitLayer(doc: StudioDoc, assets: AssetStore, x: number, y: number): Layer | null {
   for (let i = doc.layers.length - 1; i >= 0; i--) {
     const l = doc.layers[i]
-    if (!l.visible || l.locked) continue
+    if (!l.visible || l.locked || l.kind === 'adjust') continue
     const [lx, ly] = toLocal(l, x, y)
     const reach = overflow(l)
     if (Math.abs(lx) > l.width / 2 + reach || Math.abs(ly) > l.height / 2 + reach) continue
     // A clipped layer is only where it shows; the rest of its box must let clicks through.
-    const r = l.clip ? clipped(doc, l, assets) : raster(l, assets)
+    const r = masked(doc, l) ? clipped(doc, l, assets) : raster(l, assets)
     if (!r) return l
     const px = Math.floor(lx + Math.round(l.width) / 2 + r.pad)
     const py = Math.floor(ly + Math.round(l.height) / 2 + r.pad)
@@ -476,17 +618,14 @@ export function hitLayer(doc: StudioDoc, assets: AssetStore, x: number, y: numbe
   return null
 }
 
-export function isReady(doc: StudioDoc, assets: AssetStore): boolean {
-  return doc.layers.every(
-    (l) => (l.kind !== 'image' || !!assets.peek(l.asset)) && (!l.mask || !!assets.peek(l.mask))
-  )
+function layerReady(l: Layer, assets: AssetStore): boolean {
+  return assetsOf(l).every((id) => !!assets.peek(id))
 }
 
+export function isReady(doc: StudioDoc, assets: AssetStore): boolean {
+  return docAssets(doc).every((id) => !!assets.peek(id))
+}
 
 export async function loadDocAssets(assets: AssetStore, doc: StudioDoc): Promise<void> {
-  const ids = doc.layers.flatMap((l) => [
-    ...(l.kind === 'image' ? [l.asset] : []),
-    ...(l.mask ? [l.mask] : [])
-  ])
-  await Promise.all(ids.map((id) => assets.load(id)))
+  await Promise.all(docAssets(doc).map((id) => assets.load(id)))
 }

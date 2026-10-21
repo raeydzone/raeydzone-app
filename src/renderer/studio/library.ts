@@ -1,6 +1,6 @@
 import type { AssetInfo, Layer, LayerGroup, StudioFile } from '@shared/studio'
 import { AssetStore } from './assets'
-import { newGroupId, newId, normalizeDoc } from './doc'
+import { assetsOf, chainOf, emptyDoc, newGroupId, newId, normalizeDoc } from './doc'
 import type { Studio } from './engine'
 
 export interface Source {
@@ -43,28 +43,37 @@ export async function importLayers(
   assets: AssetInfo[],
   shift = 0
 ): Promise<string[]> {
-  const needed = new Set(
-    layers.flatMap((l) => [...(l.kind === 'image' ? [l.asset] : []), ...(l.mask ? [l.mask] : [])])
-  )
+  const source = { ...emptyDoc(), layers, groups }
+  const kept = groups.filter((g) => layers.some((l) => chainOf(source, l.group).some((x) => x.id === g.id)))
+  const needed = new Set([...layers.flatMap(assetsOf), ...kept.flatMap((g) => (g.mask ? [g.mask] : []))])
   const map = await bringAssets(studio, fromProject, assets.filter((a) => needed.has(a.id)))
   let doc = studio.doc(variantId)
   const regroup = new Map<string, string>()
-  for (const g of groups) {
-    if (!layers.some((l) => l.group === g.id)) continue
+  for (const g of kept) {
     const id = newGroupId(doc)
-    doc = { ...doc, groups: [...doc.groups, { id, name: g.name }] }
     regroup.set(g.id, id)
+    doc = { ...doc, groups: [...doc.groups, { id, name: g.name, parent: null, mask: g.mask ? map.get(g.mask) ?? null : null }] }
+  }
+  doc = {
+    ...doc,
+    groups: doc.groups.map((g) => {
+      const src = kept.find((x) => regroup.get(x.id) === g.id)
+      return src?.parent && regroup.has(src.parent) ? { ...g, parent: regroup.get(src.parent)! } : g
+    })
   }
   const ids: string[] = []
   const renamed = new Map<string, string>()
   for (const src of layers) {
-    const layer = { ...src, id: newId(doc), x: src.x + shift, y: src.y + shift, group: src.group ? regroup.get(src.group) ?? null : null } as Layer
+    const home = chainOf(source, src.group).find((g) => regroup.has(g.id))
+    const layer = { ...src, id: newId(doc), x: src.x + shift, y: src.y + shift, group: home ? regroup.get(home.id)! : null } as Layer
     if (layer.kind === 'image' && src.kind === 'image') {
       const asset = map.get(src.asset)
       if (!asset) continue
       layer.asset = asset
     }
     layer.mask = src.mask ? map.get(src.mask) ?? null : null
+    const lut = src.tone?.lut ? map.get(src.tone.lut.asset) : undefined
+    if (src.tone?.lut) layer.tone = { ...src.tone, lut: lut ? { ...src.tone.lut, asset: lut } : null }
     renamed.set(src.id, layer.id)
     doc = { ...doc, layers: [...doc.layers, layer] }
     ids.push(layer.id)

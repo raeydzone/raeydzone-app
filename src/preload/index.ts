@@ -4,7 +4,7 @@ import type {
   ScreenSource, StepId, Stream, Video
 } from '@shared/types'
 import type {
-  ClaudeStatus, FeatureReport, ImageRequest, ImageResult, OpenRouterStatus, ReportInput, SendRequest,
+  BrandKit, BrandLogo, ClaudeStatus, FeatureReport, ImageRequest, ImageResult, OpenRouterStatus, ReportInput, SendRequest,
   SpendSummary, StudioEvent, StudioFile, StudioListing, ToolCall, ToolReply
 } from '@shared/studio'
 
@@ -39,6 +39,16 @@ const studio = {
   copyImage: (png: Uint8Array) => call<void>('studio:copyImage', png),
   prune: (projectId: string, keep: string[]) => call<number>('studio:prune', projectId, keep),
   pickImages: () => call<string[]>('studio:pickImages'),
+  pickLut: () => call<{ name: string; text: string } | null>('studio:pickLut'),
+  exportFiles: (projectId: string, items: { name: string; data: Uint8Array }[]) =>
+    call<number>('studio:export', projectId, items),
+  brand: () => call<BrandKit>('brand:get'),
+  saveBrand: (kit: BrandKit) => call<BrandKit>('brand:save', kit),
+  pickLogo: () => call<BrandLogo | null>('brand:pickLogo'),
+  readLogo: (file: string) => call<Uint8Array>('brand:readLogo', file),
+  removeLogo: (file: string) => call<void>('brand:removeLogo', file),
+  logoToProject: (projectId: string, file: string) => call<string>('brand:logoToProject', projectId, file),
+  onBrand: (cb: (kit: BrandKit) => void) => listen<[BrandKit]>('brand:changed', cb),
   apply: (projectId: string, data: Uint8Array, ext: 'png' | 'jpg') =>
     call<{ file: string; hash: string }>('studio:apply', projectId, data, ext),
   projects: () => call<StudioListing[]>('studio:projects'),

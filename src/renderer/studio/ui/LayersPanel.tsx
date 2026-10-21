@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
 import type { AssetInfo, Layer, LayerGroup, StudioDoc } from '@shared/studio'
 import {
-  IconArrowDown, IconArrowUp, IconChevron, IconCopy, IconEye, IconEyeOff, IconFolder, IconImage, IconLock, IconTrash
+  IconAdjust, IconArrowDown, IconArrowUp, IconChevron, IconCopy, IconEye, IconEyeOff, IconFolder, IconImage, IconLock,
+  IconTrash
 } from '../../components/Icons'
 import { useStore } from '../../state/store'
 import { placeAsset } from '../ai'
+import { chainOf, groupMembers, makeAdjust } from '../doc'
+import { maskGroup } from '../selection'
+import { BrandPanel } from './BrandPanel'
 import type { Studio, VariantState } from '../engine'
 import { drawDoc } from '../render'
 import { LayerMenu } from './LayerMenu'
@@ -28,7 +32,7 @@ function AssetThumb({ studio, asset }: { studio: Studio; asset: AssetInfo }): Re
   return <canvas ref={ref} className={s.assetCanvas} width={160} height={90} />
 }
 
-const KIND_LABEL: Record<Layer['kind'], string> = { image: 'Image', text: 'Text', shape: 'Shape' }
+const KIND_LABEL: Record<Layer['kind'], string> = { image: 'Image', text: 'Text', shape: 'Shape', adjust: 'Adjustment' }
 
 function LayerThumb({ studio, doc, layer }: { studio: Studio; doc: StudioDoc; layer: Layer }): ReactNode {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -46,22 +50,29 @@ function LayerThumb({ studio, doc, layer }: { studio: Studio; doc: StudioDoc; la
   return <canvas ref={ref} className={s.layerThumb} width={80} height={45} />
 }
 
+const indent = (depth: number): { marginLeft: string } | undefined =>
+  depth ? { marginLeft: `calc(var(--s-4) * ${depth})` } : undefined
+
 function GroupRow({
   studio,
   variant,
   group,
   open,
-  onToggle
+  onToggle,
+  depth
 }: {
   studio: Studio
   variant: VariantState
   group: LayerGroup
   open: boolean
   onToggle: () => void
+  depth: number
 }): ReactNode {
+  const { notify } = useStore()
   const [renaming, setRenaming] = useState(false)
   const v = variant.id
-  const members = variant.doc.layers.filter((l) => l.group === group.id)
+  const members = groupMembers(variant.doc, group.id)
+  const inner = variant.doc.groups.filter((g) => g.parent === group.id).length
   const ids = studio.selection(v)
   const selected = members.every((l) => ids.includes(l.id))
   const visible = members.some((l) => l.visible)
@@ -74,6 +85,7 @@ function GroupRow({
   return (
     <div
       className={`${s.layerRow} ${s.groupRow} ${selected ? s.layerOn : ''} ${visible ? '' : s.layerHidden}`}
+      style={indent(depth)}
       onClick={() => studio.pick(v, members.map((l) => l.id))}
       onContextMenu={() => !selected && studio.pick(v, members.map((l) => l.id))}
     >
@@ -100,8 +112,20 @@ function GroupRow({
             {group.name}
           </span>
         )}
-        <span className={s.layerKind}>Group · {members.length} layers</span>
+        <span className={s.layerKind}>
+          Group · {members.length} layers{inner ? ` · ${inner} inside` : ''}
+          {group.mask ? ' · masked' : ''}
+        </span>
       </div>
+      {group.mask && (
+        <button
+          className={`${s.layerIcon} ${s.layerIconOn}`}
+          title="Remove the group mask"
+          onClick={stop(() => void maskGroup(studio, v, group.id, null, 'inside').catch((err: Error) => notify(err.message, 'bad')))}
+        >
+          ✕
+        </button>
+      )}
       <button
         className={`${s.layerIcon} ${locked ? s.layerIconOn : ''}`}
         title={locked ? 'Unlock group' : 'Lock group'}
@@ -126,7 +150,8 @@ function LayerRow({
   layer,
   index,
   dragging,
-  setDragging
+  setDragging,
+  depth
 }: {
   studio: Studio
   variant: VariantState
@@ -134,6 +159,7 @@ function LayerRow({
   index: number
   dragging: number | null
   setDragging: (i: number | null) => void
+  depth: number
 }): ReactNode {
   const [renaming, setRenaming] = useState(false)
   const v = variant.id
@@ -148,7 +174,8 @@ function LayerRow({
   }
   return (
     <div
-      className={`${s.layerRow} ${layer.group ? s.layerNested : ''} ${selected ? s.layerOn : ''} ${layer.visible ? '' : s.layerHidden}`}
+      className={`${s.layerRow} ${selected ? s.layerOn : ''} ${layer.visible ? '' : s.layerHidden}`}
+      style={indent(depth)}
       draggable={!renaming}
       onDragStart={() => setDragging(index)}
       onDragEnd={() => setDragging(null)}
@@ -160,7 +187,13 @@ function LayerRow({
       onClick={click}
       onContextMenu={() => !selected && studio.select(v, layer.id)}
     >
-      <LayerThumb studio={studio} doc={variant.doc} layer={layer} />
+      {layer.kind === 'adjust' ? (
+        <span className={`${s.layerThumb} ${s.adjustThumb}`}>
+          <IconAdjust size={16} />
+        </span>
+      ) : (
+        <LayerThumb studio={studio} doc={variant.doc} layer={layer} />
+      )}
       <div className={s.layerLabel}>
         {renaming ? (
           <input
@@ -182,6 +215,7 @@ function LayerRow({
           {KIND_LABEL[layer.kind]}
           {layer.mask ? ' · masked' : ''}
           {layer.clip ? ' · clipped' : ''}
+          {layer.link ? ' · brand' : ''}
         </span>
       </div>
       <button
@@ -218,7 +252,7 @@ export function LayersPanel({
   onGenerate: () => void
 }): ReactNode {
   const { notify } = useStore()
-  const [tab, setTab] = useState<'layers' | 'assets'>('layers')
+  const [tab, setTab] = useState<'layers' | 'assets' | 'brand'>('layers')
   const [dragging, setDragging] = useState<number | null>(null)
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const v = variant.id
@@ -244,7 +278,8 @@ export function LayersPanel({
           onChange={setTab}
           options={[
             { id: 'layers', label: `Layers · ${layers.length}` },
-            { id: 'assets', label: `Assets · ${assets.length}` }
+            { id: 'assets', label: `Assets · ${assets.length}` },
+            { id: 'brand', label: 'Brand' }
           ]}
         />
       </div>
@@ -255,25 +290,35 @@ export function LayersPanel({
             <div className={s.layerList}>
               {layers.length === 0 && <p className={s.hint}>No layers yet.</p>}
               {[...layers].reverse().flatMap((layer, i, top) => {
-                const group = layer.group ? variant.doc.groups.find((g) => g.id === layer.group) : undefined
-                const head = group && top[i - 1]?.group !== group.id && (
-                  <GroupRow
-                    key={'g' + group.id + i}
-                    studio={studio}
-                    variant={variant}
-                    group={group}
-                    open={!closed.has(group.id)}
-                    onToggle={() =>
-                      setClosed((prev) => {
-                        const next = new Set(prev)
-                        if (!next.delete(group.id)) next.add(group.id)
-                        return next
-                      })
-                    }
-                  />
-                )
-                if (group && closed.has(group.id)) return head ? [head] : []
-                const row = (
+                // Headers open wherever a layer's chain of groups, outermost first, parts
+                // from the row above; a closed group swallows everything inside it.
+                const chain = chainOf(variant.doc, layer.group).reverse()
+                const prev = i > 0 ? chainOf(variant.doc, top[i - 1].group).reverse() : []
+                const rows: ReactNode[] = []
+                for (let d = 0; d < chain.length; d++) {
+                  const group = chain[d]
+                  if (prev[d]?.id !== group.id) {
+                    rows.push(
+                      <GroupRow
+                        key={'g' + group.id + i}
+                        studio={studio}
+                        variant={variant}
+                        group={group}
+                        depth={d}
+                        open={!closed.has(group.id)}
+                        onToggle={() =>
+                          setClosed((was) => {
+                            const next = new Set(was)
+                            if (!next.delete(group.id)) next.add(group.id)
+                            return next
+                          })
+                        }
+                      />
+                    )
+                  }
+                  if (closed.has(group.id)) return rows
+                }
+                rows.push(
                   <LayerRow
                     key={layer.id}
                     studio={studio}
@@ -282,9 +327,10 @@ export function LayersPanel({
                     index={layers.indexOf(layer)}
                     dragging={dragging}
                     setDragging={setDragging}
+                    depth={chain.length}
                   />
                 )
-                return head ? [head, row] : [row]
+                return rows
               })}
             </div>
           </LayerMenu>
@@ -303,11 +349,23 @@ export function LayersPanel({
             >
               <IconCopy size={13} />
             </button>
+            <button
+              className={s.footBtn}
+              title="New adjustment layer — grades everything below it"
+              onClick={() => {
+                const layer = studio.addLayer(v, makeAdjust(variant.doc), selected ? layers[layers.findIndex((l) => l.id === selected) + 1]?.id ?? null : null)
+                studio.select(v, layer.id)
+              }}
+            >
+              <IconAdjust size={13} />
+            </button>
             <button className={s.footBtn} title="Delete (Del)" disabled={!ids.length} onClick={() => studio.removeMany(v, ids)}>
               <IconTrash size={13} />
             </button>
           </div>
         </>
+      ) : tab === 'brand' ? (
+        <BrandPanel studio={studio} variant={variant} />
       ) : (
         <>
           <div className={s.assetGrid}>

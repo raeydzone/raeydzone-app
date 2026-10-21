@@ -1,10 +1,10 @@
 import {
-  BLEND_MODES, CANVAS_H, CANVAS_W, GRADIENT_TYPES, SHAPES, STROKE_POSITIONS, WARP_STYLES
+  BLEND_MODES, BLUR_STYLES, CANVAS_H, CANVAS_W, GRADIENT_TYPES, SHAPES, STROKE_POSITIONS, WARP_STYLES
 } from '@shared/studio'
 import type {
-  Adjust, AssetInfo, BlendMode, Clip, Corners, Glow, Gradient, GradientStop, GradientType, ImageLayer,
-  Layer, LayerGroup, Line, Outline, Shadow, ShapeKind, ShapeLayer, StrokePosition, StudioDoc,
-  TextLayer, TextStyle, Tint, Warp, WarpStyle
+  Adjust, AdjustLayer, AssetInfo, BlendMode, BlurFx, BlurStyle, Clip, Corners, CurvePoint, Curves, Glow, Grade,
+  Gradient, GradientStop, GradientType, ImageLayer, Layer, LayerGroup, Levels, Line, Outline, Shadow, ShapeKind,
+  ShapeLayer, StrokePosition, StudioDoc, TextLayer, TextStyle, Tint, Tone, Warp, WarpStyle, Contact, Finish, LightWrap
 } from '@shared/studio'
 import { findFont } from './fonts'
 import { measureText } from './text'
@@ -18,8 +18,16 @@ const EFFECT_DEFAULTS = {
   tint: { color: '#ff1a1a', amount: 0.35 } as Tint,
   gradient: { type: 'radial', from: '#ff2a2a', to: '#00000000', angle: 90, stops: [] } as Gradient,
   line: { color: '#ffffff', width: 6, opacity: 1, dash: 0 } as Line,
-  warp: { style: 'arch', bend: 0.3 } as Warp
+  warp: { style: 'arch', bend: 0.3 } as Warp,
+  blurFx: { style: 'motion', amount: 24, angle: 0, x: 0.5, y: 0.5, focus: 0.3 } as BlurFx,
+  lightWrap: { amount: 0.6, size: 24 } as LightWrap,
+  contact: { color: '#000000', opacity: 0.65, blur: 18, squash: 0.12, y: 0 } as Contact
 }
+
+export const FINISH_DEFAULT: Finish = { sharpen: 0, clarity: 0, vibrance: 0, bloom: 0, vignette: 0, grain: 0 }
+
+export const LEVELS_NEUTRAL: Levels = { black: 0, white: 255, gamma: 1, outBlack: 0, outWhite: 255 }
+export const NO_TONE: Tone = { levels: null, curves: null, map: null, lut: null, grade: null }
 
 export const effectDefault = <K extends keyof typeof EFFECT_DEFAULTS>(
   name: K
@@ -38,14 +46,18 @@ export const emptyDoc = (): StudioDoc => ({
   height: CANVAS_H,
   background: '#0a0a0a',
   layers: [],
-  groups: []
+  groups: [],
+  guides: [],
+  finish: null
 })
 
 // Docs saved before groups, masks on every layer, clipping or effect stacks lack those fields.
 export function normalizeDoc(doc: StudioDoc): StudioDoc {
   return tidyGroups({
     ...doc,
-    groups: doc.groups ?? [],
+    groups: (doc.groups ?? []).map((g) => ({ ...g, parent: g.parent ?? null, mask: g.mask ?? null })),
+    guides: doc.guides ?? [],
+    finish: doc.finish ?? null,
     layers: doc.layers.map((l) => {
       const { shadow, glow, stroke, ...rest } = l as Layer & Partial<Record<StackName, unknown>>
       const old = { shadow, glow, stroke }
@@ -58,6 +70,11 @@ export function normalizeDoc(doc: StudioDoc): StudioDoc {
         clip: l.clip ?? null,
         corners: l.corners ?? null,
         warp: l.warp ?? null,
+        tone: l.tone ?? null,
+        blurFx: l.blurFx ?? null,
+        lightWrap: l.lightWrap ?? null,
+        contact: l.contact ?? null,
+        link: l.link ?? null,
         shadows: stack<Shadow>('shadow', l.shadows).map((e) => ({ ...EFFECT_DEFAULTS.shadow, ...e })),
         glows: stack<Glow>('glow', l.glows).map((e) => ({ ...EFFECT_DEFAULTS.glow, ...e })),
         strokes: stack<Outline>('stroke', l.strokes).map((e) => ({ ...EFFECT_DEFAULTS.stroke, ...e }))
@@ -120,8 +137,40 @@ function base(doc: StudioDoc, name: string) {
     mask: null,
     clip: null,
     corners: null,
-    warp: null
+    warp: null,
+    tone: null,
+    blurFx: null,
+    lightWrap: null,
+    contact: null,
+    link: null
   }
+}
+
+// Everything a layer needs loaded before it can be drawn.
+export function assetsOf(l: Layer): string[] {
+  return [
+    ...(l.kind === 'image' ? [l.asset] : []),
+    ...(l.mask ? [l.mask] : []),
+    ...(l.tone?.lut ? [l.tone.lut.asset] : [])
+  ]
+}
+
+export function docAssets(doc: StudioDoc): string[] {
+  return [...doc.layers.flatMap(assetsOf), ...doc.groups.flatMap((g) => (g.mask ? [g.mask] : []))]
+}
+
+export function patchFinish(current: Finish | null, value: unknown): Finish | null {
+  if (value === null || value === false) return null
+  if (typeof value !== 'object') throw new Error('finish must be an object or null')
+  const next = { ...(current ?? FINISH_DEFAULT) }
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (k in FINISH_DEFAULT) next[k as keyof Finish] = clamp(asNumber(v, 'finish.' + k), 0, 1)
+  }
+  return Object.values(next).some((v) => v > 0) ? next : null
+}
+
+export function makeAdjust(doc: StudioDoc, name = 'Adjustment'): AdjustLayer {
+  return { ...base(doc, name), kind: 'adjust', width: doc.width, height: doc.height }
 }
 
 export function makeImage(doc: StudioDoc, asset: AssetInfo, fit: 'cover' | 'contain' = 'contain'): ImageLayer {
@@ -221,6 +270,7 @@ function mergeEffect<T extends object>(
     if (typeof sample === 'number') next[k] = asNumber(v, `${key}.${k}`)
     else if (typeof sample === 'boolean') next[k] = !!v
     else if (k === 'type') next[k] = oneOf(GRADIENT_TYPES, v, `${key}.type`) as GradientType
+    else if (k === 'style' && key === 'blurFx') next[k] = oneOf(BLUR_STYLES, v, `${key}.style`) as BlurStyle
     else if (k === 'style') next[k] = oneOf(WARP_STYLES, v, `${key}.style`) as WarpStyle
     else if (k === 'stops') next[k] = asStops(v, `${key}.stops`)
     else if (k === 'position') {
@@ -230,7 +280,7 @@ function mergeEffect<T extends object>(
       next[k] = v
     } else next[k] = asColor(v, `${key}.${k}`)
   }
-  for (const k of ['opacity', 'amount']) {
+  for (const k of key === 'blurFx' ? ['opacity'] : ['opacity', 'amount']) {
     if (typeof next[k] === 'number') next[k] = clamp(next[k] as number, 0, 1)
   }
   return next as T
@@ -288,6 +338,91 @@ function asStyles(v: unknown): TextStyle[] {
   })
 }
 
+function asCurve(v: unknown, key: string): CurvePoint[] {
+  if (v === null || v === undefined) return []
+  if (!Array.isArray(v) || v.length > 16) throw new Error(`${key} must be up to 16 [input, output] points, 0 to 255`)
+  return v.map((p, i) => {
+    if (!Array.isArray(p)) throw new Error(`${key}[${i}] must be [input, output]`)
+    return [clamp(asNumber(p[0], key), 0, 255), clamp(asNumber(p[1], key), 0, 255)] as CurvePoint
+  })
+}
+
+function triple(v: unknown, key: string, fallback: [number, number, number]): [number, number, number] {
+  if (v === undefined) return fallback
+  if (!Array.isArray(v) || v.length !== 3) throw new Error(`${key} must be [red, green, blue]`)
+  return v.map((x) => asNumber(x, key)) as [number, number, number]
+}
+
+type Part = Record<string, unknown> | null | undefined
+
+function partOf(given: Record<string, unknown>, k: string): Part {
+  const v = given[k]
+  if (v === undefined) return undefined
+  if (v === null || v === false) return null
+  if (typeof v !== 'object') throw new Error(`tone.${k} must be an object or null`)
+  return v as Record<string, unknown>
+}
+
+function mergeLevels(cur: Levels | null, given: Record<string, unknown>): Levels {
+  const lv = { ...(cur ?? LEVELS_NEUTRAL) }
+  for (const k of Object.keys(LEVELS_NEUTRAL) as (keyof Levels)[]) {
+    if (given[k] !== undefined) lv[k] = asNumber(given[k], 'tone.levels.' + k)
+  }
+  return {
+    black: clamp(lv.black, 0, 254),
+    white: clamp(lv.white, 1, 255),
+    gamma: clamp(lv.gamma, 0.1, 9.99),
+    outBlack: clamp(lv.outBlack, 0, 255),
+    outWhite: clamp(lv.outWhite, 0, 255)
+  }
+}
+
+function mergeCurves(cur: Curves | null, given: Record<string, unknown>): Curves | null {
+  const base: Curves = cur ?? { rgb: [], r: [], g: [], b: [] }
+  const pick = (k: keyof Curves): CurvePoint[] => (given[k] === undefined ? base[k] : asCurve(given[k], 'tone.curves.' + k))
+  const next = { rgb: pick('rgb'), r: pick('r'), g: pick('g'), b: pick('b') }
+  return Object.values(next).some((c) => c.length >= 2) ? next : null
+}
+
+function mergeGrade(cur: Grade | null, given: Record<string, unknown>): Grade {
+  const base: Grade = cur ?? { gain: [1, 1, 1], lift: [0, 0, 0], amount: 1 }
+  return {
+    gain: triple(given.gain, 'tone.grade.gain', base.gain).map((v) => clamp(v, 0, 4)) as Grade['gain'],
+    lift: triple(given.lift, 'tone.grade.lift', base.lift).map((v) => clamp(v, -1, 1)) as Grade['lift'],
+    amount: clamp(given.amount === undefined ? base.amount : asNumber(given.amount, 'tone.grade.amount'), 0, 1)
+  }
+}
+
+// Each part of a tone adjustment merges on its own and null drops just that part; when
+// nothing is left the whole adjustment goes, so a neutral layer stores no tone at all.
+function mergeTone(current: Tone | null, value: unknown): Tone | null {
+  if (value === null || value === false) return null
+  if (typeof value !== 'object') throw new Error('tone must be an object or null')
+  const given = value as Record<string, unknown>
+  const next: Tone = { ...NO_TONE, ...current }
+  const levels = partOf(given, 'levels')
+  if (levels !== undefined) next.levels = levels && mergeLevels(next.levels, levels)
+  const curves = partOf(given, 'curves')
+  if (curves !== undefined) next.curves = curves && mergeCurves(next.curves, curves)
+  const grade = partOf(given, 'grade')
+  if (grade !== undefined) next.grade = grade && mergeGrade(next.grade, grade)
+  const map = partOf(given, 'map')
+  if (map !== undefined) {
+    const stops = map?.stops === undefined ? next.map?.stops ?? [] : asStops(map.stops, 'tone.map.stops')
+    if (map && stops.length < 2) throw new Error('tone.map needs stops: at least two { at, color }, dark to light')
+    const amount = map?.amount === undefined ? next.map?.amount ?? 1 : asNumber(map.amount, 'tone.map.amount')
+    next.map = map && { stops, amount: clamp(amount, 0, 1) }
+  }
+  const lut = partOf(given, 'lut')
+  if (lut !== undefined) {
+    const asset = typeof lut?.asset === 'string' ? lut.asset : next.lut?.asset
+    if (lut && !asset) throw new Error('tone.lut needs the asset of a loaded .cube LUT')
+    const amount = lut?.amount === undefined ? next.lut?.amount ?? 1 : asNumber(lut.amount, 'tone.lut.amount')
+    next.lut = lut && { asset: asset!, name: typeof lut.name === 'string' ? lut.name : next.lut?.name ?? 'LUT', amount: clamp(amount, 0, 1) }
+  }
+  return Object.values(next).some(Boolean) ? next : null
+}
+
 // A stack can be set as a list, or one entry at a time through the singular name.
 function mergeStack<T extends object>(
   current: T[],
@@ -304,10 +439,12 @@ function mergeStack<T extends object>(
 const COMMON = new Set([
   'name', 'x', 'y', 'width', 'height', 'rotation', 'flipX', 'flipY', 'opacity', 'blend',
   'visible', 'locked', 'shadow', 'shadows', 'glow', 'glows', 'stroke', 'strokes', 'tint',
-  'adjust', 'clip', 'corners', 'warp'
+  'adjust', 'clip', 'corners', 'warp', 'tone', 'blurFx', 'lightWrap', 'contact', 'link'
 ])
+const OUTLINE_EFFECTS = new Set(['shadow', 'shadows', 'glow', 'glows', 'stroke', 'strokes'])
 const BY_KIND: Record<Layer['kind'], Set<string>> = {
   image: new Set(),
+  adjust: new Set(),
   text: new Set([
     'text', 'font', 'size', 'weight', 'italic', 'uppercase', 'fill', 'gradient', 'highlight', 'align',
     'letterSpacing', 'lineHeight', 'wrap', 'fit', 'arc', 'styles'
@@ -328,7 +465,7 @@ export function patchLayer(layer: Layer, patch: Record<string, unknown>): PatchR
 
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue
-    if (!COMMON.has(key) && !allowed.has(key)) {
+    if ((!COMMON.has(key) && !allowed.has(key)) || (layer.kind === 'adjust' && OUTLINE_EFFECTS.has(key))) {
       ignored.push(key)
       continue
     }
@@ -361,6 +498,31 @@ export function patchLayer(layer: Layer, patch: Record<string, unknown>): PatchR
         break
       case 'wrap':
         next.wrap = value === null || value === false ? null : Math.max(20, asNumber(value, 'wrap'))
+        break
+      case 'tone':
+        next.tone = mergeTone(next.tone as Tone | null, value)
+        break
+      case 'blurFx': {
+        const b = mergeEffect(next.blurFx as BlurFx | null, value, EFFECT_DEFAULTS.blurFx, 'blurFx')
+        next.blurFx = b && {
+          ...b,
+          amount: clamp(b.amount, 0, b.style === 'spin' ? 90 : 300),
+          x: clamp(b.x, -1, 2),
+          y: clamp(b.y, -1, 2),
+          focus: clamp(b.focus, 0, 1)
+        }
+        break
+      }
+      case 'lightWrap':
+      case 'contact': {
+        const e = mergeEffect(next[key] as object | null, value, EFFECT_DEFAULTS[key], key) as (LightWrap & Contact) | null
+        if (e && 'size' in e) e.size = clamp(e.size, 1, 200)
+        if (e && 'squash' in e) Object.assign(e, { squash: clamp(e.squash, 0.02, 1), blur: clamp(e.blur, 0, 200) })
+        next[key] = e
+        break
+      }
+      case 'link':
+        next.link = typeof value === 'string' && value ? value : null
         break
       case 'line':
       case 'warp':
@@ -550,21 +712,37 @@ export const newGroupId = (doc: StudioDoc): string => {
   return id
 }
 
+// The groups a layer or group sits in, innermost first. A parent loop, which only a damaged
+// file could hold, ends the chain rather than spinning.
+export function chainOf(doc: StudioDoc, groupId: string | null): LayerGroup[] {
+  const out: LayerGroup[] = []
+  let id = groupId
+  while (id && !out.some((g) => g.id === id)) {
+    const g = doc.groups.find((x) => x.id === id)
+    if (!g) break
+    out.push(g)
+    id = g.parent
+  }
+  return out
+}
+
+export const inGroup = (doc: StudioDoc, l: Layer, id: string): boolean => chainOf(doc, l.group).some((g) => g.id === id)
+
 export function tidyGroups(doc: StudioDoc): StudioDoc {
-  const used = new Set(doc.layers.map((l) => l.group))
   const known = new Set(doc.groups.map((g) => g.id))
+  const bad = (g: LayerGroup): boolean => !!g.parent && (!known.has(g.parent) || chainOf(doc, g.parent).some((x) => x.id === g.id))
+  const groups = doc.groups.some(bad) ? doc.groups.map((g) => (bad(g) ? { ...g, parent: null } : g)) : doc.groups
+  const fixed = { ...doc, groups }
+  const used = new Set(doc.layers.flatMap((l) => chainOf(fixed, l.group).map((g) => g.id)))
   // A group emptied by this very edit is dropped below, so it no longer counts as a source.
-  const alive = new Set([
-    ...doc.layers.map((l) => l.id),
-    ...doc.groups.filter((g) => used.has(g.id)).map((g) => g.id)
-  ])
+  const alive = new Set([...doc.layers.map((l) => l.id), ...used])
   const stray = doc.layers.some((l) => l.group && !known.has(l.group))
-  const empty = doc.groups.some((g) => !used.has(g.id))
+  const empty = groups.some((g) => !used.has(g.id))
   const dangling = doc.layers.some((l) => l.clip && !alive.has(l.clip.from))
-  if (!stray && !empty && !dangling) return doc
+  if (!stray && !empty && !dangling && groups === doc.groups) return doc
   return {
     ...doc,
-    groups: doc.groups.filter((g) => used.has(g.id)),
+    groups: groups.filter((g) => used.has(g.id)),
     layers: doc.layers.map((l) => {
       const group = l.group && !known.has(l.group) ? null : l.group
       const clip = l.clip && !alive.has(l.clip.from) ? null : l.clip
@@ -579,30 +757,53 @@ export const findGroup = (doc: StudioDoc, id: string): LayerGroup => {
   return group
 }
 
-export const groupMembers = (doc: StudioDoc, id: string): Layer[] => doc.layers.filter((l) => l.group === id)
+export const groupMembers = (doc: StudioDoc, id: string): Layer[] => doc.layers.filter((l) => inGroup(doc, l, id))
+
+// The largest group in a layer's chain that the ids cover completely, if any: that whole
+// group is what the selection means, not the single layer.
+export function wholeGroupOf(doc: StudioDoc, l: Layer, ids: string[]): LayerGroup | null {
+  const chain = chainOf(doc, l.group)
+  for (let i = chain.length - 1; i >= 0; i--) {
+    if (groupMembers(doc, chain[i].id).every((m) => ids.includes(m.id))) return chain[i]
+  }
+  return null
+}
 
 // Members are pulled together where the topmost one sat, so a group always reads as one
-// block in the layers panel.
+// block in the layers panel. Whole groups in the selection nest inside the new one.
 export function groupLayers(doc: StudioDoc, ids: string[], name: string): { doc: StudioDoc; group: LayerGroup } {
   const members = doc.layers.filter((l) => ids.includes(l.id))
   if (members.length < 2) throw new Error('A group needs at least two layers')
-  const group = { id: newGroupId(doc), name: name.trim() || 'Group' }
+  const nested = new Set(members.map((l) => wholeGroupOf(doc, l, ids)?.id).filter((id): id is string => !!id))
+  const parents = new Set(members.map((l) => {
+    const whole = wholeGroupOf(doc, l, ids)
+    return whole ? whole.parent : l.group
+  }))
+  const parent = parents.size === 1 ? [...parents][0] : null
+  const group: LayerGroup = { id: newGroupId(doc), name: name.trim() || 'Group', parent, mask: null }
   const top = doc.layers.indexOf(members[members.length - 1])
   const rest = doc.layers.filter((l) => !ids.includes(l.id))
   const at = doc.layers.slice(0, top).filter((l) => !ids.includes(l.id)).length
-  rest.splice(at, 0, ...members.map((l) => ({ ...l, group: group.id })))
-  return { doc: tidyGroups({ ...doc, layers: rest, groups: [...doc.groups, group] }), group }
+  rest.splice(at, 0, ...members.map((l) => (wholeGroupOf(doc, l, ids) ? l : { ...l, group: group.id })))
+  const groups = doc.groups.map((g) => (nested.has(g.id) ? { ...g, parent: group.id } : g))
+  return { doc: tidyGroups({ ...doc, layers: rest, groups: [...groups, group] }), group }
 }
 
+// The group's layers and groups move up into its parent, wherever they sat inside it.
 export function ungroup(doc: StudioDoc, id: string): StudioDoc {
-  findGroup(doc, id)
-  return tidyGroups({ ...doc, layers: doc.layers.map((l) => (l.group === id ? { ...l, group: null } : l)) })
+  const g = findGroup(doc, id)
+  return tidyGroups({
+    ...doc,
+    groups: doc.groups.map((x) => (x.parent === id ? { ...x, parent: g.parent } : x)),
+    layers: doc.layers.map((l) => (l.group === id ? { ...l, group: g.parent } : l))
+  })
 }
 
 export function arrangeGroup(doc: StudioDoc, id: string, to: 'top' | 'bottom' | 'up' | 'down'): StudioDoc {
   const members = groupMembers(doc, id)
-  const rest = doc.layers.filter((l) => l.group !== id)
-  const now = doc.layers.slice(0, doc.layers.indexOf(members[0])).filter((l) => l.group !== id).length
+  const inside = new Set(members.map((l) => l.id))
+  const rest = doc.layers.filter((l) => !inside.has(l.id))
+  const now = doc.layers.slice(0, doc.layers.indexOf(members[0])).filter((l) => !inside.has(l.id)).length
   const at = to === 'top' ? rest.length : to === 'bottom' ? 0 : to === 'up' ? Math.min(rest.length, now + 1) : Math.max(0, now - 1)
   rest.splice(at, 0, ...members)
   return { ...doc, layers: rest }
@@ -642,11 +843,38 @@ export function scaleLayer(l: Layer, k: number, ox: number, oy: number): Layer {
     height: Math.max(1, l.height * k),
     strokes: l.strokes.map((e) => ({ ...e, width: px(e.width) })),
     glows: l.glows.map((e) => ({ ...e, size: px(e.size) })),
-    shadows: l.shadows.map((e) => ({ ...e, blur: px(e.blur), x: e.x * k, y: e.y * k }))
+    shadows: l.shadows.map((e) => ({ ...e, blur: px(e.blur), x: e.x * k, y: e.y * k })),
+    adjust: { ...l.adjust, blur: px(l.adjust.blur) },
+    corners: l.corners ? (l.corners.map(([cx, cy]) => [cx * k, cy * k]) as Corners) : null,
+    clip: l.clip ? { ...l.clip, feather: px(l.clip.feather) } : null,
+    blurFx: l.blurFx ? { ...l.blurFx, amount: l.blurFx.style === 'spin' ? l.blurFx.amount : px(l.blurFx.amount) } : null,
+    lightWrap: l.lightWrap ? { ...l.lightWrap, size: Math.max(1, l.lightWrap.size * k) } : null,
+    contact: l.contact ? { ...l.contact, blur: px(l.contact.blur), y: l.contact.y * k } : null
   } as Layer
-  if (scaled.kind === 'text') return { ...scaled, size: Math.max(6, scaled.size * k) }
-  if (scaled.kind === 'shape') return { ...scaled, radius: px(scaled.radius), feather: px(scaled.feather) }
+  if (scaled.kind === 'text') {
+    return {
+      ...scaled,
+      size: Math.max(6, scaled.size * k),
+      letterSpacing: scaled.letterSpacing * k,
+      wrap: scaled.wrap === null ? null : scaled.wrap * k,
+      styles: scaled.styles.map((st) => (st.rise === undefined ? st : { ...st, rise: st.rise * k }))
+    }
+  }
+  if (scaled.kind === 'shape') {
+    return { ...scaled, radius: px(scaled.radius), feather: px(scaled.feather), line: scaled.line && { ...scaled.line, width: px(scaled.line.width), dash: px(scaled.line.dash) } }
+  }
   return scaled
+}
+
+// The whole design at another resolution, for export: every pixel measure scales with it.
+export function scaleDoc(doc: StudioDoc, k: number): StudioDoc {
+  return {
+    ...doc,
+    width: Math.round(doc.width * k),
+    height: Math.round(doc.height * k),
+    layers: doc.layers.map((l) => scaleLayer(l, k, 0, 0)),
+    guides: doc.guides.map((g) => ({ ...g, at: g.at * k }))
+  }
 }
 
 // Copies keep their own groups: a fully copied group becomes a new group, a lone member
@@ -659,10 +887,11 @@ export function duplicateLayers(doc: StudioDoc, ids: string[], shift = 0): { doc
   for (const g of doc.groups) {
     const members = groupMembers(doc, g.id)
     if (!members.every((l) => ids.includes(l.id))) continue
-    const copy = { id: newGroupId(next), name: g.name + ' copy' }
+    const copy = { ...g, id: newGroupId(next), name: g.name + ' copy' }
     next = { ...next, groups: [...next.groups, copy] }
     regroup.set(g.id, copy.id)
   }
+  next = { ...next, groups: next.groups.map((g) => (g.parent && regroup.has(g.parent) && [...regroup.values()].includes(g.id) ? { ...g, parent: regroup.get(g.parent)! } : g)) }
   const sources = doc.layers.filter((l) => ids.includes(l.id))
   const top = doc.layers.indexOf(sources[sources.length - 1])
   const layers = [...next.layers]
@@ -687,6 +916,72 @@ export function duplicateLayers(doc: StudioDoc, ids: string[], shift = 0): { doc
   return { doc: { ...next, layers: rebound }, ids: copies }
 }
 
+export type AlignEdge = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+
+// A whole group that is part of the selection moves as one block, so aligning a badge and
+// a headline lines up the badge rather than scattering its pieces.
+function unitsOf(doc: StudioDoc, ids: string[]): Layer[][] {
+  const picked = doc.layers.filter((l) => ids.includes(l.id))
+  const units = new Map<string, Layer[]>()
+  for (const l of picked) {
+    const whole = wholeGroupOf(doc, l, ids)
+    const key = whole ? 'g:' + whole.id : l.id
+    units.set(key, [...(units.get(key) ?? []), l])
+  }
+  return [...units.values()]
+}
+
+function shifted(doc: StudioDoc, moves: Map<string, [number, number]>): StudioDoc {
+  return {
+    ...doc,
+    layers: doc.layers.map((l) => {
+      const d = moves.get(l.id)
+      return d ? ({ ...l, x: Math.round((l.x + d[0]) * 10) / 10, y: Math.round((l.y + d[1]) * 10) / 10 } as Layer) : l
+    })
+  }
+}
+
+// One unit, or toCanvas, aligns against the canvas; several align against their joint box.
+export function alignLayers(doc: StudioDoc, ids: string[], edge: AlignEdge, toCanvas = false): StudioDoc {
+  const units = unitsOf(doc, ids)
+  if (!units.length) return doc
+  const frame = toCanvas || units.length === 1 ? { x: 0, y: 0, width: doc.width, height: doc.height } : boundsOf(units.flat())
+  const moves = new Map<string, [number, number]>()
+  for (const unit of units) {
+    const b = boundsOf(unit)
+    const dx =
+      edge === 'left' ? frame.x - b.x
+        : edge === 'center' ? frame.x + frame.width / 2 - (b.x + b.width / 2)
+          : edge === 'right' ? frame.x + frame.width - (b.x + b.width) : 0
+    const dy =
+      edge === 'top' ? frame.y - b.y
+        : edge === 'middle' ? frame.y + frame.height / 2 - (b.y + b.height / 2)
+          : edge === 'bottom' ? frame.y + frame.height - (b.y + b.height) : 0
+    for (const l of unit) moves.set(l.id, [dx, dy])
+  }
+  return shifted(doc, moves)
+}
+
+// Equal gaps between neighbours, the outermost two staying where they are.
+export function distributeLayers(doc: StudioDoc, ids: string[], axis: 'x' | 'y'): StudioDoc {
+  const units = unitsOf(doc, ids).map((u) => ({ layers: u, b: boundsOf(u) }))
+  if (units.length < 3) return doc
+  const pos = (b: Bounds): number => (axis === 'x' ? b.x : b.y)
+  const len = (b: Bounds): number => (axis === 'x' ? b.width : b.height)
+  units.sort((a, c) => pos(a.b) + len(a.b) / 2 - (pos(c.b) + len(c.b) / 2))
+  const first = units[0].b
+  const last = units[units.length - 1].b
+  const gap = (pos(last) + len(last) - pos(first) - units.reduce((n, u) => n + len(u.b), 0)) / (units.length - 1)
+  const moves = new Map<string, [number, number]>()
+  let at = pos(first)
+  for (const u of units) {
+    const d = at - pos(u.b)
+    for (const l of u.layers) moves.set(l.id, axis === 'x' ? [d, 0] : [0, d])
+    at += len(u.b) + gap
+  }
+  return shifted(doc, moves)
+}
+
 export function polygonPoints(layer: ShapeLayer): [number, number][] {
   return layer.points.map(([px, py]) => [
     Math.round((layer.x + px * layer.width) * 10) / 10,
@@ -702,6 +997,8 @@ export function describeGroups(doc: StudioDoc): Record<string, unknown>[] {
     return {
       id: g.id,
       name: g.name,
+      parent: g.parent,
+      masked: !!g.mask || undefined,
       layer_ids_top_to_bottom: [...members].reverse().map((l) => l.id),
       box: { x: round(b.x), y: round(b.y), width: round(b.width), height: round(b.height) }
     }
