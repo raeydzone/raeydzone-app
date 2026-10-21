@@ -1,9 +1,11 @@
 import type {
   Adjust, Clip, Glow, Gradient, Layer, Outline, Shadow, ShapeLayer, StudioDoc
 } from '@shared/studio'
+import { colorize, dilate, erode, invertAlpha, lumaToAlpha, softened, subtract } from './alpha'
 import { canvas, ctx2d } from './assets'
 import type { AssetStore } from './assets'
 import { drawText } from './text'
+import { distort, isDistorted, overflow } from './warp'
 
 interface Raster {
   canvas: HTMLCanvasElement
@@ -59,7 +61,7 @@ function spreadOf(strokes: Outline[]): number {
 }
 
 function padFor(l: Layer): number {
-  const spread = spreadOf(l.strokes)
+  const spread = spreadOf(l.strokes) + (l.kind === 'shape' && l.line ? l.line.width / 2 : 0)
   let p = 2 + spread
   for (const glow of l.glows) {
     if (!glow.inner) p = Math.max(p, glow.size * 1.6 + spread)
@@ -71,7 +73,7 @@ function padFor(l: Layer): number {
   if (l.kind === 'shape') p = Math.max(p, l.feather * 1.6 + 2)
   if (l.kind === 'text') p = Math.max(p, l.size * 0.25 + spread)
   if (l.adjust.blur) p = Math.max(p, l.adjust.blur * 3)
-  return Math.ceil(p)
+  return Math.ceil(p + overflow(l))
 }
 
 function filterOf(a: Adjust): string {
@@ -84,13 +86,78 @@ function filterOf(a: Adjust): string {
   return parts.join(' ')
 }
 
+type Pt = [number, number]
+
+function vertices(l: ShapeLayer, w: number, h: number): Pt[] | null {
+  if (l.shape === 'polygon') return l.points.length >= 3 ? l.points.map(([x, y]) => [x * w, y * h]) : null
+  if (l.shape === 'star') {
+    const out: Pt[] = []
+    for (let i = 0; i < l.sides * 2; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / l.sides
+      const k = i % 2 ? l.inset : 1
+      out.push([w / 2 + (Math.cos(a) * w * k) / 2, h / 2 + (Math.sin(a) * h * k) / 2])
+    }
+    return out
+  }
+  if (l.shape === 'arrow') {
+    const shaft = h * l.inset
+    const head = Math.min(w * 0.45, h * 0.9)
+    const top = (h - shaft) / 2
+    return [[0, top], [w - head, top], [w - head, 0], [w, h / 2], [w - head, h], [w - head, h - top], [0, h - top]]
+  }
+  return null
+}
+
+// Corner rounding: each corner is cut back along both of its edges and bridged with a curve.
+// At 1 the cuts meet at the edge midpoints and a polygon turns into a smooth blob.
+function tracePoints(g: CanvasRenderingContext2D, pts: Pt[], smooth: number): void {
+  if (smooth <= 0) {
+    pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)))
+    g.closePath()
+    return
+  }
+  const t = smooth / 2
+  const n = pts.length
+  const lerp = (a: Pt, b: Pt, k: number): Pt => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]
+  const start = lerp(pts[0], pts[1], t)
+  g.moveTo(start[0], start[1])
+  for (let i = 1; i <= n; i++) {
+    const prev = pts[i - 1]
+    const at = pts[i % n]
+    const next = pts[(i + 1) % n]
+    const into = lerp(at, prev, t)
+    const out = lerp(at, next, t)
+    g.lineTo(into[0], into[1])
+    g.quadraticCurveTo(at[0], at[1], out[0], out[1])
+  }
+  g.closePath()
+}
+
+function bubblePath(g: CanvasRenderingContext2D, l: ShapeLayer, w: number, h: number): void {
+  const body = h * (1 - l.inset * 0.5)
+  const r = Math.min(l.radius, w / 2, body / 2)
+  g.moveTo(r, 0)
+  g.lineTo(w - r, 0)
+  g.arcTo(w, 0, w, r, r)
+  g.lineTo(w, body - r)
+  g.arcTo(w, body, w - r, body, r)
+  g.lineTo(Math.max(r, w * 0.36), body)
+  g.lineTo(w * 0.12, h)
+  g.lineTo(Math.max(r, w * 0.22), body)
+  g.lineTo(r, body)
+  g.arcTo(0, body, 0, body - r, r)
+  g.lineTo(0, r)
+  g.arcTo(0, 0, r, 0, r)
+  g.closePath()
+}
+
 function shapePath(g: CanvasRenderingContext2D, l: ShapeLayer, w: number, h: number): void {
   g.beginPath()
-  if (l.shape === 'ellipse') g.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2)
-  else if (l.shape === 'polygon' && l.points.length >= 3) {
-    l.points.forEach(([px, py], i) => (i ? g.lineTo(px * w, py * h) : g.moveTo(px * w, py * h)))
-    g.closePath()
-  } else g.roundRect(0, 0, w, h, Math.min(l.radius, w / 2, h / 2))
+  const pts = vertices(l, w, h)
+  if (pts) tracePoints(g, pts, l.smooth)
+  else if (l.shape === 'ellipse') g.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2)
+  else if (l.shape === 'bubble') bubblePath(g, l, w, h)
+  else g.roundRect(0, 0, w, h, Math.min(l.radius, w / 2, h / 2))
 }
 
 function paintOf(g: CanvasRenderingContext2D, fill: string, gr: Gradient | null | undefined, w: number, h: number): string | CanvasGradient {
@@ -98,13 +165,15 @@ function paintOf(g: CanvasRenderingContext2D, fill: string, gr: Gradient | null 
   let grad: CanvasGradient
   if (gr.type === 'radial') {
     grad = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.hypot(w, h) / 2)
+  } else if (gr.type === 'conic') {
+    grad = g.createConicGradient(((gr.angle - 90) * Math.PI) / 180, w / 2, h / 2)
   } else {
     const a = (gr.angle * Math.PI) / 180
     const r = (Math.abs(w * Math.cos(a)) + Math.abs(h * Math.sin(a))) / 2
     grad = g.createLinearGradient(w / 2 - Math.cos(a) * r, h / 2 - Math.sin(a) * r, w / 2 + Math.cos(a) * r, h / 2 + Math.sin(a) * r)
   }
-  grad.addColorStop(0, gr.from)
-  grad.addColorStop(1, gr.to)
+  const stops = gr.stops?.length >= 2 ? gr.stops : [{ at: 0, color: gr.from }, { at: 1, color: gr.to }]
+  for (const stop of stops) grad.addColorStop(stop.at, stop.color)
   return grad
 }
 
@@ -131,6 +200,17 @@ function drawContent(l: Layer, assets: AssetStore, w: number, h: number, pad: nu
     g.fillStyle = paintOf(g, l.fill, l.gradient, w, h)
     shapePath(g, l, w, h)
     g.fill()
+    if (l.line && l.line.width > 0 && l.line.opacity > 0) {
+      g.save()
+      g.globalAlpha = l.line.opacity
+      g.strokeStyle = l.line.color
+      g.lineWidth = l.line.width
+      g.lineJoin = 'round'
+      g.lineCap = 'round'
+      g.setLineDash(l.line.dash > 0 ? [l.line.dash, l.line.dash * 0.8] : [])
+      g.stroke()
+      g.restore()
+    }
   }
 
   if (mask) {
@@ -140,13 +220,16 @@ function drawContent(l: Layer, assets: AssetStore, w: number, h: number, pad: nu
     g.globalCompositeOperation = 'source-over'
   }
 
+  // Distortion bends the content itself, before any effect, so outlines and shadows trace
+  // the bent shape at an even width instead of being stretched with it.
+  const shaped = isDistorted(l) ? distort(out, l, w, h, pad) : out
   const filter = filterOf(l.adjust)
-  let result = out
+  let result = shaped
   if (filter) {
-    result = canvas(out.width, out.height)
+    result = canvas(shaped.width, shaped.height)
     const f = ctx2d(result)
     f.filter = filter
-    f.drawImage(out, 0, 0)
+    f.drawImage(shaped, 0, 0)
   }
   if (l.tint && l.tint.amount > 0) {
     const t = ctx2d(result)
@@ -156,76 +239,6 @@ function drawContent(l: Layer, assets: AssetStore, w: number, h: number, pad: nu
     t.fillRect(0, 0, result.width, result.height)
   }
   return result
-}
-
-function lumaToAlpha(src: HTMLCanvasElement): HTMLCanvasElement {
-  const g = ctx2d(src)
-  const img = g.getImageData(0, 0, src.width, src.height)
-  const d = img.data
-  for (let i = 0; i < d.length; i += 4) {
-    const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255
-    d[i] = d[i + 1] = d[i + 2] = 255
-    d[i + 3] = Math.round(d[i + 3] * lum)
-  }
-  g.putImageData(img, 0, 0)
-  return src
-}
-
-function invertAlpha(src: HTMLCanvasElement): HTMLCanvasElement {
-  const out = canvas(src.width, src.height)
-  const g = ctx2d(out)
-  g.fillStyle = '#fff'
-  g.fillRect(0, 0, out.width, out.height)
-  g.globalCompositeOperation = 'destination-out'
-  g.drawImage(src, 0, 0)
-  return out
-}
-
-function softened(src: HTMLCanvasElement, px: number): HTMLCanvasElement {
-  const out = canvas(src.width, src.height)
-  const g = ctx2d(out)
-  g.filter = `blur(${px / 2}px)`
-  g.drawImage(src, 0, 0)
-  return out
-}
-
-function colorize(src: HTMLCanvasElement, color: string): HTMLCanvasElement {
-  const out = canvas(src.width, src.height)
-  const g = ctx2d(out)
-  g.drawImage(src, 0, 0)
-  g.globalCompositeOperation = 'source-in'
-  g.fillStyle = color
-  g.fillRect(0, 0, out.width, out.height)
-  return out
-}
-
-function dilate(src: HTMLCanvasElement, radius: number): HTMLCanvasElement {
-  const out = canvas(src.width, src.height)
-  const g = ctx2d(out)
-  const rings = radius > 6 ? [radius, radius * 0.66, radius * 0.33] : [radius]
-  for (const r of rings) {
-    const steps = Math.min(72, Math.max(12, Math.ceil((Math.PI * 2 * r) / 2)))
-    for (let i = 0; i < steps; i++) {
-      const a = (i / steps) * Math.PI * 2
-      g.drawImage(src, Math.cos(a) * r, Math.sin(a) * r)
-    }
-  }
-  g.drawImage(src, 0, 0)
-  return out
-}
-
-// Grown inwards: invert, dilate the hole, invert back. The pad keeps the border clean.
-function erode(src: HTMLCanvasElement, radius: number): HTMLCanvasElement {
-  return invertAlpha(dilate(invertAlpha(src), radius))
-}
-
-function subtract(from: HTMLCanvasElement, what: HTMLCanvasElement): HTMLCanvasElement {
-  const out = canvas(from.width, from.height)
-  const g = ctx2d(out)
-  g.drawImage(from, 0, 0)
-  g.globalCompositeOperation = 'destination-out'
-  g.drawImage(what, 0, 0)
-  return out
 }
 
 // The raster is built before the layer is rotated, so an offset the creator set in canvas
@@ -450,7 +463,8 @@ export function hitLayer(doc: StudioDoc, assets: AssetStore, x: number, y: numbe
     const l = doc.layers[i]
     if (!l.visible || l.locked) continue
     const [lx, ly] = toLocal(l, x, y)
-    if (Math.abs(lx) > l.width / 2 || Math.abs(ly) > l.height / 2) continue
+    const reach = overflow(l)
+    if (Math.abs(lx) > l.width / 2 + reach || Math.abs(ly) > l.height / 2 + reach) continue
     // A clipped layer is only where it shows; the rest of its box must let clicks through.
     const r = l.clip ? clipped(doc, l, assets) : raster(l, assets)
     if (!r) return l

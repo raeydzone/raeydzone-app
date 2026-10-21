@@ -7,7 +7,7 @@ import type { AssetInfo, ChatItem, ClaudeStatus } from '@shared/studio'
 import {
   IconArrowDown, IconArrowUp, IconBrush, IconCheck, IconChevron, IconClaude, IconClose, IconCopy, IconCursor, IconEye, IconFlag,
   IconImage, IconLasso, IconLayers, IconLog, IconRect, IconRefresh, IconScissors, IconSparkle, IconStop, IconText,
-  IconTools, IconTrash, IconWand
+  IconPaint, IconTools, IconTrash, IconWand
 } from '../../components/Icons'
 import { useStore } from '../../state/store'
 import type { Studio, VariantState } from '../engine'
@@ -37,6 +37,7 @@ const TOOL_ICONS: Record<string, (p: { size?: number }) => ReactNode> = {
   edit_mask: IconLasso,
   generate_image: IconSparkle,
   generative_fill: IconWand,
+  paint: IconPaint,
   undo: IconRefresh,
   report_missing_feature: IconFlag
 }

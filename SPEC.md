@@ -207,6 +207,47 @@ and turned into the layer's own frame, so a rotated layer still casts downwards.
 Documents saved with a single `shadow`, `glow` or `stroke` load as one-entry stacks and the old
 key is dropped. The tools keep the singular names as shorthand for the first entry.
 
+### Shapes and gradients
+
+Shapes are rectangles, ellipses, free polygons, stars, arrows and speech bubbles. Every shape can
+carry a **line** — a vector stroke on its own outline, optionally dashed — and a fill can be
+switched off, so rings, frames and outlined arrows are first-class instead of faked with two
+layers. Polygons, stars and arrows round their corners by a roundness amount; at full roundness
+anchor points become a smooth curve. Gradients are linear, radial or conic and take any number of
+colour stops; two colours stay as from/to and a third turns the ramp into a stop list.
+
+### Distortion
+
+Every layer can be distorted: skew, perspective and free distort are all one set of four corner
+offsets, and Photoshop-style warps (arc, arch, bulge, flag, wave, rise) bend it on top. The four
+inspector sliders are orthogonal views of the same corners, so one never undoes another, and the
+Distort tool drags the corners directly on the canvas. Distortion bends the layer's content
+*before* its effects, so outlines and shadows trace the bent shape at an even width. It is drawn
+as a fine triangle mesh, and masks, selections and paint strokes are carried back through the
+inverse so they land where the creator sees them.
+
+### Text
+
+Text can **wrap** to a width, or with **shrink to fit** keep one line and scale down until it fits
+that width. It can follow an **arc** — the widest line sweeping the given degrees, glyphs kept
+upright, a gradient still running across the whole word. Single words can be **styled** with
+their own colour, size, font, weight, italic and lift; styles index the stored text, asterisks
+included, so `*highlight*` marks and styles coexist.
+
+### Selections and painting
+
+The Select tool makes a canvas-wide selection by box, ellipse, lasso, magic wand (touching
+pixels of a similar colour) or colour range (every such pixel), combined Photoshop-style — Shift
+adds, Alt subtracts, both intersect. It can be feathered, grown, shrunk, smoothed and inverted,
+then used to keep or hide that area on the selected layer's mask, copied into a new layer, or
+filled. Escape drops it. A selection is a working aid: it is not saved and not part of undo.
+
+The Paint tool paints on an image or a transparent **paint layer** with a brush, eraser, clone
+stamp or healing brush (clone matched to the tone where it lands), with size, hardness and
+opacity; Alt-click sets the clone source, and an active selection confines the stroke. Each
+stroke saves a new version of the layer's pixels, so undo steps back through them. Mask edges can
+also be grown, shrunk, smoothed and hardened — the refine-edge pass for cut-outs.
+
 Render caches are keyed so that moving a clip source rebuilds only the clip, never the layer
 content underneath it. `npm run test:render` composites these cases in an offscreen Electron
 window and compares the pixels

@@ -190,6 +190,14 @@ export function ColorField({
   )
 }
 
+export function Swatch({ value, onChange, title }: { value: string; onChange: (v: string) => void; title: string }): ReactNode {
+  return (
+    <label className={s.swatch} style={{ '--swatch': value } as CSSProperties} title={title}>
+      <input type="color" value={splitAlpha(value).hex} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  )
+}
+
 export function Segmented<T extends string>({
   value,
   options,

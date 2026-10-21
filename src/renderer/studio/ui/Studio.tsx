@@ -21,6 +21,7 @@ import { LayersPanel } from './LayersPanel'
 import { ReportsButton } from './Reports'
 import { SpendPill } from './Spend'
 import { Stage } from './Stage'
+import { DEFAULT_OPTIONS } from './Stage'
 import type { Tool, ToolOptions } from './Stage'
 import { Strip } from './Strip'
 import { ToolBar, ToolOptionsBar } from './ToolBar'
@@ -29,7 +30,8 @@ import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
 
 const SHORTCUTS: Record<string, Tool> = {
-  v: 'move', t: 'text', r: 'rect', e: 'ellipse', p: 'pen', l: 'lasso', b: 'brush', c: 'cut', g: 'fill'
+  v: 'move', t: 'text', r: 'rect', e: 'ellipse', p: 'pen', l: 'lasso', b: 'brush', c: 'cut', g: 'fill',
+  m: 'select', n: 'paint', d: 'distort'
 }
 
 function typing(): boolean {
@@ -42,7 +44,7 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
   const studio = useMemo(() => openStudio(project), [project])
   const state = useSyncExternalStore(studio.subscribe, studio.getState)
   const [tool, setTool] = useState<Tool>('move')
-  const [options, setOptions] = useState<ToolOptions>({ brush: 24, maskShow: false, glowPen: true })
+  const [options, setOptions] = useState<ToolOptions>(DEFAULT_OPTIONS)
   const [generating, setGenerating] = useState(false)
   const [focusText, setFocusText] = useState<string | null>(null)
   const [pendingBox, setPendingBox] = useState<Box | null>(null)
@@ -121,7 +123,8 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
         const moved = variant.doc.layers.filter((l) => ids.includes(l.id)).map((l) => [l.id, [l.x + dx, l.y + dy]])
         studio.place(v, Object.fromEntries(moved), 'nudge')
       } else if (key === 'escape') {
-        if (tool !== 'move') setTool('move')
+        if (studio.selectionOf(v)) studio.setSelection(v, null)
+        else if (tool !== 'move') setTool('move')
         else studio.select(v, null)
       } else if (!e.ctrlKey && !e.altKey && SHORTCUTS[key]) setTool(SHORTCUTS[key])
       else return
@@ -189,7 +192,15 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
         <div className={s.center}>
           {variant ? (
             <>
-              <ToolOptionsBar tool={tool} options={options} setOptions={setOptions} selected={selected} />
+              <ToolOptionsBar
+                tool={tool}
+                options={options}
+                setOptions={setOptions}
+                selected={selected}
+                studio={studio}
+                variantId={variant.id}
+                setTool={setTool}
+              />
               <LayerMenu studio={studio} variant={variant}>
                 <div className={s.menuHost}>
                   <Stage
@@ -197,6 +208,7 @@ export default function Studio({ project, onBack }: { project: StudioProject; on
                     variant={variant}
                     tool={tool}
                     options={options}
+                    setOptions={setOptions}
                     setTool={setTool}
                     onBox={onBox}
                     onTextCreated={setFocusText}

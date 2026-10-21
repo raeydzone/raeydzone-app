@@ -85,6 +85,22 @@ export class Studio {
     if (persist && this.state.ready) this.scheduleSave()
   }
 
+  // A selection is a working aid, not document content: it is neither saved nor undone, and
+  // it belongs to the version it was drawn on.
+  private selections = new Map<string, HTMLCanvasElement>()
+  selectionRev = 0
+
+  selectionOf(variantId: string): HTMLCanvasElement | null {
+    return this.selections.get(variantId) ?? null
+  }
+
+  setSelection(variantId: string, sel: HTMLCanvasElement | null): void {
+    if (sel) this.selections.set(variantId, sel)
+    else this.selections.delete(variantId)
+    this.selectionRev++
+    this.set({ tick: this.state.tick + 1 }, false)
+  }
+
   private setVariant(id: string, fn: (v: VariantState) => VariantState, persist = true): void {
     this.set({ variants: this.state.variants.map((v) => (v.id === id ? fn(v) : v)) }, persist)
   }

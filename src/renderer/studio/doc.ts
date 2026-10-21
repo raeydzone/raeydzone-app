@@ -1,7 +1,10 @@
-import { BLEND_MODES, CANVAS_H, CANVAS_W, STROKE_POSITIONS } from '@shared/studio'
+import {
+  BLEND_MODES, CANVAS_H, CANVAS_W, GRADIENT_TYPES, SHAPES, STROKE_POSITIONS, WARP_STYLES
+} from '@shared/studio'
 import type {
-  Adjust, AssetInfo, BlendMode, Clip, Glow, Gradient, ImageLayer, Layer, LayerGroup, Outline,
-  Shadow, ShapeLayer, StrokePosition, StudioDoc, TextLayer, Tint
+  Adjust, AssetInfo, BlendMode, Clip, Corners, Glow, Gradient, GradientStop, GradientType, ImageLayer,
+  Layer, LayerGroup, Line, Outline, Shadow, ShapeKind, ShapeLayer, StrokePosition, StudioDoc,
+  TextLayer, TextStyle, Tint, Warp, WarpStyle
 } from '@shared/studio'
 import { findFont } from './fonts'
 import { measureText } from './text'
@@ -13,7 +16,9 @@ const EFFECT_DEFAULTS = {
   glow: { color: '#ff2a2a', opacity: 0.9, size: 32, inner: false } as Glow,
   stroke: { color: '#ffffff', width: 8, opacity: 1, position: 'outside' } as Outline,
   tint: { color: '#ff1a1a', amount: 0.35 } as Tint,
-  gradient: { type: 'radial', from: '#ff2a2a', to: '#00000000', angle: 90 } as Gradient
+  gradient: { type: 'radial', from: '#ff2a2a', to: '#00000000', angle: 90, stops: [] } as Gradient,
+  line: { color: '#ffffff', width: 6, opacity: 1, dash: 0 } as Line,
+  warp: { style: 'arch', bend: 0.3 } as Warp
 }
 
 export const effectDefault = <K extends keyof typeof EFFECT_DEFAULTS>(
@@ -46,15 +51,39 @@ export function normalizeDoc(doc: StudioDoc): StudioDoc {
       const old = { shadow, glow, stroke }
       const stack = <T,>(name: StackName, list: T[] | undefined): T[] =>
         list ?? (old[name] ? [old[name] as T] : [])
-      return {
+      const common = {
         ...rest,
         group: l.group ?? null,
         mask: l.mask ?? null,
         clip: l.clip ?? null,
+        corners: l.corners ?? null,
+        warp: l.warp ?? null,
         shadows: stack<Shadow>('shadow', l.shadows).map((e) => ({ ...EFFECT_DEFAULTS.shadow, ...e })),
         glows: stack<Glow>('glow', l.glows).map((e) => ({ ...EFFECT_DEFAULTS.glow, ...e })),
         strokes: stack<Outline>('stroke', l.strokes).map((e) => ({ ...EFFECT_DEFAULTS.stroke, ...e }))
+      } as Layer
+      const ramp = (g: Gradient | null): Gradient | null => (g ? { ...g, stops: g.stops ?? [] } : null)
+      if (common.kind === 'text') {
+        return {
+          ...common,
+          gradient: ramp(common.gradient),
+          wrap: common.wrap ?? null,
+          fit: common.fit ?? false,
+          arc: common.arc ?? 0,
+          styles: common.styles ?? []
+        }
       }
+      if (common.kind === 'shape') {
+        return {
+          ...common,
+          gradient: ramp(common.gradient),
+          line: common.line ?? null,
+          sides: common.sides ?? 5,
+          inset: common.inset ?? 0.5,
+          smooth: common.smooth ?? 0
+        }
+      }
+      return common
     })
   })
 }
@@ -89,7 +118,9 @@ function base(doc: StudioDoc, name: string) {
     tint: null,
     adjust: { ...NEUTRAL },
     mask: null,
-    clip: null
+    clip: null,
+    corners: null,
+    warp: null
   }
 }
 
@@ -126,22 +157,34 @@ export function makeText(doc: StudioDoc, text = 'YOUR TEXT'): TextLayer {
     highlight: '#ff2a2a',
     align: 'center',
     letterSpacing: 0,
-    lineHeight: 1
+    lineHeight: 1,
+    wrap: null,
+    fit: false,
+    arc: 0,
+    styles: []
   }
   const box = measureText(layer)
   return { ...layer, ...box, x: Math.round((doc.width - box.width) / 2), y: Math.round((doc.height - box.height) / 2) }
 }
 
-export function makeShape(doc: StudioDoc, shape: ShapeLayer['shape'] = 'rect'): ShapeLayer {
+const SHAPE_NAMES: Record<ShapeKind, string> = {
+  rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Shape', star: 'Star', arrow: 'Arrow', bubble: 'Speech bubble'
+}
+
+export function makeShape(doc: StudioDoc, shape: ShapeKind = 'rect'): ShapeLayer {
   return {
-    ...base(doc, shape === 'polygon' ? 'Shape' : shape === 'ellipse' ? 'Ellipse' : 'Rectangle'),
+    ...base(doc, SHAPE_NAMES[shape]),
     kind: 'shape',
     shape,
     fill: '#ff2a2a',
     gradient: null,
-    radius: 0,
+    radius: shape === 'bubble' ? 36 : 0,
     feather: 0,
     points: [],
+    line: null,
+    sides: 5,
+    inset: shape === 'arrow' ? 0.45 : 0.5,
+    smooth: 0,
     x: doc.width / 2 - 150,
     y: doc.height / 2 - 100,
     width: 300,
@@ -177,7 +220,9 @@ function mergeEffect<T extends object>(
     const sample = (fallback as Record<string, unknown>)[k]
     if (typeof sample === 'number') next[k] = asNumber(v, `${key}.${k}`)
     else if (typeof sample === 'boolean') next[k] = !!v
-    else if (k === 'type') next[k] = v === 'linear' ? 'linear' : 'radial'
+    else if (k === 'type') next[k] = oneOf(GRADIENT_TYPES, v, `${key}.type`) as GradientType
+    else if (k === 'style') next[k] = oneOf(WARP_STYLES, v, `${key}.style`) as WarpStyle
+    else if (k === 'stops') next[k] = asStops(v, `${key}.stops`)
     else if (k === 'position') {
       if (!STROKE_POSITIONS.includes(v as StrokePosition)) {
         throw new Error(`${key}.position must be one of ${STROKE_POSITIONS.join(', ')}`)
@@ -189,6 +234,58 @@ function mergeEffect<T extends object>(
     if (typeof next[k] === 'number') next[k] = clamp(next[k] as number, 0, 1)
   }
   return next as T
+}
+
+function oneOf<T extends string>(list: readonly T[], v: unknown, key: string): T {
+  if (!list.includes(v as T)) throw new Error(`${key} must be one of ${list.join(', ')}`)
+  return v as T
+}
+
+// A ramp of colour stops; a single stop is no gradient at all, so two is the floor.
+function asStops(v: unknown, key: string): GradientStop[] {
+  if (!Array.isArray(v)) throw new Error(`${key} must be a list of { at, color }`)
+  if (v.length === 0) return []
+  if (v.length < 2 || v.length > 16) throw new Error(`${key} needs 2 to 16 stops`)
+  return v
+    .map((s, i) => {
+      const o = (s ?? {}) as Record<string, unknown>
+      return { at: clamp(asNumber(o.at, `${key}[${i}].at`), 0, 1), color: asColor(o.color, `${key}[${i}].color`) }
+    })
+    .sort((a, b) => a.at - b.at)
+}
+
+function asCorners(v: unknown): Corners | null {
+  if (v === null || v === false) return null
+  if (!Array.isArray(v) || v.length !== 4) throw new Error('corners must be four [dx, dy] offsets: top-left, top-right, bottom-right, bottom-left')
+  const out = v.map((p, i) => {
+    if (!Array.isArray(p)) throw new Error(`corners[${i}] must be [dx, dy]`)
+    return [asNumber(p[0], `corners[${i}][0]`), asNumber(p[1], `corners[${i}][1]`)] as [number, number]
+  }) as Corners
+  return out.every(([x, y]) => x === 0 && y === 0) ? null : out
+}
+
+function asStyles(v: unknown): TextStyle[] {
+  if (v === null) return []
+  if (!Array.isArray(v)) throw new Error('styles must be a list of { start, end, ... }')
+  return v.map((s, i) => {
+    const o = (s ?? {}) as Record<string, unknown>
+    const key = `styles[${i}]`
+    const style: TextStyle = {
+      start: Math.max(0, Math.round(asNumber(o.start, key + '.start'))),
+      end: Math.max(0, Math.round(asNumber(o.end, key + '.end')))
+    }
+    if (o.fill !== undefined) style.fill = asColor(o.fill, key + '.fill')
+    if (o.scale !== undefined) style.scale = clamp(asNumber(o.scale, key + '.scale'), 0.2, 5)
+    if (o.weight !== undefined) style.weight = clamp(Math.round(asNumber(o.weight, key + '.weight') / 100) * 100, 100, 900)
+    if (o.italic !== undefined) style.italic = !!o.italic
+    if (o.rise !== undefined) style.rise = asNumber(o.rise, key + '.rise')
+    if (o.font !== undefined) {
+      const font = findFont(String(o.font))
+      if (!font) throw new Error(`Font "${o.font}" is not installed. Call list_fonts for what is available.`)
+      style.font = font.name
+    }
+    return style
+  })
 }
 
 // A stack can be set as a list, or one entry at a time through the singular name.
@@ -207,12 +304,15 @@ function mergeStack<T extends object>(
 const COMMON = new Set([
   'name', 'x', 'y', 'width', 'height', 'rotation', 'flipX', 'flipY', 'opacity', 'blend',
   'visible', 'locked', 'shadow', 'shadows', 'glow', 'glows', 'stroke', 'strokes', 'tint',
-  'adjust', 'clip'
+  'adjust', 'clip', 'corners', 'warp'
 ])
 const BY_KIND: Record<Layer['kind'], Set<string>> = {
   image: new Set(),
-  text: new Set(['text', 'font', 'size', 'weight', 'italic', 'uppercase', 'fill', 'gradient', 'highlight', 'align', 'letterSpacing', 'lineHeight']),
-  shape: new Set(['shape', 'fill', 'gradient', 'radius', 'feather', 'points'])
+  text: new Set([
+    'text', 'font', 'size', 'weight', 'italic', 'uppercase', 'fill', 'gradient', 'highlight', 'align',
+    'letterSpacing', 'lineHeight', 'wrap', 'fit', 'arc', 'styles'
+  ]),
+  shape: new Set(['shape', 'fill', 'gradient', 'radius', 'feather', 'points', 'line', 'sides', 'inset', 'smooth'])
 }
 
 export interface PatchResult {
@@ -251,7 +351,20 @@ export function patchLayer(layer: Layer, patch: Record<string, unknown>): PatchR
         next[key] = value === 'left' || value === 'right' ? value : 'center'
         break
       case 'shape':
-        next[key] = value === 'ellipse' || value === 'polygon' ? value : 'rect'
+        next[key] = SHAPES.includes(value as ShapeKind) ? value : 'rect'
+        break
+      case 'corners':
+        next.corners = asCorners(value)
+        break
+      case 'styles':
+        next.styles = asStyles(value)
+        break
+      case 'wrap':
+        next.wrap = value === null || value === false ? null : Math.max(20, asNumber(value, 'wrap'))
+        break
+      case 'line':
+      case 'warp':
+        next[key] = mergeEffect(next[key] as object | null, value, EFFECT_DEFAULTS[key], key)
         break
       case 'flipX':
       case 'flipY':
@@ -259,6 +372,7 @@ export function patchLayer(layer: Layer, patch: Record<string, unknown>): PatchR
       case 'locked':
       case 'italic':
       case 'uppercase':
+      case 'fit':
         next[key] = !!value
         break
       case 'fill':
@@ -345,7 +459,15 @@ export function patchLayer(layer: Layer, patch: Record<string, unknown>): PatchR
   if (layer.kind === 'shape') {
     next.feather = clamp(next.feather as number, 0, 400)
     next.radius = Math.max(0, next.radius as number)
+    next.sides = clamp(Math.round(next.sides as number), 3, 24)
+    next.inset = clamp(next.inset as number, 0.05, 0.95)
+    next.smooth = clamp(next.smooth as number, 0, 1)
+    const line = next.line as Line | null
+    if (line) next.line = { ...line, width: clamp(line.width, 0.5, 200), dash: Math.max(0, line.dash) }
   }
+  if (layer.kind === 'text') next.arc = clamp(next.arc as number, -360, 360)
+  const warp = next.warp as Warp | null
+  if (warp) next.warp = { ...warp, bend: clamp(warp.bend, -1, 1) }
 
   let result = next as unknown as Layer
   if (result.kind === 'text') result = fitText(layer as TextLayer, result, patch)

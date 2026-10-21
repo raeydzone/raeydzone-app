@@ -11,8 +11,10 @@ const result = path.join(work, 'result.json')
 
 const ENTRY = [
   "import { run } from '@tests/render/cases'",
+  "import { runBundle } from '@tests/render/bundle'",
   'const page = window as unknown as { report: (text: string) => void }',
-  'void run()',
+  'void Promise.all([run(), runBundle()])',
+  '  .then((groups) => groups.flat())',
   '  .then((cases) => page.report(JSON.stringify(cases)))',
   '  .catch((err: Error) =>',
   '    page.report(',

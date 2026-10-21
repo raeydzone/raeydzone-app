@@ -1,5 +1,6 @@
 import { closestAspect, imageModel } from '@shared/studio'
 import type { AssetInfo, ImageLayer, ImageRequest, ImageResult, ImageTask, Layer } from '@shared/studio'
+import { dilate, erode, smoothEdge, steepen } from './alpha'
 import { canvas, copyOf, ctx2d, decode, encode } from './assets'
 import { findLayer, makeImage } from './doc'
 import type { Studio } from './engine'
@@ -25,7 +26,7 @@ function imageLayer(studio: Studio, variantId: string, layerId: string): ImageLa
 
 // An image layer's mask lives in the source image's pixels; text and shapes have no
 // source, so theirs is the layer box and stretches with it.
-async function maskCanvasFor(
+export async function maskCanvasFor(
   studio: Studio,
   layer: Layer
 ): Promise<{ width: number; height: number; scale: number }> {
@@ -56,7 +57,7 @@ function padToAspect(src: HTMLCanvasElement, aspects: string[]): { padded: HTMLC
   return { padded, ox, oy, aspect: label }
 }
 
-async function saveMask(studio: Studio, variantId: string, layer: Layer, mask: HTMLCanvasElement | null): Promise<void> {
+export async function saveMask(studio: Studio, variantId: string, layer: Layer, mask: HTMLCanvasElement | null): Promise<void> {
   let maskId: string | null = null
   if (mask) {
     const info = await studio.assets.addCanvas(mask, layer.name + ' mask', 'mask')
@@ -151,6 +152,18 @@ export async function editMask(
       break
     case 'feather':
       result = featherMask(mask, Math.max(1, radius) * scale)
+      break
+    case 'grow':
+      result = dilate(mask, Math.max(0.5, radius) * scale)
+      break
+    case 'shrink':
+      result = erode(mask, Math.max(0.5, radius) * scale)
+      break
+    case 'smooth':
+      result = smoothEdge(mask, Math.max(1, radius) * scale)
+      break
+    case 'harden':
+      result = steepen(mask, 0.8)
       break
     case 'hide_polygon':
     case 'show_polygon':

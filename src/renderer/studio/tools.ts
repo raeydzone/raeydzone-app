@@ -1,4 +1,5 @@
-import type { Layer, StudioDoc, ToolReply, Variant } from '@shared/studio'
+import { SHAPES } from '@shared/studio'
+import type { Layer, ShapeKind, StudioDoc, ToolReply, Variant } from '@shared/studio'
 import { canvas, ctx2d, copyOf, encode, toBase64 } from './assets'
 import { cutOut, editMask, generateAsset, generativeFill, placeAsset } from './ai'
 import type { Box } from './ai'
@@ -11,6 +12,8 @@ import type { Pt } from './mask'
 import { fontFamilies } from './fonts'
 import { bringAssets, importLayers, openSource } from './library'
 import type { Source } from './library'
+import { newPaintLayer, paint } from './paint'
+import type { PaintMode } from './paint'
 import { loadDocAssets, renderDoc } from './render'
 
 type Args = Record<string, unknown>
@@ -296,10 +299,10 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
 
     case 'add_shape': {
       checkClip(studio.doc(v), args)
-      const kind = args.shape === 'ellipse' || args.shape === 'polygon' ? args.shape : 'rect'
+      const kind = SHAPES.includes(args.shape as ShapeKind) ? (args.shape as ShapeKind) : 'rect'
       const { layer, ignored } = patchLayer(makeShape(studio.doc(v), kind), props(args))
       studio.addLayer(v, layer, typeof args.below_layer_id === 'string' ? args.below_layer_id : null, true)
-      return { reply: patchSummary(layer, ignored), summary: `Added ${kind === 'polygon' ? 'a shape' : 'an ' + kind}` }
+      return { reply: patchSummary(layer, ignored), summary: `Added ${layer.name.toLowerCase()}` }
     }
 
     case 'update_layer': {
@@ -395,6 +398,29 @@ export async function executeTool(studio: Studio, v: string, name: string, args:
       const points = Array.isArray(args.points) ? (args.points as Pt[]) : []
       await editMask(studio, v, id, action, points, Number(args.radius) || 20)
       return { reply: { text: `Mask on ${id}: ${action} done.` }, summary: `Mask · ${action.replace('_', ' ')}` }
+    }
+
+    case 'paint': {
+      const mode = (['brush', 'erase', 'clone', 'heal'] as PaintMode[]).find((m) => m === args.mode)
+      if (!mode) throw new Error('mode must be brush, erase, clone or heal')
+      const points = Array.isArray(args.points) ? (args.points as Pt[]) : []
+      const given = typeof args.layer_id === 'string' && args.layer_id ? args.layer_id : null
+      const id = given ?? (await newPaintLayer(studio, v)).id
+      const num = (key: string, fallback: number): number => (args[key] === undefined ? fallback : Number(args[key]))
+      // The creator's own selection is a tool in their hands; it must not silently clip Claude's strokes.
+      await paint(studio, v, id, {
+        mode,
+        points,
+        radius: num('radius', 16),
+        color: typeof args.color === 'string' ? asColor(args.color, 'color') : '#ffffff',
+        opacity: num('opacity', 1),
+        hardness: num('hardness', 0.7),
+        source: Array.isArray(args.source) ? (args.source as Pt) : null
+      }, null)
+      return {
+        reply: { text: `Painted (${mode}) on ${id}${given ? '' : ', a new paint layer'}. Check it with view_canvas.` },
+        summary: `Painted · ${mode}`
+      }
     }
 
     case 'generate_image': {

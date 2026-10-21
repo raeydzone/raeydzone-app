@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { BLEND_MODES } from '@shared/studio'
-import type { Glow, Gradient, Layer, Outline, Shadow, ShapeLayer, TextLayer } from '@shared/studio'
+import { BLEND_MODES, WARP_STYLES } from '@shared/studio'
+import type {
+  Glow, Gradient, GradientStop, Layer, Outline, Shadow, ShapeKind, ShapeLayer, TextLayer, TextStyle, WarpStyle
+} from '@shared/studio'
 import { Toggle } from '../../components/Bits'
 import { useStore } from '../../state/store'
 import { cutOut, editMask } from '../ai'
@@ -11,6 +13,8 @@ import { WEIGHT_NAMES, findFont, nearestWeight } from '../fonts'
 import type { Studio } from '../engine'
 import { ColorField, NumField, Section, Segmented, SliderField } from './fields'
 import { FontPicker } from './FontPicker'
+import { presetAmount, withPreset } from '../warp'
+import type { CornerPreset } from '../warp'
 import type { Tool } from './Stage'
 import k from '../../styles/soft.module.css'
 import s from './studio.module.css'
@@ -150,7 +154,123 @@ function TextSection({ layer, patch, focus }: { layer: TextLayer; patch: Patch; 
       </div>
       <SliderField label="Letter spacing" value={layer.letterSpacing} min={-20} max={60} unit="px" onChange={(v) => patch({ letterSpacing: v }, 'ls')} />
       <SliderField label="Line height" value={layer.lineHeight} min={0.6} max={2} step={0.01} onChange={(v) => patch({ lineHeight: v }, 'lh')} />
+      <div className={s.rowGap}>
+        <Toggle checked={layer.wrap !== null} onChange={(on) => patch({ wrap: on ? Math.round(layer.width) : null, fit: on && layer.fit })} label="Wrap" />
+        {layer.wrap !== null && <Toggle checked={layer.fit} onChange={(fit) => patch({ fit })} label="Shrink to fit" />}
+      </div>
+      {layer.wrap !== null && (
+        <NumField label={layer.fit ? 'Fit width' : 'Wrap width'} value={layer.wrap} onChange={(wrap) => patch({ wrap }, 'wrap')} />
+      )}
+      <SliderField label="Arc" value={layer.arc} min={-360} max={360} unit="°" onChange={(arc) => patch({ arc }, 'arc')} />
+      <WordStyles layer={layer} patch={patch} />
     </Section>
+  )
+}
+
+// Words as they sit in the stored text, so their offsets index it directly, stars included.
+function wordsOf(text: string): { start: number; end: number; label: string }[] {
+  const out: { start: number; end: number; label: string }[] = []
+  const re = /[^\s*]+/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) out.push({ start: m.index, end: m.index + m[0].length, label: m[0] })
+  return out
+}
+
+function WordStyles({ layer, patch }: { layer: TextLayer; patch: Patch }): ReactNode {
+  const [picked, setPicked] = useState<number | null>(null)
+  const words = wordsOf(layer.text)
+  const word = picked !== null ? words[picked] : undefined
+  const style = word ? layer.styles.find((st) => st.start === word.start && st.end === word.end) : undefined
+  const write = (next: Partial<TextStyle> | null, key?: string): void => {
+    if (!word) return
+    const rest = layer.styles.filter((st) => st !== style)
+    const merged = next ? { ...(style ?? { start: word.start, end: word.end }), ...next } : null
+    patch({ styles: merged ? [...rest, merged] : rest }, key)
+  }
+  if (!words.length) return null
+  return (
+    <div className={s.effect}>
+      <span className={s.fieldLabel}>Style a word</span>
+      <div className={s.wordChips}>
+        {words.map((w, i) => {
+          const styled = layer.styles.some((st) => st.start === w.start && st.end === w.end)
+          return (
+            <button
+              key={w.start}
+              className={`${s.wordChip} ${picked === i ? s.wordChipOn : ''} ${styled ? s.wordChipStyled : ''}`}
+              onClick={() => setPicked(picked === i ? null : i)}
+            >
+              {w.label}
+            </button>
+          )
+        })}
+      </div>
+      {word && (
+        <div className={s.effectBody}>
+          <ColorField label="Colour" value={style?.fill ?? layer.fill} onChange={(fill) => write({ fill }, 'wf' + word.start)} />
+          <SliderField label="Size" value={Math.round((style?.scale ?? 1) * 100)} min={30} max={300} unit="%" onChange={(v) => write({ scale: v / 100 }, 'ws' + word.start)} />
+          <SliderField label="Lift" value={style?.rise ?? 0} min={-120} max={120} unit="px" onChange={(rise) => write({ rise }, 'wr' + word.start)} />
+          <div className={s.rowGap}>
+            <Toggle checked={style?.italic ?? layer.italic} onChange={(italic) => write({ italic })} label="Italic" />
+            {style && (
+              <button className={s.linkBtn} onClick={() => write(null)}>
+                Clear this word
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Two colours edit as from/to; the first added stop turns the ramp into an explicit list,
+// and dropping back to two folds it into from/to again.
+function GradientStops({ value, patch }: { value: Gradient; patch: Patch }): ReactNode {
+  const stops = value.stops
+  const write = (next: GradientStop[], key?: string): void => {
+    if (next.length > 2) return patch({ gradient: { stops: next } }, key)
+    const [a, b] = [...next].sort((x, y) => x.at - y.at)
+    patch({ gradient: { stops: [], from: a.color, to: b.color } }, key)
+  }
+  const ramp = stops.length >= 2 ? stops : [{ at: 0, color: value.from }, { at: 1, color: value.to }]
+  const add = (): void => {
+    const sorted = [...ramp].sort((x, y) => x.at - y.at)
+    let gap = 0
+    for (let i = 1; i < sorted.length; i++) if (sorted[i].at - sorted[i - 1].at > sorted[gap + 1].at - sorted[gap].at) gap = i - 1
+    const at = (sorted[gap].at + sorted[gap + 1].at) / 2
+    patch({ gradient: { stops: [...sorted, { at, color: sorted[gap].color }] } })
+  }
+  if (stops.length < 2) {
+    return (
+      <>
+        <div className={s.grid2}>
+          <ColorField label="From" alpha value={value.from} onChange={(from) => patch({ gradient: { from } }, 'gfrom')} />
+          <ColorField label="To" alpha value={value.to} onChange={(to) => patch({ gradient: { to } }, 'gto')} />
+        </div>
+        <button className={s.linkBtn} onClick={add}>
+          + Add a colour
+        </button>
+      </>
+    )
+  }
+  return (
+    <>
+      {stops.map((stop, i) => (
+        <div key={i} className={s.stopRow}>
+          <ColorField label={'Colour ' + (i + 1)} alpha value={stop.color} onChange={(color) => write(stops.map((x, j) => (j === i ? { ...x, color } : x)), 'gc' + i)} />
+          <SliderField label="At" value={Math.round(stop.at * 100)} min={0} max={100} unit="%" onChange={(v) => write(stops.map((x, j) => (j === i ? { ...x, at: v / 100 } : x)), 'ga' + i)} />
+          <button className={s.effectDrop} title="Remove this colour" onClick={() => write(stops.filter((_, j) => j !== i))}>
+            Remove
+          </button>
+        </div>
+      ))}
+      {stops.length < 16 && (
+        <button className={s.linkBtn} onClick={add}>
+          + Add a colour
+        </button>
+      )}
+    </>
   )
 }
 
@@ -165,16 +285,17 @@ function GradientFields({ value, fallback, patch, onDefault }: {
     <>
       {value ? (
         <>
-          <div className={s.grid2}>
-            <ColorField label="From" alpha value={value.from} onChange={(from) => patch({ gradient: { from } }, 'gfrom')} />
-            <ColorField label="To" alpha value={value.to} onChange={(to) => patch({ gradient: { to } }, 'gto')} />
-          </div>
+          <GradientStops value={value} patch={patch} />
           <Segmented
             value={value.type}
             onChange={(type) => patch({ gradient: { type } })}
-            options={[{ id: 'radial', label: 'Radial' }, { id: 'linear', label: 'Linear' }]}
+            options={[
+              { id: 'radial', label: 'Radial' },
+              { id: 'linear', label: 'Linear' },
+              { id: 'conic', label: 'Conic', title: 'Sweeps round the centre' }
+            ]}
           />
-          {value.type === 'linear' && (
+          {value.type !== 'radial' && (
             <SliderField label="Angle" value={value.angle} min={0} max={360} unit="°" onChange={(angle) => patch({ gradient: { angle } }, 'gangle')} />
           )}
         </>
@@ -186,30 +307,143 @@ function GradientFields({ value, fallback, patch, onDefault }: {
   )
 }
 
+const SHAPE_LABELS: Record<ShapeKind, string> = {
+  rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', star: 'Star', arrow: 'Arrow', bubble: 'Speech bubble'
+}
+
+const isHollow = (l: ShapeLayer): boolean =>
+  !l.gradient && (l.fill === 'transparent' || /^#[0-9a-f]{6}00$/i.test(l.fill) || /^#[0-9a-f]{3}0$/i.test(l.fill))
+
 function ShapeSection({ layer, patch }: { layer: ShapeLayer; patch: Patch }): ReactNode {
+  const kinds = (Object.keys(SHAPE_LABELS) as ShapeKind[]).filter((id) => id !== 'polygon' || layer.points.length >= 3)
+  const hollow = isHollow(layer)
+  const line = layer.line
   return (
     <Section title="Shape">
-      <Segmented
-        value={layer.shape}
-        onChange={(shape) => patch({ shape })}
-        options={[
-          { id: 'rect', label: 'Rectangle' },
-          { id: 'ellipse', label: 'Ellipse' },
-          ...(layer.points.length >= 3 ? [{ id: 'polygon' as const, label: 'Polygon' }] : [])
-        ]}
+      <MenuSelect
+        wide
+        align="start"
+        trigger={
+          <span className={s.pillGrow}>
+            <span className={s.pillDim}>Kind</span> {SHAPE_LABELS[layer.shape]}
+          </span>
+        }
+        groups={[{
+          title: 'Shape',
+          value: layer.shape,
+          options: kinds.map((id) => ({ id, label: SHAPE_LABELS[id] })),
+          onChange: (shape) => patch({ shape })
+        }]}
       />
-      <GradientFields
-        value={layer.gradient}
-        patch={patch}
-        onDefault={{}}
-        fallback={<ColorField label="Fill" alpha value={layer.fill} onChange={(fill) => patch({ fill }, 'fill')} />}
-      />
-      {layer.shape === 'rect' && (
+      {layer.shape === 'star' && (
+        <>
+          <SliderField label="Points" value={layer.sides} min={3} max={24} onChange={(sides) => patch({ sides }, 'sides')} />
+          <SliderField label="Inner size" value={Math.round(layer.inset * 100)} min={5} max={95} unit="%" onChange={(v) => patch({ inset: v / 100 }, 'inset')} />
+        </>
+      )}
+      {layer.shape === 'arrow' && (
+        <SliderField label="Shaft" value={Math.round(layer.inset * 100)} min={5} max={95} unit="%" onChange={(v) => patch({ inset: v / 100 }, 'inset')} />
+      )}
+      {layer.shape === 'bubble' && (
+        <SliderField label="Tail" value={Math.round(layer.inset * 100)} min={5} max={95} unit="%" onChange={(v) => patch({ inset: v / 100 }, 'inset')} />
+      )}
+      {(layer.shape === 'polygon' || layer.shape === 'star' || layer.shape === 'arrow') && (
+        <SliderField label="Roundness" value={Math.round(layer.smooth * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ smooth: v / 100 }, 'smooth')} />
+      )}
+      {(layer.shape === 'rect' || layer.shape === 'bubble') && (
         <SliderField label="Corner radius" value={layer.radius} min={0} max={200} unit="px" onChange={(radius) => patch({ radius }, 'radius')} />
       )}
+
+      <Toggle
+        checked={!hollow}
+        onChange={(on) => patch(on ? { fill: '#ff2a2a' } : { fill: 'transparent', gradient: null })}
+        label="Fill"
+      />
+      {!hollow && (
+        <GradientFields
+          value={layer.gradient}
+          patch={patch}
+          onDefault={{}}
+          fallback={<ColorField label="Fill" alpha value={layer.fill} onChange={(fill) => patch({ fill }, 'fill')} />}
+        />
+      )}
+
+      <div className={s.effect}>
+        <Toggle checked={!!line} onChange={(on) => patch({ line: on ? {} : null })} label="Line" />
+        {line && (
+          <div className={s.effectBody}>
+            <ColorField label="Colour" value={line.color} onChange={(color) => patch({ line: { color } }, 'lc')} />
+            <SliderField label="Width" value={line.width} min={1} max={60} unit="px" onChange={(width) => patch({ line: { width } }, 'lw')} />
+            <SliderField label="Dashes" value={line.dash} min={0} max={80} unit="px" onChange={(dash) => patch({ line: { dash } }, 'ld')} />
+            <SliderField label="Opacity" value={Math.round(line.opacity * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ line: { opacity: v / 100 } }, 'lo')} />
+          </div>
+        )}
+      </div>
       <SliderField label="Feather" value={layer.feather} min={0} max={200} unit="px" onChange={(feather) => patch({ feather }, 'feather')} />
     </Section>
   )
+}
+
+const PRESETS: { kind: CornerPreset; label: string }[] = [
+  { kind: 'skewX', label: 'Skew horizontal' },
+  { kind: 'skewY', label: 'Skew vertical' },
+  { kind: 'perspectiveX', label: 'Perspective sideways' },
+  { kind: 'perspectiveY', label: 'Perspective upwards' }
+]
+
+const WARP_LABELS: Record<WarpStyle, string> = {
+  arc: 'Arc', arch: 'Arch', bulge: 'Bulge', flag: 'Flag', wave: 'Wave', rise: 'Rise'
+}
+
+function DistortSection({ layer, patch, setTool }: { layer: Layer; patch: Patch; setTool: (t: Tool) => void }): ReactNode {
+  const warp = layer.warp
+  const changed = !!layer.corners || !!warp
+  return (
+    <Section
+      title="Distort"
+      aside={changed ? <button className={s.linkBtn} onClick={() => patch({ corners: null, warp: null })}>Reset</button> : null}
+    >
+      {PRESETS.map((pr) => (
+        <SliderField
+          key={pr.kind}
+          label={pr.label}
+          value={Math.round(presetAmount(pr.kind, layer.corners, layer.width, layer.height) * 100)}
+          min={-100}
+          max={100}
+          unit="%"
+          onChange={(v) => patch({ corners: withPreset(pr.kind, v / 100, layer.corners, layer.width, layer.height) }, 'c-' + pr.kind)}
+        />
+      ))}
+      <button className={k.btn} onClick={() => setTool('distort')}>
+        Drag the corners
+      </button>
+      <MenuSelect
+        wide
+        align="start"
+        trigger={
+          <span className={s.pillGrow}>
+            <span className={s.pillDim}>Warp</span> {warp ? WARP_LABELS[warp.style] : 'None'}
+          </span>
+        }
+        groups={[{
+          title: 'Warp',
+          value: warp?.style ?? 'none',
+          options: [{ id: 'none', label: 'None' }, ...WARP_STYLES.map((id) => ({ id, label: WARP_LABELS[id] }))],
+          onChange: (style) => patch({ warp: style === 'none' ? null : { style } })
+        }]}
+      />
+      {warp && (
+        <SliderField label="Bend" value={Math.round(warp.bend * 100)} min={-100} max={100} unit="%" onChange={(v) => patch({ warp: { bend: v / 100 } }, 'bend')} />
+      )}
+    </Section>
+  )
+}
+
+const EDGE_TITLES = {
+  grow: 'Push the mask edge outwards',
+  shrink: 'Pull the edge in — drops a leftover halo',
+  smooth: 'Round off jagged corners',
+  harden: 'Snap a soft, smeary edge clean'
 }
 
 function MaskSection({
@@ -277,7 +511,20 @@ function MaskSection({
           Invert
         </button>
       </div>
-      <SliderField label="Feather amount" value={feather} min={1} max={40} unit="px" onChange={setFeather} />
+      <SliderField label="Edge amount" value={feather} min={1} max={40} unit="px" onChange={setFeather} />
+      <div className={s.rowGap}>
+        {(['grow', 'shrink', 'smooth', 'harden'] as const).map((op) => (
+          <button
+            key={op}
+            className={`${s.miniBtn} ${s.grow}`}
+            disabled={!!busy || !layer.mask}
+            title={EDGE_TITLES[op]}
+            onClick={() => void run(op, () => editMask(studio, variantId, layer.id, op, [], feather))}
+          >
+            {op.charAt(0).toUpperCase() + op.slice(1)}
+          </button>
+        ))}
+      </div>
       <div className={s.rowGap}>
         <button
           className={`${k.btn} ${s.grow}`}
@@ -452,6 +699,7 @@ export function Inspector({
 
       {layer.kind === 'text' && <TextSection layer={layer} patch={patch} focus={focusText} />}
       {layer.kind === 'shape' && <ShapeSection layer={layer} patch={patch} />}
+      <DistortSection layer={layer} patch={patch} setTool={setTool} />
       <MaskSection studio={studio} variantId={variantId} layer={layer} setTool={setTool} />
       <ClipSection studio={studio} variantId={variantId} layer={layer} patch={patch} />
 

@@ -8,6 +8,15 @@ export const BLEND_MODES = [
 ] as const
 export type BlendMode = (typeof BLEND_MODES)[number]
 
+export const SHAPES = ['rect', 'ellipse', 'polygon', 'star', 'arrow', 'bubble'] as const
+export type ShapeKind = (typeof SHAPES)[number]
+
+export const WARP_STYLES = ['arc', 'arch', 'bulge', 'flag', 'wave', 'rise'] as const
+export type WarpStyle = (typeof WARP_STYLES)[number]
+
+export const GRADIENT_TYPES = ['linear', 'radial', 'conic'] as const
+export type GradientType = (typeof GRADIENT_TYPES)[number]
+
 export const BUNDLED_FONTS = [
   'Montserrat', 'Anton', 'Bebas Neue', 'Oswald', 'Archivo Black', 'Luckiest Guy', 'Bangers'
 ] as const
@@ -47,11 +56,45 @@ export interface Clip {
   feather: number
 }
 
+export interface GradientStop {
+  at: number
+  color: string
+}
+
+// from/to are the two-colour case; stops, when present, are the whole ramp.
 export interface Gradient {
-  type: 'linear' | 'radial'
+  type: GradientType
   from: string
   to: string
   angle: number
+  stops: GradientStop[]
+}
+
+// Offsets of the top-left, top-right, bottom-right and bottom-left corners from where the
+// box puts them, in layer pixels. Skew, perspective and free distort are all this.
+export type Corners = [[number, number], [number, number], [number, number], [number, number]]
+
+export interface Warp {
+  style: WarpStyle
+  bend: number
+}
+
+export interface Line {
+  color: string
+  width: number
+  opacity: number
+  dash: number
+}
+
+export interface TextStyle {
+  start: number
+  end: number
+  fill?: string
+  scale?: number
+  font?: string
+  weight?: number
+  italic?: boolean
+  rise?: number
 }
 
 interface LayerBase {
@@ -76,6 +119,8 @@ interface LayerBase {
   adjust: Adjust
   mask: string | null
   clip: Clip | null
+  corners: Corners | null
+  warp: Warp | null
 }
 
 export interface ImageLayer extends LayerBase {
@@ -97,16 +142,24 @@ export interface TextLayer extends LayerBase {
   align: 'left' | 'center' | 'right'
   letterSpacing: number
   lineHeight: number
+  wrap: number | null
+  fit: boolean
+  arc: number
+  styles: TextStyle[]
 }
 
 export interface ShapeLayer extends LayerBase {
   kind: 'shape'
-  shape: 'rect' | 'ellipse' | 'polygon'
+  shape: ShapeKind
   fill: string
   gradient: Gradient | null
   radius: number
   feather: number
   points: [number, number][]
+  line: Line | null
+  sides: number
+  inset: number
+  smooth: number
 }
 
 export type Layer = ImageLayer | TextLayer | ShapeLayer
@@ -131,7 +184,7 @@ export interface AssetInfo {
   w: number
   h: number
   label: string
-  source: 'upload' | 'generated' | 'mask' | 'fill'
+  source: 'upload' | 'generated' | 'mask' | 'fill' | 'paint'
 }
 
 export type ChatItem =

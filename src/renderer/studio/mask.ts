@@ -1,6 +1,7 @@
 import type { Layer } from '@shared/studio'
 import { canvas, ctx2d } from './assets'
 import type { Pixels } from './assets'
+import { inverse, isDistorted } from './warp'
 
 export type Pt = [number, number]
 
@@ -16,18 +17,23 @@ export function baseMask(w: number, h: number, current: Pixels | null): HTMLCanv
 }
 
 // Masks live in the source image's own pixels, so a canvas point has to be carried back
-// through the layer's rotation, flip and scale before it can be painted.
+// through the layer's rotation, distortion, flip and scale before it can be painted.
 export function toSource(layer: Layer, srcW: number, srcH: number, [px, py]: Pt): Pt {
   const cx = layer.x + layer.width / 2
   const cy = layer.y + layer.height / 2
   const a = (-layer.rotation * Math.PI) / 180
   const dx = px - cx
   const dy = py - cy
-  let lx = dx * Math.cos(a) - dy * Math.sin(a)
-  let ly = dx * Math.sin(a) + dy * Math.cos(a)
-  if (layer.flipX) lx = -lx
-  if (layer.flipY) ly = -ly
-  return [((lx + layer.width / 2) / layer.width) * srcW, ((ly + layer.height / 2) / layer.height) * srcH]
+  let bx = dx * Math.cos(a) - dy * Math.sin(a) + layer.width / 2
+  let by = dx * Math.sin(a) + dy * Math.cos(a) + layer.height / 2
+  if (isDistorted(layer)) {
+    const [u, v] = inverse(layer, layer.width, layer.height)(bx, by)
+    bx = u * layer.width
+    by = v * layer.height
+  }
+  if (layer.flipX) bx = layer.width - bx
+  if (layer.flipY) by = layer.height - by
+  return [(bx / layer.width) * srcW, (by / layer.height) * srcH]
 }
 
 export function sourceScale(layer: Layer, srcW: number): number {

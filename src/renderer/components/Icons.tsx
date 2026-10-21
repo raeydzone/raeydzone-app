@@ -199,3 +199,12 @@ export const IconLayers = ({ size = 14 }: Props): ReactNode =>
 
 export const IconPencil = ({ size = 16 }: Props): ReactNode =>
   base(size, <><path d="M4 20h4l11-11-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></>)
+
+export const IconMarquee = ({ size = 18 }: Props): ReactNode =>
+  base(size, <path d="M4 7V4h3M10 4h4M17 4h3v3M20 10v4M20 17v3h-3M14 20h-4M7 20H4v-3M4 14v-4" />)
+
+export const IconPaint = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M14.5 4.5 19.5 9.5 11 18a3 3 0 0 1-4.2 0l-.8-.8a3 3 0 0 1 0-4.2z" /><path d="M6 18.5c-.5 1.5-1.6 2-3 2 0-1.6.6-2.6 2-3.2" /></>)
+
+export const IconDistort = ({ size = 18 }: Props): ReactNode =>
+  base(size, <><path d="M5 6 19 3l-2 15L4 20z" /><circle cx="5" cy="6" r="1.4" /><circle cx="19" cy="3" r="1.4" /><circle cx="17" cy="18" r="1.4" /><circle cx="4" cy="20" r="1.4" /></>)

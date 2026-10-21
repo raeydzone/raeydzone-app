@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { DragEvent, PointerEvent, ReactNode } from 'react'
-import type { Layer, ShapeLayer } from '@shared/studio'
+import type { Corners, Layer, ShapeLayer } from '@shared/studio'
 import { useStore } from '../../state/store'
 import { editMask, placeAsset } from '../ai'
 import type { Box } from '../ai'
@@ -9,15 +9,62 @@ import { boundsOf, makeShape, makeText, patchLayer, refitText, scaleLayer } from
 import type { Bounds } from '../doc'
 import type { Studio, VariantState } from '../engine'
 import type { Pt } from '../mask'
-import { drawDoc, hitLayer, toLocal } from '../render'
+import { paint } from '../paint'
+import type { PaintMode } from '../paint'
+import { drawDoc, hitLayer, renderDoc, toLocal } from '../render'
+import { boxSelection, colorSelection, combine, lassoSelection, selectionOverlay } from '../selection'
+import type { Combine, SelectShape } from '../selection'
+import { forward } from '../warp'
 import s from './studio.module.css'
 
-export type Tool = 'move' | 'text' | 'rect' | 'ellipse' | 'pen' | 'lasso' | 'brush' | 'cut' | 'fill'
+export type Tool =
+  | 'move' | 'text' | 'rect' | 'ellipse' | 'pen' | 'lasso' | 'brush' | 'cut' | 'fill'
+  | 'select' | 'paint' | 'distort'
 
 export interface ToolOptions {
   brush: number
   maskShow: boolean
   glowPen: boolean
+  selectShape: SelectShape
+  tolerance: number
+  paintMode: PaintMode
+  paintColor: string
+  paintSize: number
+  hardness: number
+  paintOpacity: number
+  cloneSource: Pt | null
+}
+
+export const DEFAULT_OPTIONS: ToolOptions = {
+  brush: 24,
+  maskShow: false,
+  glowPen: true,
+  selectShape: 'rect',
+  tolerance: 32,
+  paintMode: 'brush',
+  paintColor: '#ffffff',
+  paintSize: 18,
+  hardness: 0.7,
+  paintOpacity: 1,
+  cloneSource: null
+}
+
+// Photoshop's modifiers: Shift adds to the selection, Alt takes away, both keep the overlap.
+function combineFrom(e: { shiftKey: boolean; altKey: boolean }): Combine {
+  if (e.shiftKey && e.altKey) return 'intersect'
+  if (e.shiftKey) return 'add'
+  if (e.altKey) return 'subtract'
+  return 'replace'
+}
+
+function cornerPoints(l: Layer): Pt[] {
+  const f = forward(l, l.width, l.height)
+  const a = rad(l.rotation)
+  return ([[0, 0], [1, 0], [1, 1], [0, 1]] as Pt[]).map(([u, v]) => {
+    const [x, y] = f(u, v)
+    const [rx, ry] = rotate([x - l.width / 2, y - l.height / 2], a)
+    return [l.x + l.width / 2 + rx, l.y + l.height / 2 + ry]
+  })
 }
 
 type Drag =
@@ -27,8 +74,10 @@ type Drag =
   | { kind: 'rotate'; id: string; orig: Layer }
   | { kind: 'scale'; hx: number; hy: number; box: Bounds; orig: Layer[] }
   | { kind: 'anchor'; id: string; index: number; pts: Pt[] }
-  | { kind: 'box'; from: Pt; to: Pt }
+  | { kind: 'box'; from: Pt; to: Pt; mode: Combine }
   | { kind: 'brush'; id: string; pts: Pt[] }
+  | { kind: 'paint'; id: string; pts: Pt[] }
+  | { kind: 'corner'; id: string; index: number; orig: Layer }
 
 const HANDLES: [number, number][] = [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]]
 const rad = (deg: number): number => (deg * Math.PI) / 180
@@ -81,6 +130,7 @@ export function Stage({
   variant,
   tool,
   options,
+  setOptions,
   setTool,
   onBox,
   onTextCreated
@@ -89,6 +139,7 @@ export function Stage({
   variant: VariantState
   tool: Tool
   options: ToolOptions
+  setOptions: (o: ToolOptions) => void
   setTool: (t: Tool) => void
   onBox: (tool: 'cut' | 'fill', box: Box) => void
   onTextCreated: (id: string) => void
@@ -103,7 +154,9 @@ export function Stage({
   const [poly, setPoly] = useState<Pt[]>([])
   const [pointer, setPointer] = useState<Pt | null>(null)
   const [hover, setHover] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const selRef = useRef<HTMLCanvasElement>(null)
+  const lassoMode = useRef<Combine>('replace')
   const [dropping, setDropping] = useState(false)
   const tick = studio.state.tick
   const scale = size.w / doc.width
@@ -137,6 +190,31 @@ export function Stage({
     return () => cancelAnimationFrame(id)
   }, [doc, tick, studio])
 
+  const marked = studio.selectionOf(v)
+  useEffect(() => {
+    const c = selRef.current
+    if (!c) return
+    const g = c.getContext('2d')!
+    g.clearRect(0, 0, c.width, c.height)
+    if (!marked) return
+    const css = getComputedStyle(document.documentElement)
+    g.drawImage(selectionOverlay(marked, css.getPropertyValue('--scrim').trim(), css.getPropertyValue('--accent-hot').trim()), 0, 0)
+  }, [marked, studio.selectionRev])
+
+  const work = async (label: string, fn: () => Promise<unknown>): Promise<void> => {
+    setBusy(label)
+    try {
+      await fn()
+    } catch (err) {
+      notify((err as Error).message, 'bad')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const select = (shape: HTMLCanvasElement, mode: Combine): void =>
+    studio.setSelection(v, combine(studio.selectionOf(v), shape, mode))
+
   useEffect(() => setPoly([]), [tool, v])
 
   const at = (e: { clientX: number; clientY: number }): Pt => {
@@ -150,15 +228,13 @@ export function Stage({
     return null
   }
 
-  const runMask = async (id: string, action: string, pts: Pt[], radius?: number): Promise<void> => {
-    setBusy(true)
-    try {
-      await editMask(studio, v, id, action, pts, radius)
-    } catch (err) {
-      notify((err as Error).message, 'bad')
-    } finally {
-      setBusy(false)
-    }
+  const runMask = (id: string, action: string, pts: Pt[], radius?: number): Promise<void> =>
+    work('Updating mask…', () => editMask(studio, v, id, action, pts, radius))
+
+  const paintTarget = (): string | null => {
+    if (selected?.kind === 'image') return selected.id
+    notify('Select an image or paint layer first — or add a paint layer', 'bad')
+    return null
   }
 
   const finishPoly = (pts: Pt[]): void => {
@@ -180,7 +256,7 @@ export function Stage({
     } else if (tool === 'lasso') {
       const id = maskTarget()
       if (id) void runMask(id, options.maskShow ? 'show_polygon' : 'hide_polygon', pts)
-    }
+    } else if (tool === 'select') select(lassoSelection(doc, pts), lassoMode.current)
   }
 
   useEffect(() => {
@@ -203,6 +279,44 @@ export function Stage({
     svgRef.current!.setPointerCapture(e.pointerId)
     const handle = (e.target as Element).getAttribute('data-handle')
 
+    if (tool === 'distort') {
+      if (handle?.startsWith('c') && selected && !selected.locked) {
+        setDrag({ kind: 'corner', id: selected.id, index: Number(handle.slice(1)), orig: selected })
+        return
+      }
+      const target = hitLayer(doc, studio.assets, p[0], p[1])
+      if (target) studio.select(v, target.id)
+      return
+    }
+    if (tool === 'select') {
+      const mode = combineFrom(e)
+      if (options.selectShape === 'wand' || options.selectShape === 'color') {
+        const contiguous = options.selectShape === 'wand'
+        void work('Selecting…', async () => {
+          select(colorSelection(renderDoc(doc, studio.assets), p[0], p[1], options.tolerance, contiguous), mode)
+        })
+        return
+      }
+      if (options.selectShape === 'lasso') {
+        if (!poly.length) lassoMode.current = mode
+        const first = poly[0]
+        if (first && poly.length >= 3 && Math.hypot(first[0] - p[0], first[1] - p[1]) < 10 * unit) finishPoly(poly)
+        else if (e.detail >= 2 && poly.length >= 3) finishPoly(poly)
+        else setPoly((pts) => [...pts, p])
+        return
+      }
+      setDrag({ kind: 'box', from: p, to: p, mode })
+      return
+    }
+    if (tool === 'paint') {
+      if (e.altKey && (options.paintMode === 'clone' || options.paintMode === 'heal')) {
+        setOptions({ ...options, cloneSource: p })
+        return
+      }
+      const id = paintTarget()
+      if (id) setDrag({ kind: 'paint', id, pts: [p] })
+      return
+    }
     if (tool === 'move') {
       if (handle?.startsWith('m') && multi.length) {
         const [hx, hy] = handle.slice(1).split(',').map(Number)
@@ -262,7 +376,7 @@ export function Stage({
       if (id) setDrag({ kind: 'brush', id, pts: [p] })
       return
     }
-    setDrag({ kind: 'box', from: p, to: p })
+    setDrag({ kind: 'box', from: p, to: p, mode: 'replace' })
   }
 
   const move = (e: PointerEvent<SVGSVGElement>): void => {
@@ -285,9 +399,16 @@ export function Stage({
       case 'resize': {
         const o = drag.orig
         const box = resized(o, drag.hx, drag.hy, p, e.shiftKey || o.kind === 'shape')
-        if (o.kind === 'text') {
+        if (o.kind === 'text' && o.wrap && !o.fit && drag.hx && !drag.hy) {
+          studio.patch(v, drag.id, { wrap: box.width, x: box.x, width: box.width }, 'resize')
+        } else if (o.kind === 'text') {
           const k = box.width / o.width
-          studio.patch(v, drag.id, { size: Math.max(6, o.size * k), x: box.x, y: box.y }, 'resize')
+          studio.patch(v, drag.id, {
+            size: Math.max(6, o.size * k),
+            x: box.x,
+            y: box.y,
+            ...(o.wrap ? { wrap: o.wrap * k } : {})
+          }, 'resize')
         } else studio.patch(v, drag.id, { ...box }, 'resize')
         break
       }
@@ -316,9 +437,20 @@ export function Stage({
       case 'marquee':
         setDrag({ ...drag, to: p })
         break
-      case 'brush': {
+      case 'brush':
+      case 'paint': {
         const last = drag.pts[drag.pts.length - 1]
         if (Math.hypot(last[0] - p[0], last[1] - p[1]) > 2 * unit) setDrag({ ...drag, pts: [...drag.pts, p] })
+        break
+      }
+      case 'corner': {
+        const o = drag.orig
+        const [lx, ly] = rotate([p[0] - (o.x + o.width / 2), p[1] - (o.y + o.height / 2)], -rad(o.rotation))
+        const home: Pt = [[0, 0], [1, 0], [1, 1], [0, 1]][drag.index].map((t, i) => t * (i ? o.height : o.width)) as Pt
+        const corners = (o.corners ?? [[0, 0], [0, 0], [0, 0], [0, 0]]).map((c, i) =>
+          i === drag.index ? [Math.round(lx + o.width / 2 - home[0]), Math.round(ly + o.height / 2 - home[1])] : c
+        ) as Corners
+        studio.patch(v, drag.id, { corners }, 'corner')
       }
     }
   }
@@ -329,6 +461,19 @@ export function Stage({
     if (!d) return
     if (d.kind === 'brush') {
       void runMask(d.id, options.maskShow ? 'show_brush' : 'hide_brush', d.pts, options.brush)
+      return
+    }
+    if (d.kind === 'paint') {
+      const stroke = {
+        mode: options.paintMode,
+        points: d.pts,
+        radius: options.paintSize,
+        color: options.paintColor,
+        opacity: options.paintOpacity,
+        hardness: options.hardness,
+        source: options.cloneSource
+      }
+      void work('Painting…', () => paint(studio, v, d.id, stroke, studio.selectionOf(v)))
       return
     }
     if (d.kind === 'marquee') {
@@ -342,6 +487,12 @@ export function Stage({
     if (d.kind !== 'box') return
     const box = normBox(d.from, d.to)
     const tiny = box.width < 6 || box.height < 6
+    if (tool === 'select') {
+      if (tiny) {
+        if (d.mode === 'replace') studio.setSelection(v, null)
+      } else select(boxSelection(doc, box, options.selectShape === 'ellipse'), d.mode)
+      return
+    }
     if (tool === 'rect' || tool === 'ellipse') {
       const shape = makeShape(doc, tool)
       const placed = tiny ? { x: d.from[0] - 150, y: d.from[1] - 100, width: 300, height: 200 } : box
@@ -378,6 +529,8 @@ export function Stage({
   const touched = variant.touched ? doc.layers.find((l) => l.id === variant.touched!.id) : null
   const hovered = hover && hover !== selected?.id ? doc.layers.find((l) => l.id === hover) : null
   const box = drag?.kind === 'box' || drag?.kind === 'marquee' ? normBox(drag.from, drag.to) : null
+  const stroke = drag?.kind === 'paint' ? drag : null
+  const ellipseBox = tool === 'select' && options.selectShape === 'ellipse'
   const others = doc.layers.filter((l) => l.id !== selected?.id && variant.picked.includes(l.id))
   const drawing = tool !== 'move'
 
@@ -394,6 +547,7 @@ export function Stage({
     >
       <div className={`${s.stage} ${dropping ? s.stageDrop : ''}`} style={{ width: size.w, height: size.h }}>
         <canvas ref={canvasRef} className={s.stageCanvas} width={doc.width} height={doc.height} />
+        <canvas ref={selRef} className={s.stageCanvas} width={doc.width} height={doc.height} />
         <svg
           ref={svgRef}
           className={`${s.overlay} ${drawing ? s.overlayDraw : ''}`}
@@ -411,7 +565,9 @@ export function Stage({
             setPointer(null)
             setHover(null)
           }}
-          onDoubleClick={() => (tool === 'pen' || tool === 'lasso') && poly.length >= 3 && finishPoly(poly)}
+          onDoubleClick={() =>
+            (tool === 'pen' || tool === 'lasso' || tool === 'select') && poly.length >= 3 && finishPoly(poly)
+          }
         >
           {hovered && tool === 'move' && outline(hovered, s.hoverBox)}
           <AnimatePresence>
@@ -429,7 +585,11 @@ export function Stage({
           {others.map((l) => <g key={l.id}>{outline(l, s.selBox)}</g>)}
           {selected && <SelectionFrame layer={selected} hs={hs} unit={unit} editing={tool === 'move' && !multi.length} />}
           {tool === 'move' && multi.length > 0 && <MultiFrame box={boundsOf(multi)} hs={hs} />}
-          {box && <rect className={tool === 'fill' || tool === 'cut' ? s.aiBox : s.dragBox} {...box} />}
+          {box && !ellipseBox && <rect className={tool === 'fill' || tool === 'cut' ? s.aiBox : s.dragBox} {...box} />}
+          {box && ellipseBox && (
+            <ellipse className={s.dragBox} cx={box.x + box.width / 2} cy={box.y + box.height / 2} rx={box.width / 2} ry={box.height / 2} />
+          )}
+          {tool === 'distort' && selected && <DistortFrame layer={selected} hs={hs} />}
           {poly.length > 0 && (
             <>
               <polyline className={s.polyLine} points={[...poly, ...(pointer ? [pointer] : [])].map((q) => q.join(',')).join(' ')} />
@@ -446,10 +606,42 @@ export function Stage({
             />
           )}
           {tool === 'brush' && pointer && <circle className={s.brushCursor} cx={pointer[0]} cy={pointer[1]} r={options.brush} />}
+          {stroke && (
+            <polyline
+              className={s.paintStroke}
+              stroke={options.paintMode === 'brush' ? options.paintColor : undefined}
+              strokeWidth={options.paintSize * 2}
+              opacity={options.paintOpacity}
+              points={stroke.pts.map((q) => q.join(',')).join(' ')}
+            />
+          )}
+          {tool === 'paint' && pointer && (
+            <circle className={s.brushCursor} cx={pointer[0]} cy={pointer[1]} r={options.paintSize} />
+          )}
+          {tool === 'paint' && options.cloneSource && (options.paintMode === 'clone' || options.paintMode === 'heal') && (
+            <g className={s.cloneMark} transform={`translate(${options.cloneSource[0]} ${options.cloneSource[1]})`}>
+              <circle r={hs} />
+              <line x1={-hs * 1.6} x2={hs * 1.6} y1={0} y2={0} />
+              <line y1={-hs * 1.6} y2={hs * 1.6} x1={0} x2={0} />
+            </g>
+          )}
         </svg>
-        {busy && <div className={s.stageBusy}>Updating mask…</div>}
+        {busy && <div className={s.stageBusy}>{busy}</div>}
       </div>
     </div>
+  )
+}
+
+function DistortFrame({ layer, hs }: { layer: Layer; hs: number }): ReactNode {
+  const pts = cornerPoints(layer)
+  return (
+    <g>
+      <polygon className={s.selBox} points={pts.map((q) => q.join(',')).join(' ')} />
+      {!layer.locked &&
+        pts.map((q, i) => (
+          <circle key={i} className={s.cornerHandle} data-handle={'c' + i} cx={q[0]} cy={q[1]} r={hs / 1.5} />
+        ))}
+    </g>
   )
 }
 

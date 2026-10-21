@@ -1,4 +1,6 @@
-import { BLEND_MODES, BUNDLED_FONTS, CANVAS_H, CANVAS_W, STROKE_POSITIONS } from './studio'
+import {
+  BLEND_MODES, BUNDLED_FONTS, CANVAS_H, CANVAS_W, GRADIENT_TYPES, SHAPES, STROKE_POSITIONS, WARP_STYLES
+} from './studio'
 
 type Schema = Record<string, unknown>
 
@@ -77,6 +79,23 @@ const common: Record<string, Schema> = {
   shadow: nullable(shadowItem, 'Shorthand that edits the first entry of shadows; null clears them all.'),
   glow: nullable(glowItem, 'Shorthand that edits the first entry of glows; null clears them all.'),
   stroke: nullable(strokeItem, 'Shorthand that edits the first entry of strokes; null clears them all.'),
+  corners: nullable(
+    {
+      type: 'array',
+      items: point,
+      minItems: 4,
+      maxItems: 4,
+      description: 'Offsets in layer px of the top-left, top-right, bottom-right and bottom-left corners from where the box puts them.'
+    },
+    'Free distort: skew moves the top and bottom corners opposite ways, perspective pinches one side. The content is bent before effects, so outlines stay even. null resets it.'
+  ),
+  warp: nullable(
+    obj({
+      style: { type: 'string', enum: [...WARP_STYLES] },
+      bend: num('-1 to 1. Negative flips the direction.')
+    }, ['style']),
+    'Photoshop-style warp: arch bends the whole layer, arc only its top edge, bulge swells the middle, flag and wave ripple it, rise climbs to the right. Great on headlines. null removes it.'
+  ),
   tint: nullable(
     obj({ color: color('Tint colour.'), amount: num('0 to 1.') }),
     'Washes the layer with a colour, keeping its shape. null removes it.'
@@ -101,11 +120,17 @@ const common: Record<string, Schema> = {
 
 const gradient = (description: string): Schema => nullable(
   obj({
-    type: { type: 'string', enum: ['linear', 'radial'] },
+    type: { type: 'string', enum: [...GRADIENT_TYPES], description: 'conic sweeps round the centre like a clock hand.' },
     from: color('Start colour (centre for radial).'),
     to: color('End colour (edge for radial). Use a transparent colour like #00000000 to fade out.'),
-    angle: num('Linear direction in degrees, 90 is top to bottom.')
-  }, ['type', 'from', 'to']),
+    angle: num('Direction in degrees for linear (90 is top to bottom) and the start of a conic sweep.'),
+    stops: {
+      type: 'array',
+      items: obj({ at: num('Position 0 to 1 along the ramp.'), color: color('Colour at that position.') }, ['at', 'color']),
+      maxItems: 16,
+      description: 'Any number of colours from 2 up, replacing from/to — e.g. a fire ramp or a chrome sheen. [] goes back to from/to.'
+    }
+  }),
   description
 )
 
@@ -121,14 +146,43 @@ const textProps: Record<string, Schema> = {
   highlight: color('Colour for *highlighted* words.'),
   align: { type: 'string', enum: ['left', 'center', 'right'] },
   letterSpacing: num('Extra spacing between letters px.'),
-  lineHeight: num('Line height as a multiple of size, e.g. 0.95.')
+  lineHeight: num('Line height as a multiple of size, e.g. 0.95.'),
+  wrap: nullable(num('Width px'), 'Wrap the text to this width — the box keeps that width and words flow onto new lines. null turns wrapping off.'),
+  fit: bool('With wrap set: instead of wrapping, shrink the type until every line fits the wrap width. The size is then the largest it may get.'),
+  arc: num('Bends the text along a circle: the widest line sweeps this many degrees, -360 to 360. Positive arcs like a rainbow, negative like a smile. Glyphs stay undistorted; for squashing letters into a shape use warp instead.'),
+  styles: {
+    type: 'array',
+    items: obj({
+      start: num('First character, counted in the text exactly as stored — asterisks included.'),
+      end: num('One past the last character.'),
+      fill: color('Colour for this stretch.'),
+      scale: num('Size relative to the layer size, e.g. 1.6 for a word that punches out.'),
+      font: str('Another installed font for this stretch.'),
+      weight: num('100 to 900.'),
+      italic: bool('Italic.'),
+      rise: num('Lifts the stretch above the baseline by this many px; negative sinks it.')
+    }, ['start', 'end']),
+    description: 'Per-character styling: give one word its own colour, size, font or lift. Later entries win where they overlap. [] clears them.'
+  }
 }
 
 const shapeProps: Record<string, Schema> = {
-  shape: { type: 'string', enum: ['rect', 'ellipse', 'polygon'] },
-  fill: color('Fill colour.'),
+  shape: { type: 'string', enum: [...SHAPES], description: 'arrow points right — rotate the layer to aim it; bubble is a speech bubble with its tail bottom-left — flip it to move the tail.' },
+  fill: color('Fill colour. "transparent" leaves only the line, for rings, frames and outlined arrows.'),
   gradient: gradient('Gradient fill, overrides fill. null for a solid fill.'),
-  radius: num('Corner radius px for rect.'),
+  radius: num('Corner radius px for rect and bubble.'),
+  line: nullable(
+    obj({
+      color: color('Line colour.'),
+      width: num('Line width px.'),
+      opacity: num('0 to 1.'),
+      dash: num('Dash length px; 0 is a solid line.')
+    }),
+    'A vector line drawn along the shape outline itself, centred on the edge. With a transparent fill it makes hollow shapes: a red ring around a face, a frame, a dashed circle. null removes it.'
+  ),
+  sides: num('Number of points on a star, 3 to 24.'),
+  inset: num('0.05 to 0.95: a star\'s inner radius, an arrow\'s shaft thickness, a bubble\'s tail size.'),
+  smooth: num('0 to 1: rounds the corners of polygons, stars and arrows; 1 turns anchor points into a smooth curve.'),
   feather: num('Softens the edge by this many px — high values turn a shape into a soft light or shadow blob.'),
   points: points('Polygon anchor points in canvas pixels, [[x, y], ...]. Setting them recomputes the box.')
 }
@@ -175,7 +229,7 @@ export const STUDIO_TOOLS: ToolDef[] = [
   },
   {
     name: 'add_shape',
-    description: 'Adds a rectangle, ellipse or polygon. Use polygons with points as anchor points to draw a manual glow or light shape: give it a bright fill, a large feather and blend "screen" or "color-dodge" and put it behind or over the subject. Use a full-canvas rect with a radial gradient for vignettes and colour washes.',
+    description: 'Adds a rectangle, ellipse, polygon, star, arrow or speech bubble. Use polygons with points as anchor points to draw a manual glow or light shape: give it a bright fill, a large feather and blend "screen" or "color-dodge" and put it behind or over the subject; smooth turns the anchors into curves. Use a full-canvas rect with a radial gradient for vignettes and colour washes, and a transparent fill with a line for rings and frames.',
     inputSchema: obj({ ...shapeProps, ...common, below_layer_id: str('Insert under this layer.') }, ['shape'])
   },
   {
@@ -281,10 +335,10 @@ export const STUDIO_TOOLS: ToolDef[] = [
   },
   {
     name: 'edit_mask',
-    description: 'Manual mask editing on any layer — image, text or shape — exactly like a human with a lasso and brush. Coordinates are canvas pixels. hide_polygon / show_polygon hide or reveal the area inside the anchor points; hide_brush / show_brush paint along a path; feather softens edges; invert swaps shown and hidden; reset removes the mask. For clipping one layer to the shape of another, use clip on update_layer instead.',
+    description: 'Manual mask editing on any layer — image, text or shape — exactly like a human with a lasso and brush. Coordinates are canvas pixels. hide_polygon / show_polygon hide or reveal the area inside the anchor points; hide_brush / show_brush paint along a path; feather softens edges; invert swaps shown and hidden; reset removes the mask. Refine a cut-out edge with grow and shrink (radius px pushes the edge out or in, e.g. shrink 2 to drop a halo), smooth (rounds off jaggies) and harden (snaps a soft, smeary edge clean). For clipping one layer to the shape of another, use clip on update_layer instead.',
     inputSchema: obj({
       layer_id: str('Layer id — any kind.'),
-      action: { type: 'string', enum: ['hide_polygon', 'show_polygon', 'hide_brush', 'show_brush', 'feather', 'invert', 'reset'] },
+      action: { type: 'string', enum: ['hide_polygon', 'show_polygon', 'hide_brush', 'show_brush', 'feather', 'invert', 'grow', 'shrink', 'smooth', 'harden', 'reset'] },
       points: { type: 'array', items: point, description: 'Polygon anchors or brush path, canvas pixels.' },
       radius: num('Brush radius px, or feather amount px.')
     }, ['layer_id', 'action'])
@@ -311,6 +365,20 @@ export const STUDIO_TOOLS: ToolDef[] = [
       region: rect('Region to repaint, canvas pixels. Cover the whole object including its frame or border.'),
       keep_contents: bool('Let the model see and build on what is in the region now (smoke over the scene, light on an object). Leave off to replace it.')
     }, ['prompt', 'region'])
+  },
+  {
+    name: 'paint',
+    description: 'Paints pixels on an image layer like a human with a brush: brush lays down colour, erase removes pixels, clone copies the visible canvas from source onto the path (remove a watermark, fill a gap with surrounding texture), heal does the same but matches the colour where it lands. Points are canvas pixels along the stroke. Without layer_id a new transparent paint layer is added on top first — paint on that rather than on a photo, so the original stays untouched. Returns the layer id.',
+    inputSchema: obj({
+      layer_id: str('Image or paint layer to paint on. Omit to start a new paint layer.'),
+      mode: { type: 'string', enum: ['brush', 'erase', 'clone', 'heal'] },
+      points: { type: 'array', items: point, minItems: 1, description: 'The stroke path, canvas pixels. One point is a single dab.' },
+      radius: num('Brush radius px.'),
+      color: color('Brush colour.'),
+      opacity: num('0 to 1 for the whole stroke.'),
+      hardness: num('0 is a soft airbrush, 1 a hard-edged disc.'),
+      source: { ...point, description: 'Clone and heal: the canvas point that maps onto the first point of the stroke.' }
+    }, ['mode', 'points'])
   },
   {
     name: 'undo',
