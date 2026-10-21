@@ -12,9 +12,24 @@ export const BUNDLED_FONTS = [
   'Montserrat', 'Anton', 'Bebas Neue', 'Oswald', 'Archivo Black', 'Luckiest Guy', 'Bangers'
 ] as const
 
-export interface Shadow { color: string; opacity: number; blur: number; x: number; y: number }
-export interface Glow { color: string; opacity: number; size: number }
-export interface Outline { color: string; width: number; opacity: number }
+export const STROKE_POSITIONS = ['outside', 'center', 'inside'] as const
+export type StrokePosition = (typeof STROKE_POSITIONS)[number]
+
+export interface Shadow {
+  color: string
+  opacity: number
+  blur: number
+  x: number
+  y: number
+  inner: boolean
+}
+export interface Glow { color: string; opacity: number; size: number; inner: boolean }
+export interface Outline {
+  color: string
+  width: number
+  opacity: number
+  position: StrokePosition
+}
 export interface Tint { color: string; amount: number }
 export interface Adjust {
   brightness: number
@@ -54,9 +69,9 @@ interface LayerBase {
   visible: boolean
   locked: boolean
   group: string | null
-  shadow: Shadow | null
-  glow: Glow | null
-  stroke: Outline | null
+  shadows: Shadow[]
+  glows: Glow[]
+  strokes: Outline[]
   tint: Tint | null
   adjust: Adjust
   mask: string | null

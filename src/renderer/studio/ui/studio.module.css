@@ -1092,6 +1092,30 @@
   animation: rise var(--t-mid) var(--ease);
 }
 
+.effectHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+}
+
+.effectDrop {
+  flex: 0 0 auto;
+  padding: 0 var(--s-1);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease);
+}
+
+.effectDrop:hover {
+  color: var(--accent-hot);
+}
+
 .chat {
   display: flex;
   flex-direction: column;

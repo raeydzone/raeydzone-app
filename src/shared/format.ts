@@ -35,9 +35,9 @@ export function formatDuration(ms: number): string {
 // AI work is measured in seconds; formatDuration rounds to minutes for the day's goal.
 export function formatSpan(ms: number): string {
   const secs = Math.max(0, ms) / 1000
-  if (secs < 10) return secs.toFixed(1) + 's'
-  if (secs < 60) return Math.round(secs) + 's'
+  if (secs < 9.95) return secs.toFixed(1) + 's'
   const total = Math.round(secs)
+  if (total < 60) return total + 's'
   const m = Math.floor(total / 60)
   if (m < 60) return `${m}m ${pad(total % 60)}s`
   return `${Math.floor(m / 60)}h ${pad(m % 60)}m`

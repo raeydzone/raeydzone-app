@@ -315,7 +315,7 @@
 }
 
 .modalNote {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-dim);
   line-height: 1.5;
   margin-top: var(--s-3);

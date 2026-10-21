@@ -194,6 +194,19 @@ the clipped layer's own rotation, and a clip source is drawn without its own cli
 cannot recurse. Deleting a source clears the clips that pointed at it; duplicating a source
 together with what it clips rebinds the copy to the copy.
 
+### Effect stacks
+
+Shadows, glows and outlines are **stacks**, up to eight of each per layer. Outlines are listed
+from the content outwards and nest — a white stroke then a black one gives the classic two-tone
+thumbnail border, each ring wrapping the last — and each sits outside, inside or centred on the
+edge; an inside stroke eats into the shape and leaves its box unchanged. A shadow is a drop
+shadow or an inner shadow, a glow outer or inner. Drop shadows and outer glows are cast from the
+whole outlined silhouette, so they sit behind the strokes too. Offsets are given in canvas terms
+and turned into the layer's own frame, so a rotated layer still casts downwards.
+
+Documents saved with a single `shadow`, `glow` or `stroke` load as one-entry stacks and the old
+key is dropped. The tools keep the singular names as shorthand for the first entry.
+
 Render caches are keyed so that moving a clip source rebuilds only the clip, never the layer
 content underneath it. `npm run test:render` composites these cases in an offscreen Electron
 window and compares the pixels

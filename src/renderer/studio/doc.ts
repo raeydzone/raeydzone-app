@@ -1,7 +1,7 @@
-import { BLEND_MODES, CANVAS_H, CANVAS_W } from '@shared/studio'
+import { BLEND_MODES, CANVAS_H, CANVAS_W, STROKE_POSITIONS } from '@shared/studio'
 import type {
   Adjust, AssetInfo, BlendMode, Clip, Glow, Gradient, ImageLayer, Layer, LayerGroup, Outline,
-  Shadow, ShapeLayer, StudioDoc, TextLayer, Tint
+  Shadow, ShapeLayer, StrokePosition, StudioDoc, TextLayer, Tint
 } from '@shared/studio'
 import { findFont } from './fonts'
 import { measureText } from './text'
@@ -9,12 +9,22 @@ import { measureText } from './text'
 export const NEUTRAL: Adjust = { brightness: 100, contrast: 100, saturation: 100, hue: 0, blur: 0 }
 
 const EFFECT_DEFAULTS = {
-  shadow: { color: '#000000', opacity: 0.7, blur: 24, x: 0, y: 12 } as Shadow,
-  glow: { color: '#ff2a2a', opacity: 0.9, size: 32 } as Glow,
-  stroke: { color: '#ffffff', width: 8, opacity: 1 } as Outline,
+  shadow: { color: '#000000', opacity: 0.7, blur: 24, x: 0, y: 12, inner: false } as Shadow,
+  glow: { color: '#ff2a2a', opacity: 0.9, size: 32, inner: false } as Glow,
+  stroke: { color: '#ffffff', width: 8, opacity: 1, position: 'outside' } as Outline,
   tint: { color: '#ff1a1a', amount: 0.35 } as Tint,
   gradient: { type: 'radial', from: '#ff2a2a', to: '#00000000', angle: 90 } as Gradient
 }
+
+export const effectDefault = <K extends keyof typeof EFFECT_DEFAULTS>(
+  name: K
+): (typeof EFFECT_DEFAULTS)[K] => ({ ...EFFECT_DEFAULTS[name] })
+
+// shadow/glow/stroke each hold a stack now. The singular names stay as shorthand for the
+// first one in the stack, so a document, a tool call or a UI control written against one
+// effect keeps working.
+const STACKS = { shadow: 'shadows', glow: 'glows', stroke: 'strokes' } as const
+type StackName = keyof typeof STACKS
 
 const CLIP_DEFAULT: Clip = { from: '', mode: 'alpha', invert: false, feather: 0 }
 
@@ -26,17 +36,26 @@ export const emptyDoc = (): StudioDoc => ({
   groups: []
 })
 
-// Docs saved before groups, masks-on-anything or clipping carry none of those fields.
+// Docs saved before groups, masks on every layer, clipping or effect stacks lack those fields.
 export function normalizeDoc(doc: StudioDoc): StudioDoc {
   return tidyGroups({
     ...doc,
     groups: doc.groups ?? [],
-    layers: doc.layers.map((l) => ({
-      ...l,
-      group: l.group ?? null,
-      mask: l.mask ?? null,
-      clip: l.clip ?? null
-    }))
+    layers: doc.layers.map((l) => {
+      const { shadow, glow, stroke, ...rest } = l as Layer & Partial<Record<StackName, unknown>>
+      const old = { shadow, glow, stroke }
+      const stack = <T,>(name: StackName, list: T[] | undefined): T[] =>
+        list ?? (old[name] ? [old[name] as T] : [])
+      return {
+        ...rest,
+        group: l.group ?? null,
+        mask: l.mask ?? null,
+        clip: l.clip ?? null,
+        shadows: stack<Shadow>('shadow', l.shadows).map((e) => ({ ...EFFECT_DEFAULTS.shadow, ...e })),
+        glows: stack<Glow>('glow', l.glows).map((e) => ({ ...EFFECT_DEFAULTS.glow, ...e })),
+        strokes: stack<Outline>('stroke', l.strokes).map((e) => ({ ...EFFECT_DEFAULTS.stroke, ...e }))
+      }
+    })
   })
 }
 
@@ -64,9 +83,9 @@ function base(doc: StudioDoc, name: string) {
     visible: true,
     locked: false,
     group: null,
-    shadow: null,
-    glow: null,
-    stroke: null,
+    shadows: [],
+    glows: [],
+    strokes: [],
     tint: null,
     adjust: { ...NEUTRAL },
     mask: null,
@@ -157,8 +176,14 @@ function mergeEffect<T extends object>(
     if (!(k in fallback)) continue
     const sample = (fallback as Record<string, unknown>)[k]
     if (typeof sample === 'number') next[k] = asNumber(v, `${key}.${k}`)
+    else if (typeof sample === 'boolean') next[k] = !!v
     else if (k === 'type') next[k] = v === 'linear' ? 'linear' : 'radial'
-    else next[k] = asColor(v, `${key}.${k}`)
+    else if (k === 'position') {
+      if (!STROKE_POSITIONS.includes(v as StrokePosition)) {
+        throw new Error(`${key}.position must be one of ${STROKE_POSITIONS.join(', ')}`)
+      }
+      next[k] = v
+    } else next[k] = asColor(v, `${key}.${k}`)
   }
   for (const k of ['opacity', 'amount']) {
     if (typeof next[k] === 'number') next[k] = clamp(next[k] as number, 0, 1)
@@ -166,9 +191,23 @@ function mergeEffect<T extends object>(
   return next as T
 }
 
+// A stack can be set as a list, or one entry at a time through the singular name.
+function mergeStack<T extends object>(
+  current: T[],
+  value: unknown,
+  fallback: T,
+  key: string
+): T[] {
+  if (value === null || value === false) return []
+  const items = Array.isArray(value) ? value : [value]
+  if (items.length > 8) throw new Error(`${key} takes at most 8 entries`)
+  return items.map((item, i) => mergeEffect(current[i] ?? null, item, fallback, `${key}[${i}]`)!)
+}
+
 const COMMON = new Set([
   'name', 'x', 'y', 'width', 'height', 'rotation', 'flipX', 'flipY', 'opacity', 'blend',
-  'visible', 'locked', 'shadow', 'glow', 'stroke', 'tint', 'adjust', 'clip'
+  'visible', 'locked', 'shadow', 'shadows', 'glow', 'glows', 'stroke', 'strokes', 'tint',
+  'adjust', 'clip'
 ])
 const BY_KIND: Record<Layer['kind'], Set<string>> = {
   image: new Set(),
@@ -228,7 +267,18 @@ export function patchLayer(layer: Layer, patch: Record<string, unknown>): PatchR
         break
       case 'shadow':
       case 'glow':
-      case 'stroke':
+      case 'stroke': {
+        const stack = STACKS[key]
+        next[stack] = mergeStack(next[stack] as object[], value, EFFECT_DEFAULTS[key], key)
+        break
+      }
+      case 'shadows':
+      case 'glows':
+      case 'strokes': {
+        const one = key.slice(0, -1) as StackName
+        next[key] = mergeStack(next[key] as object[], value, EFFECT_DEFAULTS[one], key)
+        break
+      }
       case 'tint':
       case 'gradient':
         next[key] = mergeEffect(next[key] as object | null, value, EFFECT_DEFAULTS[key], key)
@@ -381,7 +431,11 @@ export const newGroupId = (doc: StudioDoc): string => {
 export function tidyGroups(doc: StudioDoc): StudioDoc {
   const used = new Set(doc.layers.map((l) => l.group))
   const known = new Set(doc.groups.map((g) => g.id))
-  const alive = new Set([...doc.layers.map((l) => l.id), ...doc.groups.map((g) => g.id)])
+  // A group emptied by this very edit is dropped below, so it no longer counts as a source.
+  const alive = new Set([
+    ...doc.layers.map((l) => l.id),
+    ...doc.groups.filter((g) => used.has(g.id)).map((g) => g.id)
+  ])
   const stray = doc.layers.some((l) => l.group && !known.has(l.group))
   const empty = doc.groups.some((g) => !used.has(g.id))
   const dangling = doc.layers.some((l) => l.clip && !alive.has(l.clip.from))
@@ -464,9 +518,9 @@ export function scaleLayer(l: Layer, k: number, ox: number, oy: number): Layer {
     y,
     width: Math.max(1, l.width * k),
     height: Math.max(1, l.height * k),
-    stroke: l.stroke && { ...l.stroke, width: px(l.stroke.width) },
-    glow: l.glow && { ...l.glow, size: px(l.glow.size) },
-    shadow: l.shadow && { ...l.shadow, blur: px(l.shadow.blur), x: l.shadow.x * k, y: l.shadow.y * k }
+    strokes: l.strokes.map((e) => ({ ...e, width: px(e.width) })),
+    glows: l.glows.map((e) => ({ ...e, size: px(e.size) })),
+    shadows: l.shadows.map((e) => ({ ...e, blur: px(e.blur), x: e.x * k, y: e.y * k }))
   } as Layer
   if (scaled.kind === 'text') return { ...scaled, size: Math.max(6, scaled.size * k) }
   if (scaled.kind === 'shape') return { ...scaled, radius: px(scaled.radius), feather: px(scaled.feather) }
@@ -504,11 +558,10 @@ export function duplicateLayers(doc: StudioDoc, ids: string[], shift = 0): { doc
     remap.set(src.id, layer.id)
   }
   // Copying a clip source together with what it clips keeps the pair self-contained.
-  const rebound = layers.map((l) =>
-    l.clip && copies.includes(l.id) && remap.has(l.clip.from)
-      ? ({ ...l, clip: { ...l.clip, from: remap.get(l.clip.from)! } } as Layer)
-      : l
-  )
+  const rebound = layers.map((l) => {
+    const from = l.clip && copies.includes(l.id) ? remap.get(l.clip.from) ?? regroup.get(l.clip.from) : undefined
+    return from ? ({ ...l, clip: { ...l.clip!, from } } as Layer) : l
+  })
   return { doc: { ...next, layers: rebound }, ids: copies }
 }
 

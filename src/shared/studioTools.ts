@@ -1,4 +1,4 @@
-import { BLEND_MODES, BUNDLED_FONTS, CANVAS_H, CANVAS_W } from './studio'
+import { BLEND_MODES, BUNDLED_FONTS, CANVAS_H, CANVAS_W, STROKE_POSITIONS } from './studio'
 
 type Schema = Record<string, unknown>
 
@@ -23,6 +23,7 @@ const nullable = (schema: Schema, description: string): Schema => ({
   description
 })
 const point = { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 }
+const stack = (item: Schema, description: string): Schema => ({ type: 'array', items: item, maxItems: 8, description })
 const ids = (description: string): Schema => ({ type: 'array', items: { type: 'string' }, description })
 const points = (description: string): Schema => ({ type: 'array', items: point, minItems: 3, description })
 const rect = (description: string): Schema => ({
@@ -31,6 +32,27 @@ const rect = (description: string): Schema => ({
     ['x', 'y', 'width', 'height']
   ),
   description
+})
+
+const shadowItem = obj({
+  color: color('Shadow colour.'),
+  opacity: num('0 to 1.'),
+  blur: num('Blur radius px.'),
+  x: num('Offset x px.'),
+  y: num('Offset y px.'),
+  inner: bool('true casts it inside the layer edge (inner shadow) instead of behind it.')
+})
+const glowItem = obj({
+  color: color('Glow colour.'),
+  opacity: num('0 to 1.'),
+  size: num('Spread px, 4 to 160.'),
+  inner: bool('true lights the inside of the edge (inner glow) instead of spilling outwards.')
+})
+const strokeItem = obj({
+  color: color('Outline colour.'),
+  width: num('Outline width px, 1 to 60.'),
+  opacity: num('0 to 1.'),
+  position: { type: 'string', enum: [...STROKE_POSITIONS], description: 'outside grows out of the shape (default), inside eats into it, center straddles the edge.' }
 })
 
 const common: Record<string, Schema> = {
@@ -46,18 +68,15 @@ const common: Record<string, Schema> = {
   blend: { type: 'string', enum: [...BLEND_MODES], description: 'Blend mode against the layers below.' },
   visible: bool('Hidden layers are not rendered.'),
   locked: bool('Locked layers cannot be dragged on the canvas by the human.'),
-  shadow: nullable(
-    obj({ color: color('Shadow colour.'), opacity: num('0 to 1.'), blur: num('Blur radius px.'), x: num('Offset x px.'), y: num('Offset y px.') }),
-    'Drop shadow following the layer shape. null removes it.'
+  shadows: stack(shadowItem, 'Shadows following the layer shape, as many as you need: a tight dark one plus a soft wide one reads as real depth. [] removes them all.'),
+  glows: stack(glowItem, 'Glows following the layer silhouette. [] removes them all.'),
+  strokes: stack(
+    strokeItem,
+    'Outlines around the layer silhouette, listed from the content outwards: [{white, 8}, {black, 10}] is the classic white-then-black thumbnail border, each ring nesting around the last. [] removes them all.'
   ),
-  glow: nullable(
-    obj({ color: color('Glow colour.'), opacity: num('0 to 1.'), size: num('Spread px, 4 to 120.') }),
-    'Automatic outer glow following the layer silhouette. null removes it.'
-  ),
-  stroke: nullable(
-    obj({ color: color('Outline colour.'), width: num('Outline width px, 1 to 40.'), opacity: num('0 to 1.') }),
-    'Outline around the layer silhouette (the classic white or black cut-out border). null removes it.'
-  ),
+  shadow: nullable(shadowItem, 'Shorthand that edits the first entry of shadows; null clears them all.'),
+  glow: nullable(glowItem, 'Shorthand that edits the first entry of glows; null clears them all.'),
+  stroke: nullable(strokeItem, 'Shorthand that edits the first entry of strokes; null clears them all.'),
   tint: nullable(
     obj({ color: color('Tint colour.'), amount: num('0 to 1.') }),
     'Washes the layer with a colour, keeping its shape. null removes it.'
@@ -151,7 +170,7 @@ export const STUDIO_TOOLS: ToolDef[] = [
   },
   {
     name: 'add_text',
-    description: 'Adds a text layer. Defaults: Montserrat 900, size 120, white, centred, no outline. Combine with stroke, shadow and glow for the bold thumbnail look.',
+    description: 'Adds a text layer. Defaults: Montserrat 900, size 120, white, centred, no outline. Combine with strokes, shadows and glows for the bold thumbnail look — stack two strokes for a white-then-black border.',
     inputSchema: obj({ ...textProps, ...common, below_layer_id: str('Insert under this layer.') }, ['text'])
   },
   {
@@ -161,7 +180,7 @@ export const STUDIO_TOOLS: ToolDef[] = [
   },
   {
     name: 'update_layer',
-    description: 'Changes any properties of a layer: position, size, rotation, opacity, blend, effects (shadow, glow, stroke, tint), clipping, adjustments, text and shape properties. Only the given properties change. Effects passed as null are removed.',
+    description: 'Changes any properties of a layer: position, size, rotation, opacity, blend, effect stacks (shadows, glows, strokes) and tint, clipping, adjustments, text and shape properties. Only the given properties change. A stack passed as a list replaces it; null or [] removes it.',
     inputSchema: obj({ layer_id: str('Layer id.'), ...common, ...textProps, ...shapeProps }, ['layer_id'])
   },
   {

@@ -1,6 +1,6 @@
 import { AssetStore, canvas, ctx2d } from '@renderer/studio/assets'
-import { emptyDoc, makeShape, patchLayer } from '@renderer/studio/doc'
-import { renderDoc } from '@renderer/studio/render'
+import { duplicateLayers, emptyDoc, groupLayers, makeShape, normalizeDoc, patchLayer, removeLayer } from '@renderer/studio/doc'
+import { hitLayer, renderDoc } from '@renderer/studio/render'
 import type { Layer, StudioDoc } from '@shared/studio'
 
 // The node test runner cannot drive the renderer: compositing needs a real canvas. These
@@ -14,9 +14,10 @@ export interface Case {
 const BG = '10,10,10'
 const RED = '255,0,0'
 const GREEN = '0,255,0'
+const WHITE = '255,255,255'
+const BLACK = '0,0,0'
 
-// The store writes every canvas it is handed through the preload bridge; here it only
-// has to remember the pixels.
+// The store persists through the preload bridge; here it only has to keep the pixels.
 ;(window as unknown as { raeydzone: unknown }).raeydzone = {
   studio: { putAsset: async (): Promise<void> => {} }
 }
@@ -81,7 +82,6 @@ export async function run(): Promise<Case[]> {
   const half = clipTo(grey, 1, grey.layers[0].id, { mode: 'luma' })
   check('luma mode turns mid-grey into half coverage', at(half, 200, 150), '5,133,5')
 
-  // Masks were an image-layer field; every kind carries one now.
   const m = canvas(200, 100)
   const mg = ctx2d(m)
   mg.fillStyle = '#fff'
@@ -91,6 +91,59 @@ export async function run(): Promise<Case[]> {
   const masked = { ...plain, layers: [{ ...plain.layers[0], mask: info.id }] }
   check('a shape keeps the painted half of its mask', at(masked, 200, 150), GREEN)
   check('a shape loses the unpainted half', at(masked, 400, 150), BG)
+
+  const solid = { name: 'S', x: 300, y: 300, width: 200, height: 100, fill: '#00ff00' }
+  const ringed = withLayers({
+    ...solid,
+    strokes: [
+      { color: '#ffffff', width: 10 },
+      { color: '#000000', width: 10 }
+    ]
+  })
+  check('the first stroke hugs the edge', at(ringed, 295, 350), WHITE)
+  check('the second stroke wraps the first', at(ringed, 285, 350), BLACK)
+  check('nothing past the outermost stroke', at(ringed, 270, 350), BG)
+
+  const inside = withLayers({ ...solid, stroke: { color: '#ff0000', width: 10, position: 'inside' } })
+  check('an inside stroke paints within the edge', at(inside, 305, 350), RED)
+  check('an inside stroke leaves the middle alone', at(inside, 340, 350), GREEN)
+  check('an inside stroke does not grow the shape', at(inside, 295, 350), BG)
+
+  const sunk = withLayers({ ...solid, shadow: { color: '#000000', opacity: 1, blur: 0, x: 0, y: 20, inner: true } })
+  check('an inner shadow darkens the edge it falls from', at(sunk, 400, 305), BLACK)
+  check('an inner shadow stays inside the shape', at(sunk, 400, 295), BG)
+  check('an inner shadow leaves the far side lit', at(sunk, 400, 380), GREEN)
+
+  const legacy = { ...plain.layers[0], strokes: undefined, stroke: { color: '#fff', width: 6, opacity: 1 } }
+  const migrated = normalizeDoc({ ...plain, layers: [legacy as unknown as Layer] }).layers[0]
+  check(
+    'a saved single stroke becomes a one-entry stack, the old key dropped',
+    `${migrated.strokes.length}:${migrated.strokes[0]?.position}:${'stroke' in migrated}`,
+    '1:outside:false'
+  )
+
+  const covered = clipTo(box, 1, a)
+  check('a clipped layer is hit where it shows', hitLayer(covered, assets, 150, 150)?.name ?? 'none', 'B')
+  check('a clipped layer lets clicks through where it is cut', hitLayer(covered, assets, 550, 150)?.name ?? 'none', 'none')
+
+  // The group is dropped in the same pass that empties it, so it cannot count as a source.
+  const trio = withLayers(
+    { name: 'A', x: 100, y: 100, width: 200, height: 200, fill: '#ff0000' },
+    { name: 'C', x: 300, y: 100, width: 200, height: 200, fill: '#ff0000' },
+    { name: 'B', x: 100, y: 100, width: 600, height: 200, fill: '#00ff00' }
+  )
+  const [first, second] = trio.layers
+  const grouped = groupLayers(trio, [first.id, second.id], 'Stencil')
+  const viaGroup = clipTo(grouped.doc, grouped.doc.layers.findIndex((l) => l.name === 'B'), grouped.group.id)
+  const clipOf = (d: StudioDoc): string => String(d.layers.find((l) => l.name === 'B')?.clip?.from ?? null)
+  const halfGone = removeLayer(viaGroup, first.id)
+  check('a clip to a group survives while the group has members', clipOf(halfGone), grouped.group.id)
+  check('a clip to a group is cleared once the group empties', clipOf(removeLayer(halfGone, second.id)), 'null')
+
+  const both = duplicateLayers(viaGroup, viaGroup.layers.map((l) => l.id))
+  const copyB = both.doc.layers.find((l) => both.ids.includes(l.id) && l.name.startsWith('B'))
+  const copyGroup = both.doc.groups.find((g) => g.id !== grouped.group.id)
+  check('duplicating a group rebinds clips aimed at it', String(copyB?.clip?.from === copyGroup?.id), 'true')
 
   return cases
 }

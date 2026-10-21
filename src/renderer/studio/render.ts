@@ -1,4 +1,6 @@
-import type { Adjust, Clip, Gradient, Layer, ShapeLayer, StudioDoc } from '@shared/studio'
+import type {
+  Adjust, Clip, Glow, Gradient, Layer, Outline, Shadow, ShapeLayer, StudioDoc
+} from '@shared/studio'
 import { canvas, ctx2d } from './assets'
 import type { AssetStore } from './assets'
 import { drawText } from './text'
@@ -27,7 +29,7 @@ function cached(key: string, build: () => Raster | null): Raster | null {
 
 function contentKey(l: Layer): string {
   const { x, y, opacity, blend, visible, name, locked, rotation, group, clip, ...rest } = l
-  return JSON.stringify(rest) + (l.shadow ? '@' + rotation : '')
+  return JSON.stringify(rest) + (l.shadows.length ? '@' + rotation : '')
 }
 
 // A clip depends on where both layers sit, so it is keyed and cached apart from the
@@ -48,13 +50,26 @@ function clipSources(doc: StudioDoc, from: string): Layer[] {
   return doc.layers.filter((l) => l.group === from)
 }
 
+// Outside strokes nest, so the room an effect needs is the whole stack, not one entry.
+function spreadOf(strokes: Outline[]): number {
+  return strokes.reduce(
+    (n, s) => n + (s.position === 'inside' || s.width <= 0 ? 0 : s.position === 'center' ? s.width / 2 : s.width),
+    0
+  )
+}
+
 function padFor(l: Layer): number {
-  const stroke = l.stroke?.width ?? 0
-  let p = 2 + stroke
-  if (l.glow) p = Math.max(p, l.glow.size * 1.6 + stroke)
-  if (l.shadow) p = Math.max(p, l.shadow.blur * 1.6 + Math.hypot(l.shadow.x, l.shadow.y) + stroke)
+  const spread = spreadOf(l.strokes)
+  let p = 2 + spread
+  for (const glow of l.glows) {
+    if (!glow.inner) p = Math.max(p, glow.size * 1.6 + spread)
+  }
+  for (const shadow of l.shadows) {
+    if (shadow.inner) continue
+    p = Math.max(p, shadow.blur * 1.6 + Math.hypot(shadow.x, shadow.y) + spread)
+  }
   if (l.kind === 'shape') p = Math.max(p, l.feather * 1.6 + 2)
-  if (l.kind === 'text') p = Math.max(p, l.size * 0.25 + stroke)
+  if (l.kind === 'text') p = Math.max(p, l.size * 0.25 + spread)
   if (l.adjust.blur) p = Math.max(p, l.adjust.blur * 3)
   return Math.ceil(p)
 }
@@ -143,77 +158,6 @@ function drawContent(l: Layer, assets: AssetStore, w: number, h: number, pad: nu
   return result
 }
 
-function colorize(src: HTMLCanvasElement, color: string): HTMLCanvasElement {
-  const out = canvas(src.width, src.height)
-  const g = ctx2d(out)
-  g.drawImage(src, 0, 0)
-  g.globalCompositeOperation = 'source-in'
-  g.fillStyle = color
-  g.fillRect(0, 0, out.width, out.height)
-  return out
-}
-
-function dilate(src: HTMLCanvasElement, radius: number): HTMLCanvasElement {
-  const out = canvas(src.width, src.height)
-  const g = ctx2d(out)
-  const rings = radius > 6 ? [radius, radius * 0.66, radius * 0.33] : [radius]
-  for (const r of rings) {
-    const steps = Math.min(72, Math.max(12, Math.ceil((Math.PI * 2 * r) / 2)))
-    for (let i = 0; i < steps; i++) {
-      const a = (i / steps) * Math.PI * 2
-      g.drawImage(src, Math.cos(a) * r, Math.sin(a) * r)
-    }
-  }
-  g.drawImage(src, 0, 0)
-  return out
-}
-
-function buildRaster(l: Layer, assets: AssetStore): Raster | null {
-  const w = Math.max(1, Math.round(l.width))
-  const h = Math.max(1, Math.round(l.height))
-  const pad = padFor(l)
-  const content = drawContent(l, assets, w, h, pad)
-  if (!content) return null
-  if (!l.shadow && !l.glow && !l.stroke) return { canvas: content, pad }
-
-  const out = canvas(content.width, content.height)
-  const g = ctx2d(out)
-  const outline = l.stroke && l.stroke.width > 0 ? dilate(colorize(content, l.stroke.color), l.stroke.width) : null
-  const body = outline ?? content
-
-  if (l.shadow) {
-    const a = (-l.rotation * Math.PI) / 180
-    const dx = l.shadow.x * Math.cos(a) - l.shadow.y * Math.sin(a)
-    const dy = l.shadow.x * Math.sin(a) + l.shadow.y * Math.cos(a)
-    g.save()
-    g.globalAlpha = l.shadow.opacity
-    if (l.shadow.blur > 0) g.filter = `blur(${l.shadow.blur / 2}px)`
-    g.drawImage(colorize(body, l.shadow.color), dx, dy)
-    g.restore()
-  }
-  if (l.glow && l.glow.size > 0) {
-    const lit = colorize(body, l.glow.color)
-    g.save()
-    g.globalAlpha = l.glow.opacity
-    g.filter = `blur(${l.glow.size / 2}px)`
-    g.drawImage(lit, 0, 0)
-    g.filter = `blur(${l.glow.size / 5}px)`
-    g.drawImage(lit, 0, 0)
-    g.restore()
-  }
-  if (outline && l.stroke) {
-    g.globalAlpha = l.stroke.opacity
-    g.drawImage(outline, 0, 0)
-    g.globalAlpha = 1
-  }
-  g.drawImage(content, 0, 0)
-  return { canvas: out, pad }
-}
-
-export function raster(l: Layer, assets: AssetStore): Raster | null {
-  return cached(contentKey(l), () => buildRaster(l, assets))
-}
-
 function lumaToAlpha(src: HTMLCanvasElement): HTMLCanvasElement {
   const g = ctx2d(src)
   const img = g.getImageData(0, 0, src.width, src.height)
@@ -243,6 +187,169 @@ function softened(src: HTMLCanvasElement, px: number): HTMLCanvasElement {
   g.filter = `blur(${px / 2}px)`
   g.drawImage(src, 0, 0)
   return out
+}
+
+function colorize(src: HTMLCanvasElement, color: string): HTMLCanvasElement {
+  const out = canvas(src.width, src.height)
+  const g = ctx2d(out)
+  g.drawImage(src, 0, 0)
+  g.globalCompositeOperation = 'source-in'
+  g.fillStyle = color
+  g.fillRect(0, 0, out.width, out.height)
+  return out
+}
+
+function dilate(src: HTMLCanvasElement, radius: number): HTMLCanvasElement {
+  const out = canvas(src.width, src.height)
+  const g = ctx2d(out)
+  const rings = radius > 6 ? [radius, radius * 0.66, radius * 0.33] : [radius]
+  for (const r of rings) {
+    const steps = Math.min(72, Math.max(12, Math.ceil((Math.PI * 2 * r) / 2)))
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2
+      g.drawImage(src, Math.cos(a) * r, Math.sin(a) * r)
+    }
+  }
+  g.drawImage(src, 0, 0)
+  return out
+}
+
+// Grown inwards: invert, dilate the hole, invert back. The pad keeps the border clean.
+function erode(src: HTMLCanvasElement, radius: number): HTMLCanvasElement {
+  return invertAlpha(dilate(invertAlpha(src), radius))
+}
+
+function subtract(from: HTMLCanvasElement, what: HTMLCanvasElement): HTMLCanvasElement {
+  const out = canvas(from.width, from.height)
+  const g = ctx2d(out)
+  g.drawImage(from, 0, 0)
+  g.globalCompositeOperation = 'destination-out'
+  g.drawImage(what, 0, 0)
+  return out
+}
+
+// The raster is built before the layer is rotated, so an offset the creator set in canvas
+// terms has to be turned back into the layer's own frame.
+function offsetIn(l: Layer, x: number, y: number): [number, number] {
+  const a = (-l.rotation * Math.PI) / 180
+  return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)]
+}
+
+function drawDropShadow(
+  g: CanvasRenderingContext2D,
+  body: HTMLCanvasElement,
+  shadow: Shadow,
+  l: Layer
+): void {
+  const [dx, dy] = offsetIn(l, shadow.x, shadow.y)
+  g.save()
+  g.globalAlpha = shadow.opacity
+  if (shadow.blur > 0) g.filter = `blur(${shadow.blur / 2}px)`
+  g.drawImage(colorize(body, shadow.color), dx, dy)
+  g.restore()
+}
+
+function drawOuterGlow(g: CanvasRenderingContext2D, body: HTMLCanvasElement, glow: Glow): void {
+  const lit = colorize(body, glow.color)
+  g.save()
+  g.globalAlpha = glow.opacity
+  g.filter = `blur(${glow.size / 2}px)`
+  g.drawImage(lit, 0, 0)
+  g.filter = `blur(${glow.size / 5}px)`
+  g.drawImage(lit, 0, 0)
+  g.restore()
+}
+
+// Fill the layer, erase the shape to leave only what is beyond its edge, then keep the part
+// that lands back on the shape: a soft band inside the outline.
+function inwardBand(
+  content: HTMLCanvasElement,
+  color: string,
+  blur: number,
+  dx: number,
+  dy: number
+): HTMLCanvasElement {
+  const out = canvas(content.width, content.height)
+  const g = ctx2d(out)
+  g.fillStyle = color
+  g.fillRect(0, 0, out.width, out.height)
+  g.globalCompositeOperation = 'destination-out'
+  if (blur > 0) g.filter = `blur(${blur / 2}px)`
+  g.drawImage(content, dx, dy)
+  g.filter = 'none'
+  g.globalCompositeOperation = 'destination-in'
+  g.drawImage(content, 0, 0)
+  return out
+}
+
+function buildRaster(l: Layer, assets: AssetStore): Raster | null {
+  const w = Math.max(1, Math.round(l.width))
+  const h = Math.max(1, Math.round(l.height))
+  const pad = padFor(l)
+  const content = drawContent(l, assets, w, h, pad)
+  if (!content) return null
+  if (!l.shadows.length && !l.glows.length && !l.strokes.length) return { canvas: content, pad }
+
+  const out = canvas(content.width, content.height)
+  const g = ctx2d(out)
+  const live = l.strokes.filter((s) => s.width > 0 && s.opacity > 0)
+  const outward = live.filter((s) => s.position !== 'inside')
+  const spread = spreadOf(live)
+  const silhouette = colorize(content, '#ffffff')
+  const body = spread > 0 ? dilate(silhouette, spread) : content
+
+  for (const shadow of l.shadows) {
+    if (!shadow.inner) drawDropShadow(g, body, shadow, l)
+  }
+  for (const glow of l.glows) {
+    if (!glow.inner && glow.size > 0) drawOuterGlow(g, body, glow)
+  }
+
+  // Outside strokes are rings around the silhouette, the widest painted first so the ones
+  // nearer the content stay on top: white-then-black outlines nest the way they are listed.
+  let radius = spread
+  for (let i = outward.length - 1; i >= 0; i--) {
+    const stroke = outward[i]
+    g.globalAlpha = stroke.opacity
+    g.drawImage(dilate(colorize(content, stroke.color), radius), 0, 0)
+    radius -= stroke.position === 'center' ? stroke.width / 2 : stroke.width
+  }
+  g.globalAlpha = 1
+  g.drawImage(content, 0, 0)
+
+  // An inside stroke eats into the shape instead of growing out of it, so it is drawn over
+  // the content as a ring hugging the edge.
+  let depth = 0
+  for (const stroke of live) {
+    if (stroke.position === 'outside') continue
+    const width = stroke.position === 'center' ? stroke.width / 2 : stroke.width
+    const outer = depth > 0 ? erode(silhouette, depth) : silhouette
+    const ring = subtract(outer, erode(silhouette, depth + width))
+    g.globalAlpha = stroke.opacity
+    g.drawImage(colorize(ring, stroke.color), 0, 0)
+    depth += width
+  }
+  g.globalAlpha = 1
+
+  for (const glow of l.glows) {
+    if (!glow.inner || glow.size <= 0) continue
+    const band = inwardBand(content, glow.color, glow.size, 0, 0)
+    g.globalAlpha = glow.opacity
+    g.drawImage(band, 0, 0)
+    g.drawImage(band, 0, 0)
+  }
+  for (const shadow of l.shadows) {
+    if (!shadow.inner) continue
+    const [dx, dy] = offsetIn(l, shadow.x, shadow.y)
+    g.globalAlpha = shadow.opacity
+    g.drawImage(inwardBand(content, shadow.color, shadow.blur, dx, dy), 0, 0)
+  }
+  g.globalAlpha = 1
+  return { canvas: out, pad }
+}
+
+export function raster(l: Layer, assets: AssetStore): Raster | null {
+  return cached(contentKey(l), () => buildRaster(l, assets))
 }
 
 function clipCoverage(doc: StudioDoc, clip: Clip, assets: AssetStore): HTMLCanvasElement | null {
@@ -344,12 +451,13 @@ export function hitLayer(doc: StudioDoc, assets: AssetStore, x: number, y: numbe
     if (!l.visible || l.locked) continue
     const [lx, ly] = toLocal(l, x, y)
     if (Math.abs(lx) > l.width / 2 || Math.abs(ly) > l.height / 2) continue
-    const r = raster(l, assets)
+    // A clipped layer is only where it shows; the rest of its box must let clicks through.
+    const r = l.clip ? clipped(doc, l, assets) : raster(l, assets)
     if (!r) return l
     const px = Math.floor(lx + Math.round(l.width) / 2 + r.pad)
     const py = Math.floor(ly + Math.round(l.height) / 2 + r.pad)
     const alpha = r.canvas.getContext('2d')!.getImageData(px, py, 1, 1).data[3]
-    if (alpha > 24 || l.kind === 'text') return l
+    if (alpha > 24 || (l.kind === 'text' && !l.clip)) return l
   }
   return null
 }

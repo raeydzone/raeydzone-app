@@ -1,7 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Switch from '@radix-ui/react-switch'
 import { AnimatePresence, motion } from 'motion/react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import { STEP_IDS, STEP_LABELS } from '@shared/types'
 import type { Steps } from '@shared/types'
@@ -234,6 +234,12 @@ export function Prompt({
 }): ReactNode {
   const [value, setValue] = useState(initial)
 
+  // Radix reports opening only for its own triggers; these dialogs are opened by a prop,
+  // so the text has to be reset here or it keeps whatever the last dialog left behind.
+  useEffect(() => {
+    if (open) setValue(initial)
+  }, [open, initial])
+
   const submit = (): void => {
     const trimmed = value.trim()
     if (!trimmed) return
@@ -242,13 +248,7 @@ export function Prompt({
   }
 
   return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(next) => {
-        if (next) setValue(initial)
-        onOpenChange(next)
-      }}
-    >
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={s.overlay} />
         <Dialog.Content className={s.modal}>

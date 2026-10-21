@@ -56,6 +56,7 @@ export async function importLayers(
     regroup.set(g.id, id)
   }
   const ids: string[] = []
+  const renamed = new Map<string, string>()
   for (const src of layers) {
     const layer = { ...src, id: newId(doc), x: src.x + shift, y: src.y + shift, group: src.group ? regroup.get(src.group) ?? null : null } as Layer
     if (layer.kind === 'image' && src.kind === 'image') {
@@ -64,11 +65,19 @@ export async function importLayers(
       layer.asset = asset
     }
     layer.mask = src.mask ? map.get(src.mask) ?? null : null
-    // A clip points at a layer id from the other document; keep it only if that layer
-    // came along in the same import.
-    layer.clip = src.clip && layers.some((l) => l.id === src.clip!.from) ? { ...src.clip } : null
+    renamed.set(src.id, layer.id)
     doc = { ...doc, layers: [...doc.layers, layer] }
     ids.push(layer.id)
+  }
+  // Every import mints new ids, so a clip is rebound to the copy of its source — layer or
+  // group — and dropped if the source stayed behind.
+  doc = {
+    ...doc,
+    layers: doc.layers.map((l) => {
+      if (!ids.includes(l.id) || !l.clip) return l
+      const from = renamed.get(l.clip.from) ?? regroup.get(l.clip.from)
+      return { ...l, clip: from ? { ...l.clip, from } : null } as Layer
+    })
   }
   studio.commit(variantId, doc)
   studio.pick(variantId, ids)

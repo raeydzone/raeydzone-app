@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { BLEND_MODES } from '@shared/studio'
-import type { Gradient, Layer, ShapeLayer, TextLayer } from '@shared/studio'
+import type { Glow, Gradient, Layer, Outline, Shadow, ShapeLayer, TextLayer } from '@shared/studio'
 import { Toggle } from '../../components/Bits'
 import { useStore } from '../../state/store'
 import { cutOut, editMask } from '../ai'
 import { MenuSelect } from '../../components/MenuSelect'
-import { NEUTRAL } from '../doc'
+import { NEUTRAL, effectDefault } from '../doc'
 import { WEIGHT_NAMES, findFont, nearestWeight } from '../fonts'
 import type { Studio } from '../engine'
 import { ColorField, NumField, Section, Segmented, SliderField } from './fields'
@@ -21,7 +21,27 @@ const TEXT_GRADIENT = { type: 'linear', from: '#ff6a5a', to: '#a30000', angle: 9
 
 const blendName = (mode: string): string => mode.charAt(0).toUpperCase() + mode.slice(1).replace('-', ' ')
 
-function Effect<K extends 'shadow' | 'glow' | 'stroke' | 'tint'>({
+function Tint({ layer, patch }: { layer: Layer; patch: Patch }): ReactNode {
+  const tint = layer.tint
+  return (
+    <div className={s.effect}>
+      <Toggle checked={!!tint} onChange={(on) => patch({ tint: on ? {} : null })} label="Colour tint" />
+      {tint && (
+        <div className={s.effectBody}>
+          <ColorField label="Colour" value={tint.color} onChange={(color) => patch({ tint: { color } }, 'tc')} />
+          <SliderField label="Amount" value={Math.round(tint.amount * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ tint: { amount: v / 100 } }, 'ta')} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+type Stacks = { shadows: Shadow; glows: Glow; strokes: Outline }
+const SINGULAR = { shadows: 'shadow', glows: 'glow', strokes: 'stroke' } as const
+
+// Each entry is edited in place and the whole list written back, so a slider drag on the
+// second outline coalesces into one undo step like any other field.
+function EffectStack<K extends keyof Stacks>({
   layer,
   name,
   title,
@@ -32,13 +52,40 @@ function Effect<K extends 'shadow' | 'glow' | 'stroke' | 'tint'>({
   name: K
   title: string
   patch: Patch
-  children: (value: NonNullable<Layer[K]>) => ReactNode
+  children: (value: Stacks[K], set: (p: Partial<Stacks[K]>, key?: string) => void) => ReactNode
 }): ReactNode {
-  const value = layer[name]
+  const list = layer[name] as Stacks[K][]
+  const write = (next: Stacks[K][], key?: string): void => patch({ [name]: next }, key)
+  const fresh = (): Stacks[K] => effectDefault(SINGULAR[name]) as Stacks[K]
   return (
     <div className={s.effect}>
-      <Toggle checked={!!value} onChange={(on) => patch({ [name]: on ? {} : null })} label={title} />
-      {value && <div className={s.effectBody}>{children(value as NonNullable<Layer[K]>)}</div>}
+      <Toggle checked={list.length > 0} onChange={(on) => write(on ? [fresh()] : [])} label={title} />
+      {list.map((entry, i) => (
+        <div key={i} className={s.effectBody}>
+          {list.length > 1 && (
+            <div className={s.effectHead}>
+              <span>
+                {title} {i + 1}
+              </span>
+              <button
+                className={s.effectDrop}
+                title={'Remove this ' + title.toLowerCase()}
+                onClick={() => write(list.filter((_, j) => j !== i))}
+              >
+                Remove
+              </button>
+            </div>
+          )}
+          {children(entry, (p, key) =>
+            write(list.map((e, j) => (j === i ? { ...e, ...p } : e)), key ? key + i : undefined)
+          )}
+        </div>
+      ))}
+      {list.length > 0 && list.length < 8 && (
+        <button className={s.linkBtn} onClick={() => write([...list, fresh()])}>
+          + Add another {title.toLowerCase()}
+        </button>
+      )}
     </div>
   )
 }
@@ -268,7 +315,10 @@ function ClipSection({
   const doc = studio.doc(variantId)
   const clip = layer.clip
   const groups = doc.groups.map((g) => ({ id: g.id, label: 'Group · ' + g.name }))
-  const layers = doc.layers.filter((l) => l.id !== layer.id).map((l) => ({ id: l.id, label: layerLabel(l) }))
+  const layers = [...doc.layers]
+    .reverse()
+    .filter((l) => l.id !== layer.id)
+    .map((l) => ({ id: l.id, label: layerLabel(l) }))
   const options = [...groups, ...layers]
   const source = options.find((o) => o.id === clip?.from)
 
@@ -406,44 +456,63 @@ export function Inspector({
       <ClipSection studio={studio} variantId={variantId} layer={layer} patch={patch} />
 
       <Section title="Effects">
-        <Effect layer={layer} name="stroke" title="Outline" patch={patch}>
-          {(e) => (
+        <EffectStack layer={layer} name="strokes" title="Outline" patch={patch}>
+          {(e, set) => (
             <>
-              <ColorField label="Colour" value={e.color} onChange={(color) => patch({ stroke: { color } }, 'sc')} />
-              <SliderField label="Width" value={e.width} min={1} max={40} unit="px" onChange={(width) => patch({ stroke: { width } }, 'sw')} />
+              <ColorField label="Colour" value={e.color} onChange={(color) => set({ color }, 'sc')} />
+              <SliderField label="Width" value={e.width} min={1} max={60} unit="px" onChange={(width) => set({ width }, 'sw')} />
+              <Segmented
+                value={e.position}
+                onChange={(position) => set({ position })}
+                options={[
+                  { id: 'outside', label: 'Outside', title: 'Grows out of the shape' },
+                  { id: 'center', label: 'Centre', title: 'Half in, half out' },
+                  { id: 'inside', label: 'Inside', title: 'Eats into the shape, size unchanged' }
+                ]}
+              />
+              <SliderField label="Opacity" value={Math.round(e.opacity * 100)} min={0} max={100} unit="%" onChange={(v) => set({ opacity: v / 100 }, 'so')} />
             </>
           )}
-        </Effect>
-        <Effect layer={layer} name="shadow" title="Drop shadow" patch={patch}>
-          {(e) => (
+        </EffectStack>
+        <EffectStack layer={layer} name="shadows" title="Shadow" patch={patch}>
+          {(e, set) => (
             <>
-              <ColorField label="Colour" value={e.color} onChange={(color) => patch({ shadow: { color } }, 'shc')} />
-              <SliderField label="Opacity" value={Math.round(e.opacity * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ shadow: { opacity: v / 100 } }, 'sho')} />
-              <SliderField label="Blur" value={e.blur} min={0} max={120} unit="px" onChange={(blur) => patch({ shadow: { blur } }, 'shb')} />
+              <Segmented
+                value={e.inner ? 'inner' : 'drop'}
+                onChange={(m) => set({ inner: m === 'inner' })}
+                options={[
+                  { id: 'drop', label: 'Drop', title: 'Cast behind the layer' },
+                  { id: 'inner', label: 'Inner', title: 'Cast inside the layer edge' }
+                ]}
+              />
+              <ColorField label="Colour" value={e.color} onChange={(color) => set({ color }, 'shc')} />
+              <SliderField label="Opacity" value={Math.round(e.opacity * 100)} min={0} max={100} unit="%" onChange={(v) => set({ opacity: v / 100 }, 'sho')} />
+              <SliderField label="Blur" value={e.blur} min={0} max={120} unit="px" onChange={(blur) => set({ blur }, 'shb')} />
               <div className={s.grid2}>
-                <NumField label="X" value={e.x} onChange={(x) => patch({ shadow: { x } }, 'shx')} />
-                <NumField label="Y" value={e.y} onChange={(y) => patch({ shadow: { y } }, 'shy')} />
+                <NumField label="X" value={e.x} onChange={(x) => set({ x }, 'shx')} />
+                <NumField label="Y" value={e.y} onChange={(y) => set({ y }, 'shy')} />
               </div>
             </>
           )}
-        </Effect>
-        <Effect layer={layer} name="glow" title="Outer glow" patch={patch}>
-          {(e) => (
+        </EffectStack>
+        <EffectStack layer={layer} name="glows" title="Glow" patch={patch}>
+          {(e, set) => (
             <>
-              <ColorField label="Colour" value={e.color} onChange={(color) => patch({ glow: { color } }, 'gc')} />
-              <SliderField label="Size" value={e.size} min={4} max={160} unit="px" onChange={(size) => patch({ glow: { size } }, 'gs')} />
-              <SliderField label="Opacity" value={Math.round(e.opacity * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ glow: { opacity: v / 100 } }, 'go')} />
+              <Segmented
+                value={e.inner ? 'inner' : 'outer'}
+                onChange={(m) => set({ inner: m === 'inner' })}
+                options={[
+                  { id: 'outer', label: 'Outer', title: 'Light spilling out around the layer' },
+                  { id: 'inner', label: 'Inner', title: 'Light along the inside of the edge' }
+                ]}
+              />
+              <ColorField label="Colour" value={e.color} onChange={(color) => set({ color }, 'gc')} />
+              <SliderField label="Size" value={e.size} min={4} max={160} unit="px" onChange={(size) => set({ size }, 'gs')} />
+              <SliderField label="Opacity" value={Math.round(e.opacity * 100)} min={0} max={100} unit="%" onChange={(v) => set({ opacity: v / 100 }, 'go')} />
             </>
           )}
-        </Effect>
-        <Effect layer={layer} name="tint" title="Colour tint" patch={patch}>
-          {(e) => (
-            <>
-              <ColorField label="Colour" value={e.color} onChange={(color) => patch({ tint: { color } }, 'tc')} />
-              <SliderField label="Amount" value={Math.round(e.amount * 100)} min={0} max={100} unit="%" onChange={(v) => patch({ tint: { amount: v / 100 } }, 'ta')} />
-            </>
-          )}
-        </Effect>
+        </EffectStack>
+        <Tint layer={layer} patch={patch} />
       </Section>
 
       <Section

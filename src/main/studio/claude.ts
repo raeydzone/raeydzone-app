@@ -134,7 +134,9 @@ function closeTurn(s: Session): number | undefined {
 
 function setStatus(variantId: string, s: Session, next: VariantStatus, error?: string): void {
   s.status = next
-  if (next === 'working') s.turnAt = Date.now()
+  // A message sent while Claude is already working steers the same turn; it must not
+  // restart the clock.
+  if (next === 'working') s.turnAt ??= Date.now()
   emit(variantId, { type: 'status', status: next, error, ms: next === 'working' ? undefined : closeTurn(s) })
   if (s.idleTimer) clearTimeout(s.idleTimer)
   s.idleTimer = next === 'working' ? null : setTimeout(() => s.proc.kill(), IDLE_MS)
@@ -245,10 +247,11 @@ async function spawnSession(
     if (s.killTimer) clearTimeout(s.killTimer)
     void fs.unlink(mcpFile).catch(() => {})
     if (s.status !== 'working') return
-    if (s.stopping || code === 0) emit(req.variantId, { type: 'status', status: 'stopped' })
+    const ms = closeTurn(s)
+    if (s.stopping || code === 0) emit(req.variantId, { type: 'status', status: 'stopped', ms })
     else {
       const detail = s.stderr.trim().split('\n').slice(-3).join(' ')
-      emit(req.variantId, { type: 'status', status: 'error', error: detail || 'Claude exited with code ' + code })
+      emit(req.variantId, { type: 'status', status: 'error', error: detail || 'Claude exited with code ' + code, ms })
     }
   })
   return s
